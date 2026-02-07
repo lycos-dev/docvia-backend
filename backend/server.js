@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const { testConnection } = require('./config/supabase');
+const { supabase, testConnection } = require('./config/supabase');
 const authRoutes = require('./routes/auth.routes');
 
 // Validate required environment variables

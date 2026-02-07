@@ -58,17 +58,33 @@ const register = async (req, res) => {
     });
 
     if (error) {
+      console.error('Supabase registration error:', error);
+      
       // Handle specific Supabase errors
-      if (error.message.includes('already registered')) {
+      if (error.message.includes('already registered') || error.message.includes('User already registered')) {
         return res.status(400).json({
           success: false,
           error: 'This email is already registered. Please login instead.'
         });
       }
       
+      if (error.message.includes('Email rate limit exceeded')) {
+        return res.status(429).json({
+          success: false,
+          error: 'Too many registration attempts. Please wait a few minutes and try again.'
+        });
+      }
+      
+      if (error.message.includes('Invalid API key')) {
+        return res.status(500).json({
+          success: false,
+          error: 'Server configuration error. Please contact support.'
+        });
+      }
+      
       return res.status(400).json({
         success: false,
-        error: error.message
+        error: error.message || 'Registration failed. Please try again.'
       });
     }
 
@@ -119,9 +135,25 @@ const login = async (req, res) => {
     });
 
     if (error) {
+      console.error('Supabase login error:', error);
+      
+      if (error.message.includes('Invalid login credentials')) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid email or password.'
+        });
+      }
+      
+      if (error.message.includes('Email rate limit exceeded')) {
+        return res.status(429).json({
+          success: false,
+          error: 'Too many login attempts. Please wait a few minutes and try again.'
+        });
+      }
+      
       return res.status(401).json({
         success: false,
-        error: 'Invalid email or password.'
+        error: error.message || 'Invalid email or password.'
       });
     }
 
