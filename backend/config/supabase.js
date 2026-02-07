@@ -9,9 +9,6 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
   );
 }
 
-const supabaseUrl = 'https://unqrpabmiokotjrznagf.supabase.co'
-const supabaseKey = process.env.SUPABASE_KEY
-
 // Create Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
