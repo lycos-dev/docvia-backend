@@ -18,18 +18,8 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Verify JWT token
+    // Verify JWT token (our custom JWT)
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Get user from Supabase to ensure they still exist
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired token.'
-      });
-    }
 
     // Attach user info to request object
     req.user = {
@@ -40,6 +30,8 @@ const authenticateToken = async (req, res, next) => {
 
     next(); // Continue to the route handler
   } catch (error) {
+    console.error('Auth middleware error:', error);
+    
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
         success: false,
