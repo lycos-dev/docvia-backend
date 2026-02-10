@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Auth Test - Academic PDF Reader</title>
+    <title>DocVia - Sign In</title>
     <style>
       * {
         margin: 0;
@@ -12,7 +12,7 @@
       }
 
       body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         min-height: 100vh;
         display: flex;
@@ -23,56 +23,54 @@
 
       .container {
         background: white;
-        border-radius: 10px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
         padding: 40px;
-        max-width: 500px;
+        max-width: 440px;
         width: 100%;
+        animation: slideIn 0.3s ease-out;
       }
 
-      h1 {
-        color: #333;
-        margin-bottom: 10px;
-        font-size: 28px;
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
-      .subtitle {
-        color: #666;
+      .logo {
+        text-align: center;
         margin-bottom: 30px;
+      }
+
+      .logo h1 {
+        color: #667eea;
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .logo p {
+        color: #666;
         font-size: 14px;
       }
 
-      .tabs {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 30px;
-        border-bottom: 2px solid #f0f0f0;
-      }
-
-      .tab {
-        padding: 10px 20px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 16px;
-        color: #666;
-        border-bottom: 2px solid transparent;
-        margin-bottom: -2px;
-        transition: all 0.3s;
-      }
-
-      .tab.active {
-        color: #667eea;
-        border-bottom-color: #667eea;
-        font-weight: 600;
-      }
-
-      .tab-content {
+      .view {
         display: none;
       }
 
-      .tab-content.active {
+      .view.active {
         display: block;
+        animation: fadeIn 0.3s ease-in;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
 
       .form-group {
@@ -89,37 +87,55 @@
 
       input {
         width: 100%;
-        padding: 12px;
+        padding: 14px 16px;
         border: 2px solid #e0e0e0;
-        border-radius: 6px;
-        font-size: 14px;
-        transition: border-color 0.3s;
+        border-radius: 8px;
+        font-size: 15px;
+        transition: all 0.3s;
+        font-family: inherit;
       }
 
       input:focus {
         outline: none;
         border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      input.error {
+        border-color: #ef4444;
+      }
+
+      .error-message {
+        color: #ef4444;
+        font-size: 13px;
+        margin-top: 6px;
+        display: none;
+      }
+
+      .error-message.show {
+        display: block;
       }
 
       button {
         width: 100%;
-        padding: 12px;
+        padding: 14px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         border: none;
-        border-radius: 6px;
+        border-radius: 8px;
         font-size: 16px;
         font-weight: 600;
         cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: all 0.3s;
+        font-family: inherit;
       }
 
-      button:hover {
+      button:hover:not(:disabled) {
         transform: translateY(-2px);
-        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
       }
 
-      button:active {
+      button:active:not(:disabled) {
         transform: translateY(0);
       }
 
@@ -137,18 +153,20 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 10px;
+        gap: 12px;
+        font-weight: 500;
       }
 
-      .google-btn:hover {
+      .google-btn:hover:not(:disabled) {
         background: #f8f9fa;
+        border-color: #d0d0d0;
         transform: translateY(-2px);
         box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
       }
 
       .divider {
         text-align: center;
-        margin: 20px 0;
+        margin: 24px 0;
         position: relative;
       }
 
@@ -164,110 +182,250 @@
 
       .divider span {
         background: white;
-        padding: 0 10px;
+        padding: 0 12px;
         position: relative;
         color: #999;
-        font-size: 14px;
+        font-size: 13px;
+        font-weight: 500;
       }
 
       .message {
-        padding: 12px;
-        border-radius: 6px;
+        padding: 14px 16px;
+        border-radius: 8px;
         margin-bottom: 20px;
         font-size: 14px;
+        animation: slideDown 0.3s ease-out;
+      }
+
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       .message.success {
-        background: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
+        background: #d1fae5;
+        color: #065f46;
+        border: 1px solid #6ee7b7;
       }
 
       .message.error {
-        background: #f8d7da;
-        color: #721c24;
-        border: 1px solid #f5c6cb;
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
       }
 
       .message.info {
-        background: #d1ecf1;
-        color: #0c5460;
-        border: 1px solid #bee5eb;
-      }
-
-      .user-info {
-        background: #f8f9fa;
-        padding: 20px;
-        border-radius: 6px;
-        margin-bottom: 20px;
-      }
-
-      .user-info h3 {
-        color: #333;
-        margin-bottom: 10px;
-        font-size: 18px;
-      }
-
-      .user-info p {
-        color: #666;
-        margin-bottom: 8px;
-        font-size: 14px;
-      }
-
-      .user-info strong {
-        color: #333;
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #93c5fd;
       }
 
       .link-btn {
         background: none;
         color: #667eea;
-        text-decoration: underline;
+        text-decoration: none;
         cursor: pointer;
         font-size: 14px;
-        margin-top: 10px;
-        padding: 0;
+        margin-top: 12px;
+        padding: 8px 0;
+        font-weight: 500;
+        border: none;
+        transition: color 0.2s;
       }
 
       .link-btn:hover {
+        color: #764ba2;
         transform: none;
         box-shadow: none;
-        color: #764ba2;
+        text-decoration: underline;
       }
 
-      .back-link {
+      .text-center {
         text-align: center;
-        margin-top: 15px;
       }
 
-      .back-link a {
-        color: #667eea;
-        text-decoration: none;
+      .user-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 24px;
+        border-radius: 12px;
+        margin-bottom: 24px;
+      }
+
+      .user-avatar {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        margin: 0 auto 16px;
+        display: block;
+        border: 4px solid white;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      .user-name {
+        font-size: 22px;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 4px;
+        text-align: center;
+      }
+
+      .user-email {
+        font-size: 14px;
+        color: #666;
+        text-align: center;
+        margin-bottom: 16px;
+      }
+
+      .user-info-grid {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .user-info-item {
+        background: white;
+        padding: 12px;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+      }
+
+      .user-info-label {
+        color: #666;
+        font-weight: 500;
+      }
+
+      .user-info-value {
+        color: #333;
+        font-weight: 600;
+      }
+
+      .logout-btn {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        margin-top: 20px;
+      }
+
+      .logout-btn:hover:not(:disabled) {
+        box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+      }
+
+      .back-btn {
+        background: #f3f4f6;
+        color: #374151;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+
+      .back-btn:hover:not(:disabled) {
+        background: #e5e7eb;
+        box-shadow: none;
+      }
+
+      .info-box {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        color: #1e40af;
+        line-height: 1.6;
+      }
+
+      .info-box strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+        margin-right: 8px;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .password-toggle {
+        position: relative;
+      }
+
+      .password-toggle input {
+        padding-right: 48px;
+      }
+
+      .password-toggle-btn {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: #666;
+        cursor: pointer;
+        padding: 8px;
+        width: auto;
         font-size: 14px;
       }
 
-      .back-link a:hover {
-        text-decoration: underline;
+      .password-toggle-btn:hover {
+        color: #333;
+        transform: translateY(-50%);
+        box-shadow: none;
+      }
+
+      .strength-meter {
+        height: 4px;
+        background: #e0e0e0;
+        border-radius: 2px;
+        margin-top: 8px;
+        overflow: hidden;
+      }
+
+      .strength-meter-fill {
+        height: 100%;
+        width: 0%;
+        transition: all 0.3s;
+        border-radius: 2px;
+      }
+
+      .strength-weak { width: 33%; background: #ef4444; }
+      .strength-medium { width: 66%; background: #f59e0b; }
+      .strength-strong { width: 100%; background: #10b981; }
+
+      .hidden {
+        display: none !important;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>🔐 Authentication Test</h1>
-      <p class="subtitle">Test your authentication backend</p>
-
-      <div class="tabs">
-        <button class="tab active" onclick="switchTab('login')">
-          Login
-        </button>
-        <button class="tab" onclick="switchTab('register')">Register</button>
-        <button class="tab" onclick="switchTab('profile')">Profile</button>
+      <div class="logo">
+        <h1>📄 DocVia - Backend Testing</h1>
+        <p>Academic PDF Reader</p>
       </div>
 
-      <!-- Login Tab -->
-      <div id="login" class="tab-content active">
+      <!-- Login View -->
+      <div id="loginView" class="view active">
         <div id="loginMessage"></div>
 
-        <!-- Google Sign-In Button -->
         <button class="google-btn" onclick="googleSignIn()">
           <svg width="18" height="18" viewBox="0 0 18 18">
             <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"></path>
@@ -275,42 +433,68 @@
             <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"></path>
             <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"></path>
           </svg>
-          Sign in with Google
+          Continue with Google
         </button>
 
         <div class="divider"><span>OR</span></div>
 
         <form id="loginForm" onsubmit="handleLogin(event)">
           <div class="form-group">
-            <label for="loginEmail">Email</label>
+            <label for="loginEmail">Email address</label>
             <input
               type="email"
               id="loginEmail"
-              placeholder="Enter your email"
+              placeholder="you@example.com"
               required
             />
+            <div class="error-message" id="loginEmailError"></div>
           </div>
           <div class="form-group">
             <label for="loginPassword">Password</label>
-            <input
-              type="password"
-              id="loginPassword"
-              placeholder="Enter your password"
-              required
-            />
+            <div class="password-toggle">
+              <input
+                type="password"
+                id="loginPassword"
+                placeholder="Enter your password"
+                required
+              />
+              <button type="button" class="password-toggle-btn" onclick="togglePassword('loginPassword')">
+                Show
+              </button>
+            </div>
+            <div class="error-message" id="loginPasswordError"></div>
           </div>
-          <button type="submit" id="loginBtn">Login</button>
-          <button type="button" class="link-btn" onclick="switchTab('forgot')">
-            Forgot Password?
+          <button type="submit" id="loginBtn">
+            Sign In
           </button>
         </form>
+
+        <div class="text-center">
+          <button class="link-btn" onclick="showView('forgotView')">
+            Forgot your password?
+          </button>
+        </div>
+
+        <div class="divider"><span></span></div>
+
+        <div class="text-center">
+          <p style="color: #666; font-size: 14px; margin-bottom: 12px;">
+            Don't have an account?
+          </p>
+          <button class="link-btn" onclick="showView('registerView')" style="font-weight: 600;">
+            Create an account
+          </button>
+        </div>
       </div>
 
-      <!-- Register Tab -->
-      <div id="register" class="tab-content">
+      <!-- Register View -->
+      <div id="registerView" class="view">
+        <button class="back-btn" onclick="showView('loginView')">
+          ← Back to Sign In
+        </button>
+
         <div id="registerMessage"></div>
 
-        <!-- Google Sign-In Button -->
         <button class="google-btn" onclick="googleSignIn()">
           <svg width="18" height="18" viewBox="0 0 18 18">
             <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"></path>
@@ -325,49 +509,72 @@
 
         <form id="registerForm" onsubmit="handleRegister(event)">
           <div class="form-group">
-            <label for="registerEmail">Email</label>
+            <label for="registerEmail">Email address</label>
             <input
               type="email"
               id="registerEmail"
-              placeholder="Enter your email"
+              placeholder="you@example.com"
               required
             />
+            <div class="error-message" id="registerEmailError"></div>
           </div>
           <div class="form-group">
             <label for="registerPassword">Password</label>
-            <input
-              type="password"
-              id="registerPassword"
-              placeholder="Create a password (min 6 characters)"
-              required
-            />
+            <div class="password-toggle">
+              <input
+                type="password"
+                id="registerPassword"
+                placeholder="Create a password (min 6 characters)"
+                required
+                oninput="checkPasswordStrength(this.value)"
+              />
+              <button type="button" class="password-toggle-btn" onclick="togglePassword('registerPassword')">
+                Show
+              </button>
+            </div>
+            <div class="strength-meter">
+              <div class="strength-meter-fill" id="strengthMeter"></div>
+            </div>
+            <div class="error-message" id="registerPasswordError"></div>
           </div>
-          <button type="submit" id="registerBtn">Register</button>
+          <button type="submit" id="registerBtn">
+            Create Account
+          </button>
         </form>
       </div>
 
-      <!-- Forgot Password Tab -->
-      <div id="forgot" class="tab-content">
+      <!-- Forgot Password View -->
+      <div id="forgotView" class="view">
+        <button class="back-btn" onclick="showView('loginView')">
+          ← Back to Sign In
+        </button>
+
         <div id="forgotMessage"></div>
+
+        <div class="info-box">
+          <strong>🔐 Reset your password</strong>
+          Enter your email address and we'll send you a link to reset your password.
+        </div>
+
         <form id="forgotForm" onsubmit="handleForgotPassword(event)">
           <div class="form-group">
-            <label for="forgotEmail">Email</label>
+            <label for="forgotEmail">Email address</label>
             <input
               type="email"
               id="forgotEmail"
-              placeholder="Enter your email"
+              placeholder="you@example.com"
               required
             />
+            <div class="error-message" id="forgotEmailError"></div>
           </div>
-          <button type="submit" id="forgotBtn">Send Reset Link</button>
+          <button type="submit" id="forgotBtn">
+            Send Reset Link
+          </button>
         </form>
-        <div class="back-link">
-          <a href="#" onclick="switchTab('login'); return false;">Back to Login</a>
-        </div>
       </div>
 
-      <!-- Profile Tab -->
-      <div id="profile" class="tab-content">
+      <!-- Profile View -->
+      <div id="profileView" class="view">
         <div id="profileMessage"></div>
         <div id="profileData"></div>
       </div>
@@ -376,30 +583,33 @@
     <script>
       const API_URL = "http://localhost:3001/api/auth";
       let authToken = localStorage.getItem("authToken");
+      let currentUser = null;
 
-      // Check for Google OAuth callback
+      // Initialize app
       window.addEventListener('DOMContentLoaded', () => {
-        // Check for hash parameters (Supabase uses hash, not query params)
+        handleOAuthCallback();
+        checkAuthState();
+      });
+
+      // Check if user is already logged in
+      function checkAuthState() {
+        if (authToken) {
+          showView('profileView');
+          loadProfile();
+        }
+      }
+
+      // Handle OAuth callback
+      function handleOAuthCallback() {
         const hash = window.location.hash.substring(1);
         const hashParams = new URLSearchParams(hash);
         const access_token = hashParams.get('access_token');
         
-        // Also check query params for our custom redirects
         const params = new URLSearchParams(window.location.search);
-        const token = params.get('token');
-        const email = params.get('email');
         const error = params.get('error');
 
         if (access_token) {
-          // We have a Supabase access token from Google OAuth
           verifyGoogleToken(access_token);
-          // Clean URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } else if (token) {
-          authToken = token;
-          localStorage.setItem("authToken", token);
-          showMessage('loginMessage', `Successfully signed in as ${email}`, 'success');
-          // Clean URL
           window.history.replaceState({}, document.title, window.location.pathname);
         } else if (error) {
           let errorMsg = 'Google sign-in failed';
@@ -409,17 +619,15 @@
           showMessage('loginMessage', errorMsg, 'error');
           window.history.replaceState({}, document.title, window.location.pathname);
         }
-      });
+      }
 
       async function verifyGoogleToken(access_token) {
         try {
-          showMessage('loginMessage', 'Verifying Google sign-in...', 'info');
+          showMessage('loginMessage', 'Verifying your Google account...', 'info');
           
           const response = await fetch(`${API_URL}/google/verify`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ access_token })
           });
 
@@ -427,12 +635,14 @@
 
           if (data.success) {
             authToken = data.data.token;
+            currentUser = data.data.user;
             localStorage.setItem("authToken", authToken);
-            showMessage('loginMessage', `Successfully signed in with Google as ${data.data.user.email}`, 'success');
+            showMessage('loginMessage', `Welcome, ${data.data.user.name}!`, 'success');
             
             setTimeout(() => {
-              switchTab('profile');
-            }, 1500);
+              showView('profileView');
+              loadProfile();
+            }, 1000);
           } else {
             showMessage('loginMessage', data.error || 'Google sign-in verification failed', 'error');
           }
@@ -442,26 +652,33 @@
         }
       }
 
-      function switchTab(tabName) {
-        // Remove active class from all tabs and contents
-        document.querySelectorAll(".tab").forEach((tab) => {
-          tab.classList.remove("active");
-        });
-        document.querySelectorAll(".tab-content").forEach((content) => {
-          content.classList.remove("active");
+      function showView(viewName) {
+        // Hide all views
+        document.querySelectorAll('.view').forEach(view => {
+          view.classList.remove('active');
         });
 
-        // Add active class to selected tab
-        event.target.classList.add("active");
-        document.getElementById(tabName).classList.add("active");
+        // Clear all messages
+        clearMessages();
 
-        // If switching to profile, load profile data
-        if (tabName === "profile") {
+        // Show requested view
+        document.getElementById(viewName).classList.add('active');
+
+        // Load profile data if showing profile
+        if (viewName === 'profileView') {
+          if (!authToken) {
+            showView('loginView');
+            showMessage('loginMessage', 'Please sign in to view your profile', 'info');
+            return;
+          }
           loadProfile();
         }
 
-        // Clear messages
-        clearMessages();
+        // Prevent accessing login/register when already logged in
+        if ((viewName === 'loginView' || viewName === 'registerView') && authToken) {
+          showView('profileView');
+          return;
+        }
       }
 
       function showMessage(elementId, message, type) {
@@ -470,70 +687,72 @@
       }
 
       function clearMessages() {
-        document
-          .querySelectorAll('[id$="Message"]')
-          .forEach((el) => (el.innerHTML = ""));
+        document.querySelectorAll('[id$="Message"]').forEach(el => el.innerHTML = '');
+        document.querySelectorAll('.error-message').forEach(el => {
+          el.classList.remove('show');
+          el.textContent = '';
+        });
+        document.querySelectorAll('input').forEach(input => input.classList.remove('error'));
       }
 
-      async function handleRegister(event) {
-        event.preventDefault();
-        const btn = document.getElementById("registerBtn");
-        btn.disabled = true;
-        btn.textContent = "Registering...";
+      function showFieldError(fieldId, message) {
+        const input = document.getElementById(fieldId);
+        const errorDiv = document.getElementById(fieldId + 'Error');
+        if (input && errorDiv) {
+          input.classList.add('error');
+          errorDiv.textContent = message;
+          errorDiv.classList.add('show');
+        }
+      }
 
-        const email = document.getElementById("registerEmail").value;
-        const password = document.getElementById("registerPassword").value;
+      function togglePassword(inputId) {
+        const input = document.getElementById(inputId);
+        const btn = input.nextElementSibling;
+        if (input.type === 'password') {
+          input.type = 'text';
+          btn.textContent = 'Hide';
+        } else {
+          input.type = 'password';
+          btn.textContent = 'Show';
+        }
+      }
 
-        try {
-          const response = await fetch(`${API_URL}/register`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ email, password }),
-          });
+      function checkPasswordStrength(password) {
+        const meter = document.getElementById('strengthMeter');
+        let strength = 0;
+        
+        if (password.length >= 6) strength++;
+        if (password.length >= 10) strength++;
+        if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+        if (/\d/.test(password)) strength++;
+        if (/[^a-zA-Z0-9]/.test(password)) strength++;
 
-          const data = await response.json();
-
-          if (data.success) {
-            authToken = data.data.token;
-            localStorage.setItem("authToken", authToken);
-            showMessage("registerMessage", data.message, "success");
-            document.getElementById("registerForm").reset();
-
-            setTimeout(() => {
-              switchTab("profile");
-            }, 1500);
-          } else {
-            showMessage("registerMessage", data.error, "error");
-          }
-        } catch (error) {
-          showMessage(
-            "registerMessage",
-            "Network error. Please try again.",
-            "error"
-          );
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "Register";
+        meter.className = 'strength-meter-fill';
+        if (strength <= 2) {
+          meter.classList.add('strength-weak');
+        } else if (strength <= 3) {
+          meter.classList.add('strength-medium');
+        } else {
+          meter.classList.add('strength-strong');
         }
       }
 
       async function handleLogin(event) {
         event.preventDefault();
+        clearMessages();
+        
         const btn = document.getElementById("loginBtn");
+        const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = "Logging in...";
+        btn.innerHTML = '<span class="spinner"></span>Signing in...';
 
-        const email = document.getElementById("loginEmail").value;
+        const email = document.getElementById("loginEmail").value.trim();
         const password = document.getElementById("loginPassword").value;
 
         try {
           const response = await fetch(`${API_URL}/login`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password }),
           });
 
@@ -541,62 +760,116 @@
 
           if (data.success) {
             authToken = data.data.token;
+            currentUser = data.data.user;
             localStorage.setItem("authToken", authToken);
-            showMessage("loginMessage", data.message, "success");
+            showMessage("loginMessage", "Welcome back!", "success");
             document.getElementById("loginForm").reset();
 
             setTimeout(() => {
-              switchTab("profile");
-            }, 1500);
+              showView("profileView");
+            }, 1000);
           } else {
             showMessage("loginMessage", data.error, "error");
           }
         } catch (error) {
-          showMessage(
-            "loginMessage",
-            "Network error. Please try again.",
-            "error"
-          );
+          showMessage("loginMessage", "Network error. Please check your connection.", "error");
         } finally {
           btn.disabled = false;
-          btn.textContent = "Login";
+          btn.textContent = originalText;
+        }
+      }
+
+      async function handleRegister(event) {
+        event.preventDefault();
+        clearMessages();
+        
+        const btn = document.getElementById("registerBtn");
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Creating account...';
+
+        const email = document.getElementById("registerEmail").value.trim();
+        const password = document.getElementById("registerPassword").value;
+
+        // Validate password
+        if (password.length < 6) {
+          showFieldError('registerPassword', 'Password must be at least 6 characters');
+          btn.disabled = false;
+          btn.textContent = originalText;
+          return;
+        }
+
+        try {
+          const response = await fetch(`${API_URL}/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            authToken = data.data.token;
+            currentUser = data.data.user;
+            localStorage.setItem("authToken", authToken);
+            showMessage("registerMessage", "Account created successfully!", "success");
+            document.getElementById("registerForm").reset();
+
+            setTimeout(() => {
+              showView("profileView");
+            }, 1000);
+          } else {
+            showMessage("registerMessage", data.error, "error");
+          }
+        } catch (error) {
+          showMessage("registerMessage", "Network error. Please check your connection.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
         }
       }
 
       async function handleForgotPassword(event) {
         event.preventDefault();
+        clearMessages();
+        
         const btn = document.getElementById("forgotBtn");
+        const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = "Sending...";
+        btn.innerHTML = '<span class="spinner"></span>Sending email...';
 
-        const email = document.getElementById("forgotEmail").value;
+        const email = document.getElementById("forgotEmail").value.trim();
 
         try {
           const response = await fetch(`${API_URL}/forgot-password`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email }),
           });
 
           const data = await response.json();
 
           if (data.success) {
-            showMessage("forgotMessage", data.message, "success");
+            showMessage("forgotMessage", 
+              "✅ Password reset email sent! Check your inbox (and spam folder) for a link to reset your password.", 
+              "success"
+            );
             document.getElementById("forgotForm").reset();
+            
+            // Show additional info
+            setTimeout(() => {
+              const currentMsg = document.getElementById("forgotMessage").innerHTML;
+              document.getElementById("forgotMessage").innerHTML = currentMsg + 
+                '<div class="info-box" style="margin-top: 16px;"><strong>📧 What\'s next?</strong>Click the link in the email to reset your password. The link will expire in 1 hour for security.</div>';
+            }, 500);
           } else {
             showMessage("forgotMessage", data.error, "error");
           }
         } catch (error) {
-          showMessage(
-            "forgotMessage",
-            "Network error. Please try again.",
-            "error"
-          );
+          showMessage("forgotMessage", "Network error. Please check your connection.", "error");
         } finally {
           btn.disabled = false;
-          btn.textContent = "Send Reset Link";
+          btn.textContent = originalText;
         }
       }
 
@@ -606,17 +879,12 @@
           const data = await response.json();
 
           if (data.success && data.data.url) {
-            // Redirect to Google OAuth URL
             window.location.href = data.data.url;
           } else {
             showMessage("loginMessage", "Failed to initiate Google sign-in", "error");
           }
         } catch (error) {
-          showMessage(
-            "loginMessage",
-            "Network error. Please try again.",
-            "error"
-          );
+          showMessage("loginMessage", "Network error. Please try again.", "error");
         }
       }
 
@@ -625,39 +893,47 @@
         const profileMessage = document.getElementById("profileMessage");
 
         if (!authToken) {
-          profileData.innerHTML = "";
-          showMessage(
-            "profileMessage",
-            "Please login first to view your profile.",
-            "info"
-          );
+          showView('loginView');
+          showMessage('loginMessage', 'Please sign in to view your profile', 'info');
           return;
         }
 
         try {
           const response = await fetch(`${API_URL}/profile`, {
-            headers: {
-              Authorization: `Bearer ${authToken}`,
-            },
+            headers: { Authorization: `Bearer ${authToken}` },
           });
 
           const data = await response.json();
 
           if (data.success) {
             const user = data.data.user;
+            const avatar = currentUser?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email)}&background=667eea&color=fff&size=200`;
+            const displayName = currentUser?.name || user.email.split('@')[0];
+            
             profileData.innerHTML = `
-              <div class="user-info">
-                <h3>User Profile</h3>
-                <p><strong>Email:</strong> ${user.email}</p>
-                <p><strong>User ID:</strong> ${user.id}</p>
-                <p><strong>Created:</strong> ${new Date(
-                  user.created_at
-                ).toLocaleString()}</p>
-                <p><strong>Last Sign In:</strong> ${new Date(
-                  user.last_sign_in
-                ).toLocaleString()}</p>
+              <div class="user-card">
+                <img src="${avatar}" alt="Avatar" class="user-avatar" />
+                <div class="user-name">${displayName}</div>
+                <div class="user-email">${user.email}</div>
+                
+                <div class="user-info-grid">
+                  <div class="user-info-item">
+                    <span class="user-info-label">User ID</span>
+                    <span class="user-info-value">${user.id.substring(0, 8)}...</span>
+                  </div>
+                  <div class="user-info-item">
+                    <span class="user-info-label">Account Created</span>
+                    <span class="user-info-value">${new Date(user.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div class="user-info-item">
+                    <span class="user-info-label">Last Sign In</span>
+                    <span class="user-info-value">${new Date(user.last_sign_in).toLocaleDateString()}</span>
+                  </div>
+                </div>
               </div>
-              <button onclick="handleLogout()">Logout</button>
+              <button class="logout-btn" onclick="handleLogout()">
+                Sign Out
+              </button>
             `;
             profileMessage.innerHTML = "";
           } else {
@@ -666,45 +942,37 @@
             if (response.status === 401 || response.status === 403) {
               localStorage.removeItem("authToken");
               authToken = null;
+              currentUser = null;
+              setTimeout(() => showView('loginView'), 2000);
             }
           }
         } catch (error) {
           profileData.innerHTML = "";
-          showMessage(
-            "profileMessage",
-            "Network error. Please try again.",
-            "error"
-          );
+          showMessage("profileMessage", "Network error. Please try again.", "error");
         }
       }
 
       async function handleLogout() {
         try {
-          const response = await fetch(`${API_URL}/logout`, {
+          await fetch(`${API_URL}/logout`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${authToken}`,
-            },
+            headers: { Authorization: `Bearer ${authToken}` },
           });
 
-          const data = await response.json();
-
-          if (data.success) {
-            localStorage.removeItem("authToken");
-            authToken = null;
-            showMessage("profileMessage", data.message, "success");
-            document.getElementById("profileData").innerHTML = "";
-
-            setTimeout(() => {
-              switchTab("login");
-            }, 1500);
-          }
+          localStorage.removeItem("authToken");
+          authToken = null;
+          currentUser = null;
+          document.getElementById("profileData").innerHTML = "";
+          
+          showView('loginView');
+          showMessage("loginMessage", "You've been signed out successfully", "success");
         } catch (error) {
-          showMessage(
-            "profileMessage",
-            "Network error. Please try again.",
-            "error"
-          );
+          console.error('Logout error:', error);
+          // Still log out locally even if server request fails
+          localStorage.removeItem("authToken");
+          authToken = null;
+          currentUser = null;
+          showView('loginView');
         }
       }
     </script>
