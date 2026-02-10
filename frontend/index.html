@@ -111,11 +111,12 @@
         font-size: 16px;
         font-weight: 600;
         cursor: pointer;
-        transition: transform 0.2s;
+        transition: transform 0.2s, box-shadow 0.2s;
       }
 
       button:hover {
         transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
       }
 
       button:active {
@@ -128,26 +129,70 @@
         transform: none;
       }
 
+      .google-btn {
+        background: white;
+        color: #333;
+        border: 2px solid #e0e0e0;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .google-btn:hover {
+        background: #f8f9fa;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+      }
+
+      .divider {
+        text-align: center;
+        margin: 20px 0;
+        position: relative;
+      }
+
+      .divider::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #e0e0e0;
+      }
+
+      .divider span {
+        background: white;
+        padding: 0 10px;
+        position: relative;
+        color: #999;
+        font-size: 14px;
+      }
+
       .message {
         padding: 12px;
         border-radius: 6px;
         margin-bottom: 20px;
         font-size: 14px;
-        display: none;
       }
 
       .message.success {
         background: #d4edda;
         color: #155724;
         border: 1px solid #c3e6cb;
-        display: block;
       }
 
       .message.error {
         background: #f8d7da;
         color: #721c24;
         border: 1px solid #f5c6cb;
-        display: block;
+      }
+
+      .message.info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
       }
 
       .user-info {
@@ -159,371 +204,507 @@
 
       .user-info h3 {
         color: #333;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
         font-size: 18px;
       }
 
-      .info-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 8px 0;
-        border-bottom: 1px solid #e0e0e0;
-      }
-
-      .info-row:last-child {
-        border-bottom: none;
-      }
-
-      .info-label {
+      .user-info p {
         color: #666;
-        font-weight: 500;
+        margin-bottom: 8px;
+        font-size: 14px;
       }
 
-      .info-value {
+      .user-info strong {
         color: #333;
-        font-family: monospace;
       }
 
-      .logout-btn {
-        background: #dc3545;
-      }
-
-      .logout-btn:hover {
-        background: #c82333;
-      }
-
-      .hidden {
-        display: none !important;
-      }
-
-      .token-display {
-        background: #f8f9fa;
-        padding: 10px;
-        border-radius: 4px;
-        word-break: break-all;
-        font-family: monospace;
-        font-size: 12px;
+      .link-btn {
+        background: none;
+        color: #667eea;
+        text-decoration: underline;
+        cursor: pointer;
+        font-size: 14px;
         margin-top: 10px;
-        max-height: 100px;
-        overflow-y: auto;
+        padding: 0;
+      }
+
+      .link-btn:hover {
+        transform: none;
+        box-shadow: none;
+        color: #764ba2;
+      }
+
+      .back-link {
+        text-align: center;
+        margin-top: 15px;
+      }
+
+      .back-link a {
+        color: #667eea;
+        text-decoration: none;
+        font-size: 14px;
+      }
+
+      .back-link a:hover {
+        text-decoration: underline;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>🔐 Auth Test</h1>
-      <p class="subtitle">Academic PDF Reader - Backend Testing</p>
+      <h1>🔐 Authentication Test</h1>
+      <p class="subtitle">Test your authentication backend</p>
 
-      <div id="message" class="message"></div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('login')">
+          Login
+        </button>
+        <button class="tab" onclick="switchTab('register')">Register</button>
+        <button class="tab" onclick="switchTab('profile')">Profile</button>
+      </div>
 
-      <!-- Login/Register View -->
-      <div id="auth-view">
-        <div class="tabs">
-          <button class="tab active" onclick="switchTab('login')">Login</button>
-          <button class="tab" onclick="switchTab('register')">Register</button>
-        </div>
+      <!-- Login Tab -->
+      <div id="login" class="tab-content active">
+        <div id="loginMessage"></div>
 
-        <!-- Login Form -->
-        <div id="login-tab" class="tab-content active">
-          <form id="login-form">
-            <div class="form-group">
-              <label for="login-email">Email</label>
-              <input
-                type="email"
-                id="login-email"
-                placeholder="your@email.com"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="login-password">Password</label>
-              <input
-                type="password"
-                id="login-password"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            <button type="submit">Login</button>
-          </form>
-        </div>
+        <!-- Google Sign-In Button -->
+        <button class="google-btn" onclick="googleSignIn()">
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"></path>
+            <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"></path>
+            <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"></path>
+            <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"></path>
+          </svg>
+          Sign in with Google
+        </button>
 
-        <!-- Register Form -->
-        <div id="register-tab" class="tab-content">
-          <form id="register-form">
-            <div class="form-group">
-              <label for="register-email">Email</label>
-              <input
-                type="email"
-                id="register-email"
-                placeholder="your@email.com"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="register-password">Password</label>
-              <input
-                type="password"
-                id="register-password"
-                placeholder="At least 6 characters"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="register-confirm-password">Confirm Password</label>
-              <input
-                type="password"
-                id="register-confirm-password"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            <button type="submit">Create Account</button>
-          </form>
+        <div class="divider"><span>OR</span></div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="loginEmail">Email</label>
+            <input
+              type="email"
+              id="loginEmail"
+              placeholder="Enter your email"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <input
+              type="password"
+              id="loginPassword"
+              placeholder="Enter your password"
+              required
+            />
+          </div>
+          <button type="submit" id="loginBtn">Login</button>
+          <button type="button" class="link-btn" onclick="switchTab('forgot')">
+            Forgot Password?
+          </button>
+        </form>
+      </div>
+
+      <!-- Register Tab -->
+      <div id="register" class="tab-content">
+        <div id="registerMessage"></div>
+
+        <!-- Google Sign-In Button -->
+        <button class="google-btn" onclick="googleSignIn()">
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"></path>
+            <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"></path>
+            <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"></path>
+            <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"></path>
+          </svg>
+          Sign up with Google
+        </button>
+
+        <div class="divider"><span>OR</span></div>
+
+        <form id="registerForm" onsubmit="handleRegister(event)">
+          <div class="form-group">
+            <label for="registerEmail">Email</label>
+            <input
+              type="email"
+              id="registerEmail"
+              placeholder="Enter your email"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="registerPassword">Password</label>
+            <input
+              type="password"
+              id="registerPassword"
+              placeholder="Create a password (min 6 characters)"
+              required
+            />
+          </div>
+          <button type="submit" id="registerBtn">Register</button>
+        </form>
+      </div>
+
+      <!-- Forgot Password Tab -->
+      <div id="forgot" class="tab-content">
+        <div id="forgotMessage"></div>
+        <form id="forgotForm" onsubmit="handleForgotPassword(event)">
+          <div class="form-group">
+            <label for="forgotEmail">Email</label>
+            <input
+              type="email"
+              id="forgotEmail"
+              placeholder="Enter your email"
+              required
+            />
+          </div>
+          <button type="submit" id="forgotBtn">Send Reset Link</button>
+        </form>
+        <div class="back-link">
+          <a href="#" onclick="switchTab('login'); return false;">Back to Login</a>
         </div>
       </div>
 
-      <!-- Profile View (shown when logged in) -->
-      <div id="profile-view" class="hidden">
-        <div class="user-info">
-          <h3>👤 User Profile</h3>
-          <div class="info-row">
-            <span class="info-label">Email:</span>
-            <span class="info-value" id="user-email">-</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">User ID:</span>
-            <span class="info-value" id="user-id">-</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Created:</span>
-            <span class="info-value" id="user-created">-</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Last Sign In:</span>
-            <span class="info-value" id="user-last-signin">-</span>
-          </div>
-        </div>
-
-        <details>
-          <summary style="cursor: pointer; margin-bottom: 10px; color: #666">
-            Show Token
-          </summary>
-          <div class="token-display" id="token-display"></div>
-        </details>
-
-        <button class="logout-btn" onclick="logout()">Logout</button>
+      <!-- Profile Tab -->
+      <div id="profile" class="tab-content">
+        <div id="profileMessage"></div>
+        <div id="profileData"></div>
       </div>
     </div>
 
     <script>
       const API_URL = "http://localhost:3001/api/auth";
+      let authToken = localStorage.getItem("authToken");
 
-      // Check if user is already logged in
-      window.onload = () => {
-        const token = localStorage.getItem("token");
-        if (token) {
-          loadUserProfile();
+      // Check for Google OAuth callback
+      window.addEventListener('DOMContentLoaded', () => {
+        // Check for hash parameters (Supabase uses hash, not query params)
+        const hash = window.location.hash.substring(1);
+        const hashParams = new URLSearchParams(hash);
+        const access_token = hashParams.get('access_token');
+        
+        // Also check query params for our custom redirects
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+        const email = params.get('email');
+        const error = params.get('error');
+
+        if (access_token) {
+          // We have a Supabase access token from Google OAuth
+          verifyGoogleToken(access_token);
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (token) {
+          authToken = token;
+          localStorage.setItem("authToken", token);
+          showMessage('loginMessage', `Successfully signed in as ${email}`, 'success');
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (error) {
+          let errorMsg = 'Google sign-in failed';
+          if (error === 'no_code') errorMsg = 'No authorization code received';
+          if (error === 'auth_failed') errorMsg = 'Google authentication failed';
+          if (error === 'server_error') errorMsg = 'Server error occurred';
+          showMessage('loginMessage', errorMsg, 'error');
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
-      };
+      });
 
-      // Switch between login and register tabs
-      function switchTab(tab) {
-        document
-          .querySelectorAll(".tab")
-          .forEach((t) => t.classList.remove("active"));
-        document
-          .querySelectorAll(".tab-content")
-          .forEach((c) => c.classList.remove("active"));
+      async function verifyGoogleToken(access_token) {
+        try {
+          showMessage('loginMessage', 'Verifying Google sign-in...', 'info');
+          
+          const response = await fetch(`${API_URL}/google/verify`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ access_token })
+          });
 
+          const data = await response.json();
+
+          if (data.success) {
+            authToken = data.data.token;
+            localStorage.setItem("authToken", authToken);
+            showMessage('loginMessage', `Successfully signed in with Google as ${data.data.user.email}`, 'success');
+            
+            setTimeout(() => {
+              switchTab('profile');
+            }, 1500);
+          } else {
+            showMessage('loginMessage', data.error || 'Google sign-in verification failed', 'error');
+          }
+        } catch (error) {
+          console.error('Google verification error:', error);
+          showMessage('loginMessage', 'Failed to verify Google sign-in. Please try again.', 'error');
+        }
+      }
+
+      function switchTab(tabName) {
+        // Remove active class from all tabs and contents
+        document.querySelectorAll(".tab").forEach((tab) => {
+          tab.classList.remove("active");
+        });
+        document.querySelectorAll(".tab-content").forEach((content) => {
+          content.classList.remove("active");
+        });
+
+        // Add active class to selected tab
         event.target.classList.add("active");
-        document.getElementById(`${tab}-tab`).classList.add("active");
-        hideMessage();
+        document.getElementById(tabName).classList.add("active");
+
+        // If switching to profile, load profile data
+        if (tabName === "profile") {
+          loadProfile();
+        }
+
+        // Clear messages
+        clearMessages();
       }
 
-      // Show message
-      function showMessage(text, type = "success") {
-        const messageEl = document.getElementById("message");
-        messageEl.textContent = text;
-        messageEl.className = `message ${type}`;
-        messageEl.style.display = "block";
+      function showMessage(elementId, message, type) {
+        const messageDiv = document.getElementById(elementId);
+        messageDiv.innerHTML = `<div class="message ${type}">${message}</div>`;
       }
 
-      // Hide message
-      function hideMessage() {
-        document.getElementById("message").style.display = "none";
+      function clearMessages() {
+        document
+          .querySelectorAll('[id$="Message"]')
+          .forEach((el) => (el.innerHTML = ""));
       }
 
-      // Register form handler
-      document
-        .getElementById("register-form")
-        .addEventListener("submit", async (e) => {
-          e.preventDefault();
-          hideMessage();
+      async function handleRegister(event) {
+        event.preventDefault();
+        const btn = document.getElementById("registerBtn");
+        btn.disabled = true;
+        btn.textContent = "Registering...";
 
-          const email = document.getElementById("register-email").value;
-          const password = document.getElementById("register-password").value;
-          const confirmPassword = document.getElementById(
-            "register-confirm-password",
-          ).value;
+        const email = document.getElementById("registerEmail").value;
+        const password = document.getElementById("registerPassword").value;
 
-          // Validate passwords match
-          if (password !== confirmPassword) {
-            showMessage("Passwords do not match!", "error");
-            return;
+        try {
+          const response = await fetch(`${API_URL}/register`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            authToken = data.data.token;
+            localStorage.setItem("authToken", authToken);
+            showMessage("registerMessage", data.message, "success");
+            document.getElementById("registerForm").reset();
+
+            setTimeout(() => {
+              switchTab("profile");
+            }, 1500);
+          } else {
+            showMessage("registerMessage", data.error, "error");
           }
+        } catch (error) {
+          showMessage(
+            "registerMessage",
+            "Network error. Please try again.",
+            "error"
+          );
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Register";
+        }
+      }
 
-          // Validate password length
-          if (password.length < 6) {
-            showMessage(
-              "Password must be at least 6 characters long!",
-              "error",
-            );
-            return;
+      async function handleLogin(event) {
+        event.preventDefault();
+        const btn = document.getElementById("loginBtn");
+        btn.disabled = true;
+        btn.textContent = "Logging in...";
+
+        const email = document.getElementById("loginEmail").value;
+        const password = document.getElementById("loginPassword").value;
+
+        try {
+          const response = await fetch(`${API_URL}/login`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            authToken = data.data.token;
+            localStorage.setItem("authToken", authToken);
+            showMessage("loginMessage", data.message, "success");
+            document.getElementById("loginForm").reset();
+
+            setTimeout(() => {
+              switchTab("profile");
+            }, 1500);
+          } else {
+            showMessage("loginMessage", data.error, "error");
           }
+        } catch (error) {
+          showMessage(
+            "loginMessage",
+            "Network error. Please try again.",
+            "error"
+          );
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Login";
+        }
+      }
 
-          try {
-            const response = await fetch(`${API_URL}/register`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ email, password }),
-            });
+      async function handleForgotPassword(event) {
+        event.preventDefault();
+        const btn = document.getElementById("forgotBtn");
+        btn.disabled = true;
+        btn.textContent = "Sending...";
 
-            const data = await response.json();
+        const email = document.getElementById("forgotEmail").value;
 
-            if (data.success) {
-              localStorage.setItem("token", data.data.token);
-              showMessage("Registration successful! Welcome!", "success");
-              setTimeout(() => loadUserProfile(), 1500);
-            } else {
-              showMessage(data.error || "Registration failed", "error");
-            }
-          } catch (error) {
-            console.error("Registration error:", error);
-            showMessage(
-              "Connection error. Make sure the backend server is running.",
-              "error",
-            );
+        try {
+          const response = await fetch(`${API_URL}/forgot-password`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showMessage("forgotMessage", data.message, "success");
+            document.getElementById("forgotForm").reset();
+          } else {
+            showMessage("forgotMessage", data.error, "error");
           }
-        });
+        } catch (error) {
+          showMessage(
+            "forgotMessage",
+            "Network error. Please try again.",
+            "error"
+          );
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Send Reset Link";
+        }
+      }
 
-      // Login form handler
-      document
-        .getElementById("login-form")
-        .addEventListener("submit", async (e) => {
-          e.preventDefault();
-          hideMessage();
+      async function googleSignIn() {
+        try {
+          const response = await fetch(`${API_URL}/google`);
+          const data = await response.json();
 
-          const email = document.getElementById("login-email").value;
-          const password = document.getElementById("login-password").value;
-
-          try {
-            const response = await fetch(`${API_URL}/login`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ email, password }),
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-              localStorage.setItem("token", data.data.token);
-              showMessage("Login successful!", "success");
-              setTimeout(() => loadUserProfile(), 1500);
-            } else {
-              showMessage(data.error || "Login failed", "error");
-            }
-          } catch (error) {
-            console.error("Login error:", error);
-            showMessage(
-              "Connection error. Make sure the backend server is running.",
-              "error",
-            );
+          if (data.success && data.data.url) {
+            // Redirect to Google OAuth URL
+            window.location.href = data.data.url;
+          } else {
+            showMessage("loginMessage", "Failed to initiate Google sign-in", "error");
           }
-        });
+        } catch (error) {
+          showMessage(
+            "loginMessage",
+            "Network error. Please try again.",
+            "error"
+          );
+        }
+      }
 
-      // Load user profile
-      async function loadUserProfile() {
-        const token = localStorage.getItem("token");
+      async function loadProfile() {
+        const profileData = document.getElementById("profileData");
+        const profileMessage = document.getElementById("profileMessage");
 
-        if (!token) {
-          showView("auth");
+        if (!authToken) {
+          profileData.innerHTML = "";
+          showMessage(
+            "profileMessage",
+            "Please login first to view your profile.",
+            "info"
+          );
           return;
         }
 
         try {
           const response = await fetch(`${API_URL}/profile`, {
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${authToken}`,
             },
           });
 
           const data = await response.json();
 
           if (data.success) {
-            // Display user info
-            document.getElementById("user-email").textContent =
-              data.data.user.email;
-            document.getElementById("user-id").textContent = data.data.user.id;
-            document.getElementById("user-created").textContent = new Date(
-              data.data.user.created_at,
-            ).toLocaleString();
-            document.getElementById("user-last-signin").textContent = data.data
-              .user.last_sign_in
-              ? new Date(data.data.user.last_sign_in).toLocaleString()
-              : "N/A";
-            document.getElementById("token-display").textContent = token;
-
-            showView("profile");
+            const user = data.data.user;
+            profileData.innerHTML = `
+              <div class="user-info">
+                <h3>User Profile</h3>
+                <p><strong>Email:</strong> ${user.email}</p>
+                <p><strong>User ID:</strong> ${user.id}</p>
+                <p><strong>Created:</strong> ${new Date(
+                  user.created_at
+                ).toLocaleString()}</p>
+                <p><strong>Last Sign In:</strong> ${new Date(
+                  user.last_sign_in
+                ).toLocaleString()}</p>
+              </div>
+              <button onclick="handleLogout()">Logout</button>
+            `;
+            profileMessage.innerHTML = "";
           } else {
-            localStorage.removeItem("token");
-            showView("auth");
-            showMessage("Session expired. Please login again.", "error");
+            profileData.innerHTML = "";
+            showMessage("profileMessage", data.error, "error");
+            if (response.status === 401 || response.status === 403) {
+              localStorage.removeItem("authToken");
+              authToken = null;
+            }
           }
         } catch (error) {
-          console.error("Profile error:", error);
-          localStorage.removeItem("token");
-          showView("auth");
-          showMessage("Error loading profile. Please login again.", "error");
+          profileData.innerHTML = "";
+          showMessage(
+            "profileMessage",
+            "Network error. Please try again.",
+            "error"
+          );
         }
       }
 
-      // Logout
-      async function logout() {
-        const token = localStorage.getItem("token");
-
+      async function handleLogout() {
         try {
-          await fetch(`${API_URL}/logout`, {
+          const response = await fetch(`${API_URL}/logout`, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${token}`,
+              Authorization: `Bearer ${authToken}`,
             },
           });
+
+          const data = await response.json();
+
+          if (data.success) {
+            localStorage.removeItem("authToken");
+            authToken = null;
+            showMessage("profileMessage", data.message, "success");
+            document.getElementById("profileData").innerHTML = "";
+
+            setTimeout(() => {
+              switchTab("login");
+            }, 1500);
+          }
         } catch (error) {
-          console.error("Logout error:", error);
-        }
-
-        localStorage.removeItem("token");
-        showView("auth");
-        showMessage("Logged out successfully!", "success");
-
-        // Clear form inputs
-        document.getElementById("login-form").reset();
-        document.getElementById("register-form").reset();
-      }
-
-      // Show/hide views
-      function showView(view) {
-        if (view === "auth") {
-          document.getElementById("auth-view").classList.remove("hidden");
-          document.getElementById("profile-view").classList.add("hidden");
-        } else {
-          document.getElementById("auth-view").classList.add("hidden");
-          document.getElementById("profile-view").classList.remove("hidden");
+          showMessage(
+            "profileMessage",
+            "Network error. Please try again.",
+            "error"
+          );
         }
       }
     </script>

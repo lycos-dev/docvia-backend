@@ -183,6 +183,204 @@ const login = async (req, res) => {
 };
 
 /**
+ * Forgot Password - Send reset email
+ * POST /api/auth/forgot-password
+ */
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Validation
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required.'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide a valid email address.'
+      });
+    }
+
+    // Send password reset email via Supabase
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password`,
+    });
+
+    if (error) {
+      console.error('Supabase forgot password error:', error);
+      
+      // For security, don't reveal if email exists or not
+      // Return success message regardless
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email, a password reset link has been sent.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'If an account exists with this email, a password reset link has been sent.'
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to process password reset request. Please try again.'
+    });
+  }
+};
+
+/**
+ * Reset Password - Update password with reset token
+ * POST /api/auth/reset-password
+ */
+const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    // Validation
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token and new password are required.'
+      });
+    }
+
+    // Validate password strength
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be at least 6 characters long.'
+      });
+    }
+
+    // Update password using the reset token
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+
+    if (error) {
+      console.error('Supabase reset password error:', error);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired reset token. Please request a new password reset.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully. You can now login with your new password.'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to reset password. Please try again.'
+    });
+  }
+};
+
+/**
+ * Google Sign-In - Initiate OAuth flow
+ * GET /api/auth/google
+ */
+const googleSignIn = async (req, res) => {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3001'}`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
+      }
+    });
+
+    if (error) {
+      console.error('Google OAuth initiation error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to initiate Google sign-in.'
+      });
+    }
+
+    // Return the OAuth URL for the frontend to redirect to
+    return res.status(200).json({
+      success: true,
+      data: {
+        url: data.url
+      }
+    });
+  } catch (error) {
+    console.error('Google sign-in error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to initiate Google sign-in.'
+    });
+  }
+};
+
+/**
+ * Verify Google OAuth Session
+ * POST /api/auth/google/verify
+ */
+const googleVerify = async (req, res) => {
+  try {
+    const { access_token } = req.body;
+
+    if (!access_token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Access token is required.'
+      });
+    }
+
+    // Get user from Supabase using the access token
+    const { data: { user }, error } = await supabase.auth.getUser(access_token);
+
+    if (error || !user) {
+      console.error('Google OAuth verification error:', error);
+      return res.status(401).json({
+        success: false,
+        error: 'Failed to verify Google sign-in.'
+      });
+    }
+
+    // Generate our own JWT token
+    const token = generateToken(user.id, user.email);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Google sign-in successful!',
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.full_name || user.email,
+          avatar: user.user_metadata?.avatar_url || null,
+          created_at: user.created_at,
+          last_sign_in: user.last_sign_in_at
+        },
+        token
+      }
+    });
+  } catch (error) {
+    console.error('Google verify error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to verify Google sign-in.'
+    });
+  }
+};
+
+/**
  * Get user profile (protected route)
  * GET /api/auth/profile
  */
@@ -249,6 +447,10 @@ const logout = async (req, res) => {
 module.exports = {
   register,
   login,
+  forgotPassword,
+  resetPassword,
+  googleSignIn,
+  googleVerify,
   getProfile,
   logout
 };
