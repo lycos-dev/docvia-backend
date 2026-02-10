@@ -239,6 +239,8 @@ const forgotPassword = async (req, res) => {
 /**
  * Reset Password - Update password with reset token
  * POST /api/auth/reset-password
+ * 
+ * The token comes from the email link and is an access_token JWT
  */
 const resetPassword = async (req, res) => {
   try {
@@ -246,6 +248,7 @@ const resetPassword = async (req, res) => {
 
     // Validation
     if (!token || !newPassword) {
+      console.error('❌ Missing token or password');
       return res.status(400).json({
         success: false,
         error: 'Token and new password are required.'
@@ -260,25 +263,50 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Update password using the reset token
-    const { data, error } = await supabase.auth.updateUser({
-      password: newPassword
+    console.log('🔄 Processing password reset...');
+    console.log('Token length:', token.length);
+
+    // Make a direct API call to Supabase to update the password
+    // using the access token from the password reset email
+    const updateUrl = `${process.env.SUPABASE_URL}/auth/v1/user`;
+    
+    console.log('📡 Calling Supabase API...');
+    console.log('URL:', updateUrl);
+
+    const response = await fetch(updateUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'apikey': process.env.SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({
+        password: newPassword
+      })
     });
 
-    if (error) {
-      console.error('Supabase reset password error:', error);
+    console.log('📊 Response status:', response.status);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('❌ API error response:', errorData);
       return res.status(400).json({
         success: false,
-        error: 'Invalid or expired reset token. Please request a new password reset.'
+        error: 'Invalid or expired reset link. Please request a new password reset.'
       });
     }
 
+    const result = await response.json();
+    console.log('✅ Password updated successfully');
+    
     return res.status(200).json({
       success: true,
-      message: 'Password has been reset successfully. You can now login with your new password.'
+      message: 'Password has been reset successfully. Please log in with your new password.'
     });
+
   } catch (error) {
-    console.error('Reset password error:', error);
+    console.error('❌ Reset password exception:', error.message);
+    console.error('Full error:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to reset password. Please try again.'
