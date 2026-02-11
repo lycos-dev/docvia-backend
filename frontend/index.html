@@ -633,11 +633,44 @@
       <div id="profileView" class="view">
         <div id="profileMessage"></div>
         <div id="profileData"></div>
+        
+        <!-- PDF Upload Section (shown in profile) -->
+        <div id="pdfSection" style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e5e7eb;">
+          <h3 style="color: #333; margin-bottom: 20px; font-size: 18px; font-weight: 600;">📄 Upload Academic PDF</h3>
+          
+          <div id="pdfMessage"></div>
+          
+          <form id="pdfForm" onsubmit="handlePDFUpload(event)" style="margin-bottom: 30px;">
+            <div class="form-group">
+              <label for="pdfFile">Select PDF Document:</label>
+              <input type="file" id="pdfFile" accept=".pdf" required style="padding: 10px;">
+              <div id="fileInfo" style="display: none; background: #f0f9ff; border-left: 4px solid #667eea; padding: 12px; margin-top: 12px; border-radius: 6px; font-size: 13px; color: #333;"></div>
+            </div>
+            
+            <button type="submit" id="pdfUploadBtn" style="margin-top: 15px;">
+              <span id="pdfUploadBtnText">📤 Upload PDF</span>
+            </button>
+          </form>
+          
+          <div id="pdfResponse" style="display: none; background: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 20px;">
+            <h4 style="color: #333; margin-bottom: 12px; font-size: 14px;">Upload Response:</h4>
+            <pre id="pdfResponseJson" style="background: white; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 11px; color: #333; line-height: 1.4;"></pre>
+          </div>
+          
+          <div style="margin-top: 30px;">
+            <h3 style="color: #333; margin-bottom: 15px; font-size: 16px; font-weight: 600;">📋 Uploaded PDFs</h3>
+            <button type="button" onclick="loadPDFList()" class="link-btn" style="background: #f3f4f6; color: #333; width: 100%; margin-top: 0;">
+              🔄 Refresh PDF List
+            </button>
+            <div id="pdfList" style="margin-top: 15px;"></div>
+          </div>
+        </div>
       </div>
     </div>
 
     <script>
       const API_URL = "http://localhost:3001/api/auth";
+      const PDF_API_URL = "http://localhost:3001/api/pdf";
       let authToken = localStorage.getItem("authToken");
       let currentUser = null;
 
@@ -1227,6 +1260,189 @@
           showView('loginView');
         }
       }
+
+      // ===== PDF UPLOAD FUNCTIONS =====
+
+      document.getElementById('pdfFile').addEventListener('change', function(e) {
+        const file = this.files[0];
+        const infoDiv = document.getElementById('fileInfo');
+        
+        if (file) {
+          const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+          const sizeKB = (file.size / 1024).toFixed(2);
+          infoDiv.innerHTML = `
+            <strong>File Selected:</strong> ${file.name}<br>
+            <strong>Size:</strong> ${sizeMB} MB (${sizeKB} KB)<br>
+            <strong>Type:</strong> ${file.type || 'application/pdf'}
+          `;
+          infoDiv.style.display = 'block';
+        } else {
+          infoDiv.style.display = 'none';
+        }
+      });
+
+      async function handlePDFUpload(e) {
+        e.preventDefault();
+
+        const file = document.getElementById('pdfFile').files[0];
+        if (!file) {
+          showMessage('pdfMessage', 'Please select a file', 'error');
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('pdf', file);
+
+        const uploadBtn = document.getElementById('pdfUploadBtn');
+        const uploadBtnText = document.getElementById('pdfUploadBtnText');
+        uploadBtn.disabled = true;
+        uploadBtnText.textContent = '⏳ Uploading & Validating...';
+
+        try {
+          const response = await fetch(`${PDF_API_URL}/upload`, {
+            method: 'POST',
+            body: formData
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showMessage('pdfMessage', 
+              `✓ PDF uploaded successfully! File: ${data.data.originalFilename}`, 
+              'success');
+            
+            // Show response
+            const responseDiv = document.getElementById('pdfResponse');
+            const jsonDiv = document.getElementById('pdfResponseJson');
+            jsonDiv.textContent = JSON.stringify(data, null, 2);
+            responseDiv.style.display = 'block';
+
+            // Clear form
+            document.getElementById('pdfForm').reset();
+            document.getElementById('fileInfo').style.display = 'none';
+
+            // Refresh PDF list
+            setTimeout(() => loadPDFList(), 1000);
+          } else {
+            // PDF validation failed
+            let errorMsg = data.error || 'Upload failed';
+            
+            if (data.errors && data.errors.length > 0) {
+              errorMsg += '\n\nValidation Errors:';
+              data.errors.forEach(err => {
+                errorMsg += '\n• ' + err;
+              });
+            }
+            
+            showMessage('pdfMessage', errorMsg, 'error');
+
+            // Show response with validation details
+            const responseDiv = document.getElementById('pdfResponse');
+            const jsonDiv = document.getElementById('pdfResponseJson');
+            
+            let html = 'File Validation Failed\n\n';
+            html += 'Message: ' + data.message + '\n\n';
+            
+            if (data.errors && data.errors.length > 0) {
+              html += 'Errors:\n';
+              data.errors.forEach(err => {
+                html += '• ' + err + '\n';
+              });
+              html += '\n';
+            }
+            
+            if (data.warnings && data.warnings.length > 0) {
+              html += 'Warnings:\n';
+              data.warnings.forEach(warn => {
+                html += '• ' + warn + '\n';
+              });
+            }
+            
+            html += '\n\nFull Response:\n' + JSON.stringify(data, null, 2);
+            jsonDiv.textContent = html;
+            responseDiv.style.display = 'block';
+          }
+        } catch (error) {
+          console.error('Upload error:', error);
+          showMessage('pdfMessage', 'Network error: ' + error.message, 'error');
+        } finally {
+          uploadBtn.disabled = false;
+          uploadBtnText.textContent = '📤 Upload PDF';
+        }
+      }
+
+      async function loadPDFList() {
+        const pdfList = document.getElementById('pdfList');
+        pdfList.innerHTML = '<p style="text-align: center; color: #999;">Loading PDFs...</p>';
+
+        try {
+          const response = await fetch(`${PDF_API_URL}/list`);
+          const data = await response.json();
+
+          if (data.success && data.data.length > 0) {
+            let html = '';
+            data.data.forEach(file => {
+              const sizeMB = (file.metadata?.size / 1024 / 1024 || 0).toFixed(2);
+              const createdAt = new Date(file.created_at).toLocaleString();
+              html += `
+                <div style="background: #f0f9ff; padding: 12px; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #667eea;">
+                  <div>
+                    <div style="font-weight: 600; color: #333;">📄 ${file.name}</div>
+                    <div style="font-size: 12px; color: #999; margin-top: 4px;">
+                      Size: ${sizeMB} MB | Uploaded: ${createdAt}
+                    </div>
+                  </div>
+                  <button type="button" onclick="deletePDF('${file.name}')" style="background: #ef4444; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                    🗑️ Delete
+                  </button>
+                </div>
+              `;
+            });
+            pdfList.innerHTML = html;
+            showMessage('pdfMessage', `Found ${data.count} PDF(s)`, 'info');
+          } else {
+            pdfList.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">No PDFs uploaded yet</p>';
+            showMessage('pdfMessage', 'No PDFs found', 'info');
+          }
+        } catch (error) {
+          console.error('List error:', error);
+          pdfList.innerHTML = `<p style="color: #ef4444; text-align: center; padding: 20px;">Error loading PDFs: ${error.message}</p>`;
+          showMessage('pdfMessage', 'Network error: ' + error.message, 'error');
+        }
+      }
+
+      async function deletePDF(filename) {
+        if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`${PDF_API_URL}/${filename}`, {
+            method: 'DELETE'
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            showMessage('pdfMessage', `✓ PDF deleted successfully`, 'success');
+            loadPDFList();
+          } else {
+            showMessage('pdfMessage', `✗ Failed to delete PDF: ${data.error}`, 'error');
+          }
+        } catch (error) {
+          console.error('Delete error:', error);
+          showMessage('pdfMessage', 'Network error: ' + error.message, 'error');
+        }
+      }
+
+      // Load PDF list when profile is loaded
+      const originalLoadProfile = loadProfile;
+      loadProfile = function() {
+        originalLoadProfile.apply(this, arguments);
+        setTimeout(() => {
+          loadPDFList();
+        }, 500);
+      };
     </script>
   </body>
 </html>

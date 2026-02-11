@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const pdfRoutes = require('./routes/pdf.routes');
 require('dotenv').config();
 
 const { supabase, testConnection } = require('./config/supabase');
@@ -31,22 +32,31 @@ app.use((req, res, next) => {
 
 // API Routes (must come before catch-all route)
 app.use('/api/auth', authRoutes);
+app.use('/api/pdf', pdfRoutes);
 
+// Health check endpoint for API
 // Health check endpoint for API
 app.get('/api', (req, res) => {
   res.json({
     success: true,
-    message: 'Academic PDF Reader API - Authentication Service',
+    message: 'Academic PDF Reader API - Authentication & PDF Management Service',
     version: '1.0.0',
     endpoints: {
-      register: 'POST /api/auth/register',
-      login: 'POST /api/auth/login',
-      'forgot-password': 'POST /api/auth/forgot-password',
-      'reset-password': 'POST /api/auth/reset-password',
-      google: 'GET /api/auth/google',
-      'google-verify': 'POST /api/auth/google/verify',
-      profile: 'GET /api/auth/profile (requires auth)',
-      logout: 'POST /api/auth/logout (requires auth)'
+      auth: {
+        register: 'POST /api/auth/register',
+        login: 'POST /api/auth/login',
+        'forgot-password': 'POST /api/auth/forgot-password',
+        'reset-password': 'POST /api/auth/reset-password',
+        google: 'GET /api/auth/google',
+        'google-verify': 'POST /api/auth/google/verify',
+        profile: 'GET /api/auth/profile (requires auth)',
+        logout: 'POST /api/auth/logout (requires auth)'
+      },
+      pdf: {
+        upload: 'POST /api/pdf/upload (with integrated validation)',
+        list: 'GET /api/pdf/list',
+        delete: 'DELETE /api/pdf/:filename'
+      }
     }
   });
 });
