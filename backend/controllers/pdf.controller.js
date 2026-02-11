@@ -167,6 +167,8 @@ const uploadPDF = async (req, res) => {
  * @route GET /api/pdf/list
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
+ * 
+ * Note: Supabase storage returns file.name with path prefix (e.g., "pdfs/filename.pdf")
  */
 const listPDFs = async (req, res) => {
   try {
@@ -221,10 +223,15 @@ const deletePDF = async (req, res) => {
       });
     }
 
+    // Handle both cases: filename with or without 'pdfs/' prefix
+    // If the filename already includes 'pdfs/', use it as-is
+    // Otherwise, prepend 'pdfs/' to the filename
+    const storagePath = filename.startsWith('pdfs/') ? filename : `pdfs/${filename}`;
+
     const { error } = await supabase
       .storage
       .from('academic-pdfs')
-      .remove([`pdfs/${filename}`]);
+      .remove([storagePath]);
 
     if (error) {
       console.error('Supabase delete error:', error);
