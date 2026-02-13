@@ -645,6 +645,21 @@
           font-size: 28px;
         }
       }
+
+      .spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+        margin-right: 8px;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
     </style>
   </head>
   <body>
@@ -877,9 +892,21 @@
       let currentSegmentation = null;
 
       window.addEventListener('DOMContentLoaded', () => {
-        handleOAuthCallback();
-        checkAuthState();
+        handleRouting();  // Handle URL routing FIRST
       });
+
+      function handleRouting() {
+        const path = window.location.pathname;
+        
+        // Handle different routes
+        if (path === '/reset-password' || path.includes('reset-password')) {
+          checkForResetToken();  // Check for token and show reset form
+        } else {
+          // Normal flow for other routes
+          handleOAuthCallback();
+          checkAuthState();
+        }
+      }
 
       function showView(viewName) {
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -900,6 +927,22 @@
       }
 
       function checkAuthState() {
+        // Check for reset token in BOTH query params and hash
+        const searchParams = new URLSearchParams(window.location.search);
+        let resetToken = searchParams.get("token");
+        
+        if (!resetToken) {
+          const hash = window.location.hash.substring(1);
+          const hashParams = new URLSearchParams(hash);
+          resetToken = hashParams.get("token");
+        }
+        
+        if (resetToken) {
+          // Skip auto-login when resetting password
+          console.log("🔐 Reset token detected - skipping auto-login");
+          return;
+        }
+        
         if (authToken) {
           loadProfile();
           showView('profileView');
@@ -970,9 +1013,16 @@
         }
       }
 
-      async function handleForgotPassword(e) {
-        e.preventDefault();
-        const email = document.getElementById("forgotEmail").value;
+      async function handleForgotPassword(event) {
+        event.preventDefault();
+        clearMessages();
+        
+        const btn = document.getElementById("forgotBtn");
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Sending email...';
+
+        const email = document.getElementById("forgotEmail").value.trim();
 
         try {
           const response = await fetch(`${API_URL}/forgot-password`, {
@@ -984,45 +1034,215 @@
           const data = await response.json();
 
           if (data.success) {
-            showMessage("forgotMessage", "✓ Reset link sent to your email", "success");
-            setTimeout(() => showView('loginView'), 2000);
+            showMessage("forgotMessage", 
+              "✅ Password reset email sent! Check your inbox (and spam folder) for a link to reset your password.", 
+              "success"
+            );
+            document.getElementById("forgotForm").reset();
+            
+            // Show additional info
+            setTimeout(() => {
+              const currentMsg = document.getElementById("forgotMessage").innerHTML;
+              document.getElementById("forgotMessage").innerHTML = currentMsg + 
+                '<div class="info-box" style="margin-top: 16px;"><strong>📧 What\'s next?</strong> Click the link in the email to reset your password. The link will expire in 1 hour for security.</div>';
+            }, 500);
           } else {
             showMessage("forgotMessage", data.error, "error");
           }
         } catch (error) {
-          showMessage("forgotMessage", "Network error. Please try again.", "error");
+          showMessage("forgotMessage", "Network error. Please check your connection.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
         }
       }
 
-      async function handleResetPassword(e) {
-        e.preventDefault();
-        const password = document.getElementById("resetPassword").value;
-        const passwordConfirm = document.getElementById("resetPasswordConfirm").value;
+      /**
+       * Handle Reset Password Form Submission
+       */
+      async function handleResetPassword(event) {
+        event.preventDefault();
+        clearMessages();
 
-        if (password !== passwordConfirm) {
-          showMessage("resetMessage", "Passwords do not match", "error");
+        const password = document.getElementById("resetPassword").value.trim();
+        const confirmPassword = document.getElementById("resetPasswordConfirm").value.trim();
+
+        // Validation
+        if (!password || !confirmPassword) {
+          showMessage("resetMessage", "Please enter and confirm your new password.", "error");
           return;
         }
 
-        const resetToken = new URLSearchParams(window.location.hash.substring(1)).get("token");
+        if (password.length < 6) {
+          showMessage("resetMessage", "Password must be at least 6 characters long.", "error");
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          showMessage("resetMessage", "Passwords do not match.", "error");
+          return;
+        }
+
+        const btn = document.getElementById("resetBtn");
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Resetting password...';
 
         try {
+          // Get token from URL or sessionStorage
+          let token = null;
+          
+          // Try getting from URL first
+          const searchParams = new URLSearchParams(window.location.search);
+          token = searchParams.get("token");
+          
+          // If not in URL, check hash
+          if (!token && window.location.hash) {
+            const hash = window.location.hash.substring(1);
+            const hashParams = new URLSearchParams(hash);
+            token = hashParams.get("token");
+            
+            // Also check for access_token format
+            if (!token) {
+              token = hashParams.get("access_token");
+            }
+          }
+          
+          // If still not found, try sessionStorage
+          if (!token) {
+            token = sessionStorage.getItem("resetToken");
+          }
+
+          if (!token) {
+            console.error("❌ No token found");
+            showMessage("resetMessage", "Invalid or expired reset link. Please request a new password reset.", "error");
+            btn.disabled = false;
+            btn.textContent = originalText;
+            return;
+          }
+
+          console.log("🔄 Sending reset password request...");
+          console.log("Token length:", token.length);
+
           const response = await fetch(`${API_URL}/reset-password`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token: resetToken, password }),
+            body: JSON.stringify({
+              token: token,
+              newPassword: password
+            }),
           });
 
           const data = await response.json();
 
           if (data.success) {
-            showMessage("resetMessage", "✓ Password reset successfully!", "success");
-            setTimeout(() => showView('loginView'), 2000);
+            console.log("✅ Password reset successful");
+            showMessage("resetMessage", 
+              "✅ " + data.message + " You'll be redirected to login in 3 seconds...", 
+              "success"
+            );
+            
+            // Clear the stored token
+            sessionStorage.removeItem("resetToken");
+            
+            // Clear the form
+            document.getElementById("resetForm").reset();
+
+            // Redirect to login after 3 seconds
+            setTimeout(() => {
+              window.history.replaceState({}, document.title, '/');
+              window.location.href = '/';
+            }, 3000);
           } else {
-            showMessage("resetMessage", data.error, "error");
+            console.error("❌ Password reset failed:", data.error);
+            showMessage("resetMessage", data.error || "Failed to reset password.", "error");
           }
         } catch (error) {
-          showMessage("resetMessage", "Network error. Please try again.", "error");
+          console.error("Reset password error:", error);
+          showMessage("resetMessage", "Network error. Please check your connection.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      }
+
+      /**
+       * Check if user clicked password reset link from email
+       * This should run on page load when visiting /reset-password route
+       */
+      function checkForResetToken() {
+        console.log("🔍 Checking for reset token...");
+        console.log("Current URL:", window.location.href);
+        console.log("Search:", window.location.search);
+        console.log("Hash:", window.location.hash);
+        
+        let token = null;
+        let type = null;
+
+        // Method 1: Check query parameters (?token=...)
+        const searchParams = new URLSearchParams(window.location.search);
+        token = searchParams.get("token");
+        type = searchParams.get("type");
+
+        console.log("From search params - Token:", token, "Type:", type);
+
+        // Method 2: If not found, check hash (#token=...)
+        if (!token && window.location.hash) {
+          const hash = window.location.hash.substring(1);
+          const hashParams = new URLSearchParams(hash);
+          token = hashParams.get("token");
+          type = hashParams.get("type");
+          console.log("From hash - Token:", token, "Type:", type);
+        }
+
+        // Method 3: Check if access_token in hash (Supabase OAuth format)
+        if (!token && window.location.hash) {
+          const hash = window.location.hash.substring(1);
+          const hashParams = new URLSearchParams(hash);
+          const accessToken = hashParams.get("access_token");
+          const hashType = hashParams.get("type");
+          
+          if (accessToken && hashType === "recovery") {
+            token = accessToken;
+            type = "recovery";
+            console.log("From access_token - Token:", token, "Type:", type);
+          }
+        }
+
+        console.log("Final extracted - Token:", token ? "✅ Found" : "❌ Not found", "Type:", type);
+
+        // If we have a valid reset token, show the reset password view
+        if (token && (type === "recovery" || type === "magiclink")) {
+          console.log("✅ Valid reset token found! Showing reset password form.");
+          
+          // IMPORTANT: Clear the auth token so profile doesn't auto-load
+          localStorage.removeItem("authToken");
+          authToken = null;
+          currentUser = null;
+          
+          // Store token for later use
+          sessionStorage.setItem("resetToken", token);
+          
+          // Clean up URL - remove hash/query params but keep /reset-password path
+          window.history.replaceState({}, document.title, '/reset-password');
+          showView('resetView');
+        } else if (token || type) {
+          // Token exists but invalid format
+          console.warn("⚠️  Invalid token format - Token:", token, "Type:", type);
+          window.history.replaceState({}, document.title, '/');
+          showView('loginView');
+          showMessage("loginMessage", "Invalid or expired reset link. Please request a new password reset.", "error");
+        } else {
+          // No token found - check if we're on reset-password route without a token
+          const path = window.location.pathname;
+          if (path === '/reset-password' || path.includes('reset-password')) {
+            console.log("⚠️  On reset-password route but no token found");
+            window.history.replaceState({}, document.title, '/');
+            showView('loginView');
+            showMessage("loginMessage", "Invalid or expired reset link. Please request a new password reset from the forgot password page.", "error");
+          } else {
+            console.log("ℹ️  No reset token found in URL");
+          }
         }
       }
 
