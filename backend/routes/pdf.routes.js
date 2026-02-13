@@ -7,6 +7,11 @@ const {
   listPDFs,
   deletePDF
 } = require('../controllers/pdf.controller');
+const {
+  segmentPDFEndpoint,
+  getSegmentsEndpoint,
+  deleteSegmentsEndpoint
+} = require('../controllers/segmentation.controller');
 
 // Configure multer for PDF uploads
 const storage = multer.memoryStorage();
@@ -49,6 +54,13 @@ router.get('/list', listPDFs);
  * @access  Public (for testing) - Can be made Private with authenticateToken
  */
 router.delete('/:filename', deletePDF);
+
+/**
+ * SEGMENTATION ROUTES - AI-Powered Document Analysis (Groq)
+ */
+router.post('/segment', segmentPDFEndpoint);
+router.get('/:pdfId/segments', getSegmentsEndpoint);
+router.delete('/:pdfId/segments', deleteSegmentsEndpoint);
 
 // Error handling middleware for multer
 router.use((error, req, res, next) => {
