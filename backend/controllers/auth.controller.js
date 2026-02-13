@@ -472,9 +472,15 @@ const logout = async (req, res) => {
   }
 };
 
+// Aliases for alternative naming
+const signUp = register;
+const signIn = login;
+
 module.exports = {
   register,
   login,
+  signUp,
+  signIn,
   forgotPassword,
   resetPassword,
   googleSignIn,

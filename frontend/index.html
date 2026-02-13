@@ -659,7 +659,7 @@
 
           <div id="loginMessage"></div>
 
-          <button class="google-btn" onclick="handleGoogleSignIn()">
+          <button class="google-btn" onclick="googleSignIn()">
             🔵 Continue with Google
           </button>
 
@@ -705,6 +705,18 @@
           </div>
 
           <div id="registerMessage"></div>
+
+          <button class="google-btn" onclick="googleSignIn()">
+            <svg width="18" height="18" viewBox="0 0 18 18">
+              <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"></path>
+              <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"></path>
+              <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"></path>
+              <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"></path>
+            </svg>
+            Sign up with Google
+          </button>
+
+          <div class="divider"><span>OR</span></div>
 
           <form id="registerForm" onsubmit="handleRegister(event)">
             <div class="form-group">
@@ -865,6 +877,7 @@
       let currentSegmentation = null;
 
       window.addEventListener('DOMContentLoaded', () => {
+        handleOAuthCallback();
         checkAuthState();
       });
 
@@ -1013,8 +1026,72 @@
         }
       }
 
-      function handleGoogleSignIn() {
-        alert("Google Sign In coming soon!");
+      async function googleSignIn() {
+        try {
+          const response = await fetch(`${API_URL}/google`);
+          const data = await response.json();
+
+          if (data.success && data.data.url) {
+            window.location.href = data.data.url;
+          } else {
+            showMessage("loginMessage", "Failed to initiate Google sign-in", "error");
+          }
+        } catch (error) {
+          showMessage("loginMessage", "Network error. Please try again.", "error");
+        }
+      }
+
+      // Handle OAuth callback
+      function handleOAuthCallback() {
+        const hash = window.location.hash.substring(1);
+        const hashParams = new URLSearchParams(hash);
+        const access_token = hashParams.get('access_token');
+        
+        const params = new URLSearchParams(window.location.search);
+        const error = params.get('error');
+
+        if (access_token) {
+          verifyGoogleToken(access_token);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (error) {
+          let errorMsg = 'Google sign-in failed';
+          if (error === 'no_code') errorMsg = 'No authorization code received';
+          if (error === 'auth_failed') errorMsg = 'Google authentication failed';
+          if (error === 'server_error') errorMsg = 'Server error occurred';
+          showMessage('loginMessage', errorMsg, 'error');
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+
+      async function verifyGoogleToken(access_token) {
+        try {
+          showMessage('loginMessage', 'Verifying your Google account...', 'info');
+          
+          const response = await fetch(`${API_URL}/google/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token })
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            authToken = data.data.token;
+            currentUser = data.data.user;
+            localStorage.setItem("authToken", authToken);
+            showMessage('loginMessage', `Welcome, ${data.data.user.name}!`, 'success');
+            
+            setTimeout(() => {
+              showView('profileView');
+              loadProfile();
+            }, 1000);
+          } else {
+            showMessage('loginMessage', data.error || 'Google sign-in verification failed', 'error');
+          }
+        } catch (error) {
+          console.error('Google verification error:', error);
+          showMessage('loginMessage', 'Failed to verify Google sign-in. Please try again.', 'error');
+        }
       }
 
       async function loadProfile() {

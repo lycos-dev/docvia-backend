@@ -4,6 +4,8 @@ const { authenticateToken } = require('../middleware/auth.middleware');
 const {
   register,
   login,
+  signUp,
+  signIn,
   forgotPassword,
   resetPassword,
   googleSignIn,
@@ -20,11 +22,25 @@ const {
 router.post('/register', register);
 
 /**
+ * @route   POST /api/auth/signup
+ * @desc    Sign up a new user (alias for register)
+ * @access  Public
+ */
+router.post('/signup', signUp);
+
+/**
  * @route   POST /api/auth/login
  * @desc    Login user
  * @access  Public
  */
 router.post('/login', login);
+
+/**
+ * @route   POST /api/auth/signin
+ * @desc    Sign in user (alias for login)
+ * @access  Public
+ */
+router.post('/signin', signIn);
 
 /**
  * @route   POST /api/auth/forgot-password
