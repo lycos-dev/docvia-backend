@@ -1,1532 +1,1335 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DocVia - Smart Document Segmentation</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      :root {
-        --primary: #667eea;
-        --primary-dark: #764ba2;
-        --accent: #10b981;
-        --warning: #f59e0b;
-        --danger: #ef4444;
-        --bg-light: #f8fafc;
-        --bg-white: #ffffff;
-        --text-dark: #1f2937;
-        --text-gray: #6b7280;
-        --border: #e5e7eb;
-      }
-
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-        min-height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 20px;
-      }
-
-      .auth-container {
-        width: 100%;
-        max-width: 420px;
-      }
-
-      .auth-box {
-        background: var(--bg-white);
-        border-radius: 16px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-        padding: 48px 40px;
-        animation: slideIn 0.3s ease-out;
-      }
-
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateY(-20px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .logo {
-        text-align: center;
-        margin-bottom: 40px;
-      }
-
-      .logo h1 {
-        color: var(--primary);
-        font-size: 36px;
-        font-weight: 700;
-        margin-bottom: 8px;
-        letter-spacing: -0.5px;
-      }
-
-      .logo p {
-        color: var(--text-gray);
-        font-size: 14px;
-        font-weight: 500;
-      }
-
-      .view {
-        display: none;
-      }
-
-      .view.active {
-        display: block;
-        animation: fadeIn 0.3s ease-in;
-      }
-
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-
-      .form-group {
-        margin-bottom: 24px;
-      }
-
-      label {
-        display: block;
-        margin-bottom: 10px;
-        color: var(--text-dark);
-        font-weight: 600;
-        font-size: 14px;
-      }
-
-      input, textarea {
-        width: 100%;
-        padding: 12px 14px;
-        border: 2px solid var(--border);
-        border-radius: 10px;
-        font-size: 15px;
-        transition: all 0.3s;
-        font-family: inherit;
-        background: var(--bg-light);
-      }
-
-      input:focus, textarea:focus {
-        outline: none;
-        border-color: var(--primary);
-        background: var(--bg-white);
-        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-      }
-
-      input.error {
-        border-color: var(--danger);
-      }
-
-      .error-message {
-        color: var(--danger);
-        font-size: 13px;
-        margin-top: 8px;
-        display: none;
-      }
-
-      .error-message.show {
-        display: block;
-      }
-
-      button {
-        width: 100%;
-        padding: 14px;
-        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        font-size: 15px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s;
-        font-family: inherit;
-      }
-
-      button:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 30px rgba(102, 126, 234, 0.4);
-      }
-
-      button:active:not(:disabled) {
-        transform: translateY(0);
-      }
-
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .google-btn {
-        background: var(--bg-white);
-        color: var(--text-dark);
-        border: 2px solid var(--border);
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        font-weight: 600;
-      }
-
-      .google-btn:hover:not(:disabled) {
-        background: var(--bg-light);
-        border-color: var(--primary);
-      }
-
-      .divider {
-        text-align: center;
-        margin: 28px 0;
-        position: relative;
-      }
-
-      .divider::before {
-        content: "";
-        position: absolute;
-        top: 50%;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: var(--border);
-      }
-
-      .divider span {
-        background: var(--bg-white);
-        padding: 0 12px;
-        position: relative;
-        color: var(--text-gray);
-        font-size: 13px;
-        font-weight: 500;
-      }
-
-      .message {
-        padding: 14px 16px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        font-size: 14px;
-        animation: slideDown 0.3s ease-out;
-        border-left: 4px solid;
-      }
-
-      @keyframes slideDown {
-        from {
-          opacity: 0;
-          transform: translateY(-10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      .message.success {
-        background: #d1fae5;
-        color: #065f46;
-        border-left-color: var(--accent);
-      }
-
-      .message.error {
-        background: #fee2e2;
-        color: #991b1b;
-        border-left-color: var(--danger);
-      }
-
-      .message.info {
-        background: #dbeafe;
-        color: #1e40af;
-        border-left-color: var(--primary);
-      }
-
-      .link-btn {
-        background: none;
-        color: var(--primary);
-        text-decoration: none;
-        cursor: pointer;
-        font-size: 14px;
-        margin-top: 12px;
-        padding: 8px 0;
-        font-weight: 600;
-        border: none;
-        transition: color 0.2s;
-      }
-
-      .link-btn:hover {
-        color: var(--primary-dark);
-        text-decoration: underline;
-      }
-
-      .text-center {
-        text-align: center;
-      }
-
-      .profile-container {
-        width: 100%;
-        max-width: 1200px;
-      }
-
-      .profile-header {
-        background: var(--bg-white);
-        border-radius: 16px;
-        padding: 40px;
-        margin-bottom: 30px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .user-card {
-        display: flex;
-        align-items: center;
-        gap: 24px;
-      }
-
-      .user-avatar {
-        width: 100px;
-        height: 100px;
-        border-radius: 12px;
-        border: 4px solid var(--primary);
-        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
-      }
-
-      .user-info h2 {
-        color: var(--text-dark);
-        font-size: 24px;
-        margin-bottom: 4px;
-      }
-
-      .user-info p {
-        color: var(--text-gray);
-        font-size: 14px;
-      }
-
-      .logout-btn {
-        background: var(--danger);
-        padding: 12px 24px;
-        width: auto;
-      }
-
-      .logout-btn:hover {
-        background: #dc2626;
-      }
-
-      .section {
-        background: var(--bg-white);
-        border-radius: 16px;
-        padding: 40px;
-        margin-bottom: 30px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-      }
-
-      .section h3 {
-        color: var(--text-dark);
-        font-size: 20px;
-        margin-bottom: 30px;
-        font-weight: 700;
-      }
-
-      .upload-area {
-        border: 2px dashed var(--primary);
-        border-radius: 12px;
-        padding: 60px 40px;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s;
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
-      }
-
-      .upload-area:hover {
-        border-color: var(--primary-dark);
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-      }
-
-      .upload-area p {
-        color: var(--text-dark);
-        font-size: 18px;
-        font-weight: 600;
-        margin-bottom: 8px;
-      }
-
-      .upload-area small {
-        color: var(--text-gray);
-        font-size: 14px;
-      }
-
-      #pdfInput {
-        display: none;
-      }
-
-      .pdf-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 20px;
-        margin-top: 30px;
-      }
-
-      .pdf-card {
-        background: linear-gradient(135deg, var(--bg-light) 0%, #f3f4f6 100%);
-        padding: 20px;
-        border-radius: 12px;
-        border-left: 4px solid var(--primary);
-        transition: all 0.3s;
-      }
-
-      .pdf-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
-      }
-
-      .pdf-name {
-        color: var(--text-dark);
-        font-weight: 600;
-        margin-bottom: 8px;
-        word-break: break-word;
-        font-size: 14px;
-      }
-
-      .pdf-date {
-        color: var(--text-gray);
-        font-size: 12px;
-        margin-bottom: 16px;
-      }
-
-      .pdf-actions {
-        display: flex;
-        gap: 10px;
-      }
-
-      .pdf-actions button {
-        flex: 1;
-        padding: 10px;
-        font-size: 12px;
-      }
-
-      .segment-btn {
-        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-      }
-
-      .delete-btn {
-        background: var(--danger);
-      }
-
-      .roadmap-section {
-        margin-top: 30px;
-      }
-
-      .roadmap-header {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-        padding: 24px;
-        border-radius: 12px;
-        margin-bottom: 30px;
-        border-left: 4px solid var(--primary);
-      }
-
-      .roadmap-title {
-        color: var(--text-dark);
-        font-size: 22px;
-        font-weight: 700;
-        margin-bottom: 10px;
-      }
-
-      .roadmap-overview {
-        color: var(--text-gray);
-        font-size: 14px;
-        line-height: 1.6;
-        margin-bottom: 16px;
-      }
-
-      .roadmap-meta {
-        display: flex;
-        gap: 24px;
-        font-size: 13px;
-        color: var(--text-gray);
-        flex-wrap: wrap;
-      }
-
-      .segment-card {
-        position: relative;
-        padding-left: 40px;
-        padding-bottom: 24px;
-      }
-
-      .segment-card::before {
-        content: '';
-        position: absolute;
-        left: 10px;
-        top: 30px;
-        bottom: -24px;
-        width: 2px;
-        background: var(--border);
-      }
-
-      .segment-card:last-child::before {
-        display: none;
-      }
-
-      .segment-number {
-        position: absolute;
-        left: -5px;
-        top: 0;
-        width: 30px;
-        height: 30px;
-        background: var(--primary);
-        color: white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 14px;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-      }
-
-      .segment-content {
-        background: var(--bg-light);
-        padding: 20px;
-        border-radius: 12px;
-        border-left: 4px solid var(--primary);
-      }
-
-      .segment-title {
-        color: var(--text-dark);
-        font-weight: 700;
-        font-size: 16px;
-        margin-bottom: 10px;
-      }
-
-      .segment-description {
-        color: var(--text-gray);
-        font-size: 14px;
-        margin-bottom: 12px;
-        line-height: 1.6;
-      }
-
-      .segment-meta {
-        display: flex;
-        gap: 12px;
-        margin-bottom: 12px;
-        flex-wrap: wrap;
-      }
-
-      .difficulty-badge {
-        padding: 6px 12px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        color: white;
-        text-transform: capitalize;
-      }
-
-      .difficulty-beginner {
-        background: var(--accent);
-      }
-
-      .difficulty-intermediate {
-        background: var(--warning);
-      }
-
-      .difficulty-advanced {
-        background: var(--danger);
-      }
-
-      .time-badge {
-        color: var(--text-gray);
-        font-size: 12px;
-      }
-
-      .key-points {
-        margin-top: 12px;
-      }
-
-      .key-points-title {
-        color: var(--text-dark);
-        font-weight: 600;
-        font-size: 12px;
-        margin-bottom: 8px;
-      }
-
-      .key-points ul {
-        list-style: none;
-        padding-left: 0;
-      }
-
-      .key-points li {
-        color: var(--text-gray);
-        font-size: 13px;
-        padding: 4px 0;
-        padding-left: 20px;
-        position: relative;
-      }
-
-      .key-points li::before {
-        content: '✓';
-        position: absolute;
-        left: 0;
-        color: var(--accent);
-        font-weight: 700;
-      }
-
-      .empty-state {
-        text-align: center;
-        color: var(--text-gray);
-        padding: 60px 40px;
-      }
-
-      .empty-state-icon {
-        font-size: 64px;
-        margin-bottom: 16px;
-      }
-
-      .empty-state p {
-        font-size: 16px;
-        margin-bottom: 8px;
-      }
-
-      .back-btn {
-        background: none;
-        color: var(--primary);
-        border: none;
-        cursor: pointer;
-        font-size: 14px;
-        margin-bottom: 30px;
-        padding: 0;
-        font-weight: 600;
-      }
-
-      .back-btn:hover {
-        color: var(--primary-dark);
-      }
-
-      .info-box {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-        padding: 16px;
-        border-radius: 10px;
-        margin-bottom: 24px;
-        border-left: 4px solid var(--primary);
-        font-size: 14px;
-        color: var(--text-dark);
-      }
-
-      @media (max-width: 768px) {
-        .auth-box {
-          padding: 32px 24px;
-        }
-
-        .profile-header {
-          flex-direction: column;
-          text-align: center;
-          gap: 20px;
-        }
-
-        .user-card {
-          flex-direction: column;
-        }
-
-        .section {
-          padding: 24px;
-        }
-
-        .pdf-list {
-          grid-template-columns: 1fr;
-        }
-
-        .segment-meta {
-          flex-direction: column;
-        }
-
-        .logo h1 {
-          font-size: 28px;
-        }
-      }
-
-      .spinner {
-        display: inline-block;
-        width: 16px;
-        height: 16px;
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-radius: 50%;
-        border-top-color: white;
-        animation: spin 0.8s linear infinite;
-        margin-right: 8px;
-      }
-
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    </style>
-  </head>
-  <body>
-    <!-- LOGIN VIEW -->
-    <div id="loginView" class="view active">
-      <div class="auth-container">
-        <div class="auth-box">
-          <div class="logo">
-            <h1>📚 DocVia</h1>
-            <p>Smart Document Segmentation</p>
-          </div>
-
-          <div id="loginMessage"></div>
-
-          <button class="google-btn" onclick="googleSignIn()">
-            🔵 Continue with Google
-          </button>
-
-          <div class="divider"><span>or email</span></div>
-
-          <form id="loginForm" onsubmit="handleLogin(event)">
-            <div class="form-group">
-              <label for="loginEmail">Email Address</label>
-              <input type="email" id="loginEmail" placeholder="you@example.com" required />
-              <div class="error-message" id="loginEmailError"></div>
-            </div>
-
-            <div class="form-group">
-              <label for="loginPassword">Password</label>
-              <input type="password" id="loginPassword" placeholder="••••••••" required />
-              <div class="error-message" id="loginPasswordError"></div>
-            </div>
-
-            <button type="submit" id="loginBtn">Sign In</button>
-          </form>
-
-          <div class="text-center">
-            <button class="link-btn" onclick="showView('registerView')">
-              Don't have an account? Sign up
-            </button>
-            <button class="link-btn" onclick="showView('forgotView')">
-              Forgot password?
-            </button>
-          </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocVia — Interactive Document Learning</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+  :root {
+    --ink:       #1a1a2e;
+    --ink-soft:  #4a4a6a;
+    --ink-muted: #8888aa;
+    --border:    #e2e2ef;
+    --bg:        #f7f7fc;
+    --surface:   #ffffff;
+    --primary:      #5b5ef6;
+    --primary-dk:   #4346d4;
+    --primary-lt:   #ebebff;
+    --accent:    #10c98f;
+    --accent-lt: #d1fdf0;
+    --warn:      #f59e0b;
+    --warn-lt:   #fef3c7;
+    --danger:    #ef4444;
+    --danger-lt: #fee2e2;
+    --gold:      #f5a623;
+    --shadow-sm: 0 2px 8px rgba(91,94,246,.08);
+    --shadow-md: 0 6px 24px rgba(91,94,246,.12);
+    --shadow-lg: 0 16px 48px rgba(91,94,246,.16);
+    --radius:    14px;
+    --radius-sm: 8px;
+  }
+
+  body { font-family:'DM Sans',system-ui,sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; }
+
+  @keyframes fadeUp  { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+  @keyframes slideIn { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes spin    { to{transform:rotate(360deg)} }
+  @keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.45} }
+  @keyframes bounce  { 0%,80%,100%{transform:scale(.8);opacity:.5} 40%{transform:scale(1.1);opacity:1} }
+  @keyframes nodeIn  { from{opacity:0;transform:translateX(-12px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes popIn   { from{opacity:0;transform:scale(.9) translateY(4px)} to{opacity:1;transform:scale(1) translateY(0)} }
+
+  /* ── AUTH ── */
+  .auth-wrap {
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+    background:linear-gradient(145deg,#1a1a2e 0%,#2d2b6b 50%,#1a1a2e 100%);
+  }
+  .auth-card {
+    background:var(--surface); border-radius:20px; padding:48px 44px;
+    width:100%; max-width:420px; box-shadow:var(--shadow-lg);
+    animation:slideIn .35s cubic-bezier(.22,.68,0,1.2);
+  }
+  .auth-logo { text-align:center; margin-bottom:36px; }
+  .auth-logo h1 {
+    font-family:'Sora',sans-serif; font-size:32px; font-weight:800; letter-spacing:-1px; margin-bottom:6px;
+    background:linear-gradient(135deg,var(--primary),var(--primary-dk)); -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .auth-logo p { color:var(--ink-muted); font-size:13px; }
+
+  .form-group { margin-bottom:20px; }
+  label { display:block; margin-bottom:8px; font-size:13px; font-weight:600; color:var(--ink-soft); }
+  input {
+    width:100%; padding:12px 14px; border:1.5px solid var(--border); border-radius:var(--radius-sm);
+    font-size:14px; font-family:inherit; background:var(--bg); color:var(--ink); transition:all .2s;
+  }
+  input:focus { outline:none; border-color:var(--primary); background:var(--surface); box-shadow:0 0 0 3px rgba(91,94,246,.12); }
+
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:13px 20px; border:none; border-radius:var(--radius-sm); font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; transition:all .2s; }
+  .btn-primary { width:100%; background:linear-gradient(135deg,var(--primary),var(--primary-dk)); color:#fff; box-shadow:0 4px 16px rgba(91,94,246,.35); }
+  .btn-primary:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 8px 24px rgba(91,94,246,.45); }
+  .btn-primary:disabled { opacity:.6; cursor:not-allowed; }
+  .btn-ghost { background:none; color:var(--ink); border:1.5px solid var(--border); width:100%; margin-bottom:16px; }
+  .btn-ghost:hover { border-color:var(--primary); background:var(--primary-lt); color:var(--primary); }
+  .btn-link { background:none; border:none; color:var(--primary); font-size:13px; font-weight:600; cursor:pointer; padding:6px 0; }
+  .btn-link:hover { text-decoration:underline; }
+
+  .divider { text-align:center; margin:22px 0; position:relative; }
+  .divider::before { content:''; position:absolute; top:50%; left:0; right:0; height:1px; background:var(--border); }
+  .divider span { background:var(--surface); padding:0 12px; position:relative; color:var(--ink-muted); font-size:12px; }
+
+  .msg { padding:12px 14px; border-radius:var(--radius-sm); font-size:13px; margin-bottom:16px; border-left:3px solid; animation:fadeIn .2s; }
+  .msg-success { background:var(--accent-lt); color:#065f46; border-color:var(--accent); }
+  .msg-error   { background:var(--danger-lt); color:#991b1b; border-color:var(--danger); }
+  .msg-info    { background:var(--primary-lt); color:#312e81; border-color:var(--primary); }
+
+  .back-btn { background:none; border:none; color:var(--primary); font-size:13px; font-weight:600; cursor:pointer; padding:0; margin-bottom:24px; }
+  .info-box { background:var(--primary-lt); border-left:3px solid var(--primary); padding:12px 14px; border-radius:var(--radius-sm); font-size:13px; color:var(--ink-soft); margin-bottom:20px; }
+  .t-center { text-align:center; }
+  .spinner { width:15px; height:15px; border:2px solid rgba(255,255,255,.35); border-radius:50%; border-top-color:#fff; animation:spin .8s linear infinite; }
+
+  /* ── VIEW SYSTEM ── */
+  .view { display:none !important; }
+  .view.active { display:block !important; }
+  #dashView.active { display:flex !important; flex-direction:column; min-height:100vh; }
+  #lessonView.active { display:flex !important; flex-direction:column; min-height:100vh; }
+
+  /* ── DASHBOARD TOP BAR ── */
+  .dash-topbar {
+    position:sticky; top:0; z-index:100; background:var(--surface); border-bottom:1px solid var(--border);
+    padding:0 32px; height:60px; display:flex; align-items:center; justify-content:space-between;
+    box-shadow:var(--shadow-sm);
+  }
+  .dash-logo { font-family:'Sora',sans-serif; font-size:20px; font-weight:800; letter-spacing:-.5px; color:var(--primary); }
+  .dash-user { display:flex; align-items:center; gap:12px; }
+  .dash-avatar { width:34px; height:34px; border-radius:50%; border:2px solid var(--primary); }
+  .dash-username { font-size:13px; font-weight:600; color:var(--ink-soft); }
+  .sign-out-btn { padding:7px 14px; background:var(--danger); color:#fff; border:none; border-radius:var(--radius-sm); font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .2s; }
+  .sign-out-btn:hover { background:#dc2626; }
+
+  /* ── DASHBOARD BODY ── */
+  .dash-body { flex:1; display:grid; grid-template-columns:320px 1fr; }
+
+  .dash-left {
+    border-right:1px solid var(--border); padding:24px 20px; overflow-y:auto;
+    height:calc(100vh - 60px); position:sticky; top:60px;
+  }
+  .panel-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--ink-muted); margin-bottom:14px; }
+
+  /* Upload zone */
+  .upload-zone {
+    border:2px dashed var(--border); border-radius:var(--radius); padding:26px 16px;
+    text-align:center; cursor:pointer; transition:all .25s; margin-bottom:8px;
+    background:repeating-linear-gradient(45deg,transparent,transparent 6px,rgba(91,94,246,.015) 6px,rgba(91,94,246,.015) 12px);
+  }
+  .upload-zone:hover, .upload-zone.drag-over { border-color:var(--primary); background:var(--primary-lt); }
+  .upload-zone-icon { font-size:28px; margin-bottom:6px; }
+  .upload-zone p    { font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:3px; }
+  .upload-zone small{ font-size:11px; color:var(--ink-muted); }
+  #pdfFileInput { display:none; }
+
+  .file-chip { display:none; background:var(--primary-lt); border:1.5px solid var(--primary); border-radius:var(--radius-sm); padding:9px 12px; font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
+  .upload-go-btn { display:none; width:100%; padding:11px; background:linear-gradient(135deg,var(--primary),var(--primary-dk)); color:#fff; border:none; border-radius:var(--radius-sm); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .2s; }
+  .upload-go-btn:hover:not(:disabled) { transform:translateY(-1px); }
+  .upload-go-btn:disabled { opacity:.6; cursor:not-allowed; }
+
+  /* PDF list */
+  .pdf-list-section { margin-top:28px; }
+  .pdf-list-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .icon-btn { background:none; border:none; cursor:pointer; padding:5px; border-radius:6px; font-size:14px; color:var(--ink-muted); transition:all .15s; }
+  .icon-btn:hover { background:var(--bg); color:var(--ink); }
+  .icon-btn.del:hover { background:var(--danger-lt); color:var(--danger); }
+
+  .pdf-item { display:flex; align-items:center; gap:9px; padding:10px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:7px; cursor:pointer; transition:all .2s; background:var(--surface); }
+  .pdf-item:hover  { border-color:var(--primary); box-shadow:var(--shadow-sm); }
+  .pdf-item.active { border-color:var(--primary); background:var(--primary-lt); }
+  .pdf-icon { font-size:18px; flex-shrink:0; }
+  .pdf-info { flex:1; min-width:0; }
+  .pdf-name { font-size:12px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pdf-date { font-size:10px; color:var(--ink-muted); }
+  .pdf-actions { display:flex; gap:2px; flex-shrink:0; }
+
+  /* Roadmap panel */
+  .dash-right { padding:32px 36px; overflow-y:auto; height:calc(100vh - 60px); }
+
+  .rm-empty { text-align:center; padding:80px 40px; color:var(--ink-muted); }
+  .rm-empty-icon { font-size:60px; margin-bottom:14px; opacity:.45; }
+  .rm-empty h3 { font-family:'Sora',sans-serif; font-size:18px; color:var(--ink-soft); margin-bottom:8px; }
+  .rm-empty p  { font-size:14px; line-height:1.6; }
+
+  .rm-loading { text-align:center; padding:80px 40px; }
+  .rm-loading-icon { font-size:44px; margin-bottom:14px; animation:pulse 1.4s ease infinite; }
+  .rm-loading h3 { font-family:'Sora',sans-serif; font-size:17px; color:var(--ink-soft); margin-bottom:6px; }
+  .rm-loading p  { font-size:13px; color:var(--ink-muted); }
+
+  /* Roadmap banner */
+  .rm-banner {
+    background:linear-gradient(135deg,#1a1a2e 0%,#3730a3 60%,var(--primary) 100%);
+    border-radius:var(--radius); padding:28px 30px; margin-bottom:28px; color:#fff;
+    position:relative; overflow:hidden;
+  }
+  .rm-banner::after { content:''; position:absolute; top:-30px; right:-30px; width:150px; height:150px; border-radius:50%; background:rgba(255,255,255,.06); }
+  .rm-inner { position:relative; z-index:1; }
+  .rm-label    { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; opacity:.55; margin-bottom:8px; }
+  .rm-title    { font-family:'Sora',sans-serif; font-size:21px; font-weight:800; margin-bottom:8px; line-height:1.3; }
+  .rm-overview { font-size:13px; opacity:.75; line-height:1.6; margin-bottom:16px; }
+  .rm-stats    { display:flex; gap:18px; font-size:12px; font-weight:600; opacity:.85; flex-wrap:wrap; }
+  .rm-prog     { margin-top:16px; }
+  .rm-prog-labels { display:flex; justify-content:space-between; font-size:11px; font-weight:600; opacity:.7; margin-bottom:5px; }
+  .rm-prog-track { height:5px; background:rgba(255,255,255,.2); border-radius:99px; }
+  .rm-prog-fill  { height:100%; background:linear-gradient(90deg,#34d399,#10b981); border-radius:99px; transition:width .5s ease; }
+
+  /* Roadmap nodes */
+  .rm-nodes { display:flex; flex-direction:column; }
+  .rm-node  { display:flex; animation:nodeIn .35s ease both; }
+  .rm-rail  { display:flex; flex-direction:column; align-items:center; width:40px; flex-shrink:0; }
+  .rm-circle {
+    width:40px; height:40px; border-radius:50%; flex-shrink:0; z-index:1;
+    background:linear-gradient(135deg,var(--primary),var(--primary-dk));
+    color:#fff; font-family:'Sora',sans-serif; font-weight:700; font-size:15px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 3px 12px rgba(91,94,246,.4); border:3px solid var(--surface);
+  }
+  .rm-circle.done { background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 3px 12px rgba(16,185,129,.4); }
+  .rm-line { flex:1; width:2px; background:var(--border); min-height:12px; }
+  .rm-line.done { background:linear-gradient(180deg,#10b981,var(--border)); }
+  .rm-node:last-child .rm-line { display:none; }
+
+  .rm-card {
+    flex:1; margin-left:16px; margin-bottom:12px; background:var(--surface);
+    border:1.5px solid var(--border); border-radius:var(--radius);
+    transition:all .2s; box-shadow:var(--shadow-sm);
+  }
+  .rm-card:hover  { border-color:var(--primary); box-shadow:var(--shadow-md); }
+  .rm-card.done   { border-color:var(--accent); }
+  .rm-card-head   { padding:14px 16px; display:flex; align-items:center; gap:12px; }
+  .rm-card-info   { flex:1; min-width:0; }
+  .rm-card-title  { font-family:'Sora',sans-serif; font-size:14px; font-weight:700; color:var(--ink); margin-bottom:5px; }
+  .rm-card.done .rm-card-title { color:#059669; }
+  .rm-card-badges { display:flex; gap:6px; flex-wrap:wrap; }
+  .badge { padding:2px 9px; border-radius:99px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; }
+  .badge-beginner     { background:var(--accent-lt); color:#065f46; }
+  .badge-intermediate { background:var(--warn-lt); color:#92400e; }
+  .badge-advanced     { background:var(--danger-lt); color:#991b1b; }
+  .badge-time { background:var(--bg); color:var(--ink-muted); }
+  .badge-done { background:var(--accent-lt); color:#059669; }
+
+  .open-btn {
+    flex-shrink:0; padding:8px 16px; background:linear-gradient(135deg,var(--primary),var(--primary-dk));
+    color:#fff; border:none; border-radius:var(--radius-sm); font-size:12px; font-weight:600;
+    cursor:pointer; transition:all .2s; font-family:inherit;
+  }
+  .open-btn:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(91,94,246,.4); }
+  .rm-card.done .open-btn { background:linear-gradient(135deg,#059669,#10b981); }
+
+  /* ── LESSON VIEW ── */
+  .lesson-topbar {
+    position:sticky; top:0; z-index:100; background:var(--surface); border-bottom:1px solid var(--border);
+    height:56px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 24px; gap:12px; box-shadow:var(--shadow-sm);
+  }
+  .lesson-back { display:flex; align-items:center; gap:7px; background:none; border:none; color:var(--ink-soft); font-size:13px; font-weight:600; cursor:pointer; padding:0; white-space:nowrap; }
+  .lesson-back:hover { color:var(--primary); }
+  .lesson-nav-title { font-family:'Sora',sans-serif; font-size:14px; font-weight:700; color:var(--ink); flex:1; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lesson-nav-right { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .nav-counter { font-size:12px; font-weight:600; color:var(--ink-muted); white-space:nowrap; }
+  .nav-btn { padding:7px 13px; border:1.5px solid var(--border); background:var(--surface); color:var(--ink-soft); border-radius:var(--radius-sm); font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .2s; }
+  .nav-btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
+  .nav-btn:disabled { opacity:.3; cursor:not-allowed; }
+
+  .lesson-body { flex:1; display:grid; grid-template-columns:1fr 320px; }
+
+  /* Reading pane */
+  .lesson-main { overflow-y:auto; height:calc(100vh - 56px); display:flex; flex-direction:column; }
+  .lesson-scroll { flex:1; padding:36px 52px; }
+
+  .seg-hero { margin-bottom:28px; padding-bottom:24px; border-bottom:1px solid var(--border); }
+  .seg-num  { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--primary-dk)); color:#fff; font-family:'Sora',sans-serif; font-weight:700; font-size:15px; display:flex; align-items:center; justify-content:center; margin-bottom:12px; box-shadow:0 3px 10px rgba(91,94,246,.35); }
+  .seg-title { font-family:'Sora',sans-serif; font-size:24px; font-weight:800; color:var(--ink); line-height:1.25; margin-bottom:10px; }
+  .seg-desc  { font-size:15px; color:var(--ink-soft); line-height:1.65; margin-bottom:14px; }
+  .seg-meta  { display:flex; gap:8px; flex-wrap:wrap; }
+
+  .seg-kps { background:var(--primary-lt); border-radius:var(--radius); padding:18px 20px; margin-bottom:26px; }
+  .seg-kps-title { font-family:'Sora',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--primary); margin-bottom:10px; }
+  .seg-kp { display:flex; align-items:flex-start; gap:9px; font-size:13px; color:var(--ink-soft); margin-bottom:7px; line-height:1.5; }
+  .seg-kp:last-child { margin-bottom:0; }
+  .kp-dot { width:6px; height:6px; background:var(--primary); border-radius:50%; margin-top:5px; flex-shrink:0; }
+
+  .content-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--ink-muted); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+  .content-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .lesson-text {
+    font-family:'Lora',Georgia,serif; font-size:16.5px; line-height:1.85; color:var(--ink);
+    max-width:660px;
+  }
+  .lesson-text p { margin-bottom:1.15em; }
+  .lesson-text p:last-child { margin-bottom:0; }
+
+  .seg-objs { margin-top:28px; padding-top:22px; border-top:1px solid var(--border); }
+  .seg-objs-title { font-family:'Sora',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--ink-muted); margin-bottom:10px; }
+  .seg-obj { display:flex; gap:9px; font-size:13px; color:var(--ink-soft); margin-bottom:8px; line-height:1.5; }
+
+  /* Bottom bar */
+  .lesson-bottom {
+    flex-shrink:0; background:var(--surface); border-top:1px solid var(--border);
+    padding:13px 52px; display:flex; align-items:center; justify-content:space-between;
+    box-shadow:0 -4px 14px rgba(0,0,0,.05);
+  }
+  .complete-btn {
+    padding:11px 22px; border-radius:var(--radius-sm); font-size:14px; font-weight:600;
+    border:none; cursor:pointer; font-family:inherit; transition:all .2s; display:flex; align-items:center; gap:8px;
+  }
+  .complete-btn.do   { background:linear-gradient(135deg,#059669,#10b981); color:#fff; box-shadow:0 3px 12px rgba(16,185,129,.4); }
+  .complete-btn.do:hover { transform:translateY(-1px); }
+  .complete-btn.undo { background:var(--bg); color:var(--ink-soft); border:1.5px solid var(--border); }
+  .paging { display:flex; gap:8px; }
+  .page-btn { padding:10px 18px; border:1.5px solid var(--border); background:var(--surface); color:var(--ink-soft); border-radius:var(--radius-sm); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .2s; }
+  .page-btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
+  .page-btn:disabled { opacity:.3; cursor:not-allowed; }
+
+  /* Explain tooltip */
+  #explainTip {
+    position:fixed; z-index:9999; background:var(--ink); color:#fff;
+    padding:7px 13px; border-radius:var(--radius-sm); font-size:12px; font-weight:600;
+    cursor:pointer; display:none; white-space:nowrap;
+    box-shadow:0 4px 14px rgba(0,0,0,.28); animation:popIn .15s ease;
+    align-items:center; gap:6px; pointer-events:auto;
+  }
+  #explainTip:hover { background:var(--primary); }
+
+
+  /* ── MICRO-TASK PANEL ── */
+  @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+  .microtask-panel { border-top:2px solid var(--warn); background:var(--surface); padding:24px 52px 28px; animation:slideUp .3s cubic-bezier(.22,.68,0,1.2); flex-shrink:0; }
+  .mt-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .mt-title  { font-family:'Sora',sans-serif; font-size:14px; font-weight:700; color:var(--ink); display:flex; align-items:center; gap:8px; }
+  .mt-close  { background:none; border:none; cursor:pointer; color:var(--ink-muted); font-size:18px; padding:4px; border-radius:6px; transition:all .15s; }
+  .mt-close:hover { background:var(--bg); color:var(--ink); }
+  .mt-loading { display:flex; align-items:center; gap:12px; padding:10px 0; color:var(--ink-soft); font-size:14px; }
+  .mt-question { font-family:'Sora',sans-serif; font-size:16px; font-weight:700; color:var(--ink); margin-bottom:18px; line-height:1.4; }
+  .mt-options { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+  .mt-option { display:flex; align-items:center; gap:12px; padding:12px 16px; border:1.5px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; transition:all .2s; font-size:14px; color:var(--ink-soft); background:var(--surface); text-align:left; font-family:inherit; width:100%; }
+  .mt-option:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); background:var(--primary-lt); }
+  .mt-option.selected  { border-color:var(--primary); background:var(--primary-lt); color:var(--primary); font-weight:600; }
+  .mt-option.correct   { border-color:var(--accent); background:var(--accent-lt); color:#065f46; font-weight:600; }
+  .mt-option.incorrect { border-color:var(--danger); background:var(--danger-lt); color:#991b1b; }
+  .mt-option:disabled  { cursor:default; }
+  .mt-opt-letter { width:24px; height:24px; border-radius:50%; background:var(--bg); border:1.5px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex-shrink:0; }
+  .mt-textarea { width:100%; padding:12px 14px; border:1.5px solid var(--border); border-radius:var(--radius-sm); font-size:14px; font-family:'Lora',serif; line-height:1.6; resize:vertical; min-height:80px; background:var(--bg); color:var(--ink); transition:all .2s; margin-bottom:12px; }
+  .mt-textarea:focus { outline:none; border-color:var(--primary); background:var(--surface); }
+  .mt-textarea:disabled { opacity:.6; cursor:not-allowed; }
+  .mt-actions { display:flex; gap:8px; align-items:center; }
+  .mt-submit { padding:10px 20px; border-radius:var(--radius-sm); font-size:14px; font-weight:600; border:none; cursor:pointer; font-family:inherit; background:linear-gradient(135deg,var(--warn),#d97706); color:#fff; transition:all .2s; }
+  .mt-submit:hover:not(:disabled) { transform:translateY(-1px); }
+  .mt-submit:disabled { opacity:.5; cursor:not-allowed; }
+  .mt-retry { padding:10px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; border:1.5px solid var(--border); background:var(--surface); color:var(--ink-soft); cursor:pointer; font-family:inherit; transition:all .2s; }
+  .mt-retry:hover { border-color:var(--primary); color:var(--primary); }
+  .mt-feedback { border-radius:var(--radius); padding:16px 18px; margin-top:16px; animation:fadeIn .3s ease; font-size:14px; line-height:1.6; }
+  .mt-feedback.pass { background:var(--accent-lt); border:1px solid #6ee7b7; color:#065f46; }
+  .mt-feedback.fail { background:var(--danger-lt); border:1px solid #fca5a5; color:#991b1b; }
+  .mt-fb-score { font-family:'Sora',sans-serif; font-weight:800; font-size:22px; float:right; opacity:.7; }
+  .mt-fb-main  { font-weight:600; margin-bottom:5px; }
+  .mt-fb-sub   { font-size:13px; opacity:.85; }
+  .mt-fb-model { margin-top:10px; padding-top:10px; border-top:1px solid currentColor; font-size:13px; opacity:.75; }
+  .mt-fb-model strong { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px; }
+  .quiz-btn { padding:11px 20px; border-radius:var(--radius-sm); font-size:14px; font-weight:600; border:none; cursor:pointer; font-family:inherit; transition:all .2s; background:linear-gradient(135deg,var(--warn),#d97706); color:#fff; box-shadow:0 3px 10px rgba(245,158,11,.3); display:flex; align-items:center; gap:7px; }
+  .quiz-btn:hover { transform:translateY(-1px); }
+
+  /* ── CHAT SIDEBAR ── */
+  .lesson-chat {
+    border-left:1px solid var(--border); display:flex; flex-direction:column;
+    height:calc(100vh - 56px); position:sticky; top:56px; background:var(--surface);
+  }
+  .chat-hdr { padding:14px 16px; border-bottom:1px solid var(--border); flex-shrink:0; background:linear-gradient(135deg,rgba(91,94,246,.04),rgba(67,70,212,.04)); }
+  .chat-hdr h4 { font-family:'Sora',sans-serif; font-size:13px; font-weight:700; color:var(--ink); margin-bottom:2px; }
+  .chat-hdr p  { font-size:11px; color:var(--ink-muted); }
+
+  .chat-msgs { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
+  .chat-msgs::-webkit-scrollbar { width:3px; }
+  .chat-msgs::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+
+  .chat-hint-box { background:var(--bg); border:1px dashed var(--border); border-radius:var(--radius-sm); padding:12px 13px; font-size:12px; color:var(--ink-muted); line-height:1.6; }
+  .chat-hint-box strong { color:var(--ink-soft); }
+
+  .bubble { max-width:94%; animation:fadeIn .2s ease; }
+  .bubble-user { align-self:flex-end; }
+  .bubble-ai   { align-self:flex-start; }
+  .blabel { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-muted); margin-bottom:3px; }
+  .bubble-user .blabel { text-align:right; }
+  .binner { padding:10px 12px; border-radius:12px; font-size:13px; line-height:1.55; }
+  .bubble-user .binner { background:linear-gradient(135deg,var(--primary),var(--primary-dk)); color:#fff; border-bottom-right-radius:4px; }
+  .bubble-ai   .binner { background:var(--bg); color:var(--ink); border:1px solid var(--border); border-bottom-left-radius:4px; }
+
+  .typing { display:flex; gap:4px; align-items:center; padding:10px 12px; }
+  .typing span { width:6px; height:6px; background:var(--ink-muted); border-radius:50%; animation:bounce 1.1s infinite; }
+  .typing span:nth-child(2) { animation-delay:.15s; }
+  .typing span:nth-child(3) { animation-delay:.30s; }
+
+  .explain-chip { background:linear-gradient(135deg,#fef3c7,#fffbeb); border:1px solid #fde68a; border-radius:var(--radius-sm); padding:9px 12px; font-size:12px; color:#92400e; line-height:1.5; animation:fadeIn .2s; }
+  .explain-chip strong { display:block; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:#78350f; margin-bottom:3px; }
+
+  .chat-input-area { padding:12px 16px; border-top:1px solid var(--border); flex-shrink:0; display:flex; gap:8px; }
+  .chat-input { flex:1; padding:10px 12px; border:1.5px solid var(--border); border-radius:var(--radius-sm); font-size:13px; font-family:inherit; background:var(--bg); color:var(--ink); transition:all .2s; }
+  .chat-input:focus { outline:none; border-color:var(--primary); background:var(--surface); }
+  .chat-send { padding:10px 14px; border-radius:var(--radius-sm); background:linear-gradient(135deg,var(--primary),var(--primary-dk)); color:#fff; border:none; cursor:pointer; font-size:14px; transition:all .2s; flex-shrink:0; }
+  .chat-send:hover:not(:disabled) { transform:scale(1.05); }
+  .chat-send:disabled { opacity:.5; cursor:not-allowed; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width:900px) {
+    .dash-body   { grid-template-columns:1fr; }
+    .dash-left   { height:auto; position:static; border-right:none; border-bottom:1px solid var(--border); }
+    .dash-right  { height:auto; }
+    .lesson-body { grid-template-columns:1fr; }
+    .lesson-main { height:auto; }
+    .lesson-chat { height:400px; position:static; border-left:none; border-top:1px solid var(--border); }
+    .lesson-scroll { padding:24px 20px; }
+    .lesson-bottom { padding:12px 20px; }
+    .lesson-text { font-size:15.5px; }
+  }
+  @media (max-width:600px) {
+    .auth-card { padding:32px 22px; }
+    .dash-topbar { padding:0 16px; }
+    .seg-title { font-size:20px; }
+    .rm-banner-title { font-size:18px; }
+  }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════ LOGIN ════════════════════ -->
+<div id="loginView" class="view active">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo"><h1>📚 DocVia</h1><p>Interactive Document Learning</p></div>
+      <div id="loginMsg"></div>
+      <button class="btn btn-ghost" onclick="googleSignIn()">🔵 Continue with Google</button>
+      <div class="divider"><span>or email</span></div>
+      <form onsubmit="handleLogin(event)">
+        <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com" required /></div>
+        <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••" required /></div>
+        <button type="submit" class="btn btn-primary" id="loginBtn">Sign In</button>
+      </form>
+      <div class="t-center" style="margin-top:14px;">
+        <button class="btn-link" onclick="showView('registerView')">Don't have an account? Sign up</button><br>
+        <button class="btn-link" onclick="showView('forgotView')">Forgot password?</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ REGISTER ════════════════════ -->
+<div id="registerView" class="view">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <button class="back-btn" onclick="showView('loginView')">← Back</button>
+      <div class="auth-logo"><h1>📚 DocVia</h1><p>Create your account</p></div>
+      <div id="registerMsg"></div>
+      <button class="btn btn-ghost" onclick="googleSignIn()">🔵 Sign up with Google</button>
+      <div class="divider"><span>or</span></div>
+      <form onsubmit="handleRegister(event)">
+        <div class="form-group"><label>Email</label><input type="email" id="registerEmail" placeholder="you@example.com" required /></div>
+        <div class="form-group"><label>Password</label><input type="password" id="registerPassword" placeholder="••••••••" minlength="6" required /></div>
+        <button type="submit" class="btn btn-primary" id="registerBtn">Create Account</button>
+      </form>
+      <div class="t-center" style="margin-top:14px;">
+        <button class="btn-link" onclick="showView('loginView')">Already have an account?</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ FORGOT ════════════════════ -->
+<div id="forgotView" class="view">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <button class="back-btn" onclick="showView('loginView')">← Back</button>
+      <div class="auth-logo"><h1>📚 DocVia</h1><p>Reset password</p></div>
+      <div id="forgotMsg"></div>
+      <div class="info-box">Enter your email and we'll send a reset link.</div>
+      <form onsubmit="handleForgotPassword(event)">
+        <div class="form-group"><label>Email</label><input type="email" id="forgotEmail" placeholder="you@example.com" required /></div>
+        <button type="submit" class="btn btn-primary" id="forgotBtn">Send Reset Link</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ RESET ════════════════════ -->
+<div id="resetView" class="view">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <button class="back-btn" onclick="showView('loginView')">← Back</button>
+      <div class="auth-logo"><h1>📚 DocVia</h1><p>Set new password</p></div>
+      <div id="resetMsg"></div>
+      <form onsubmit="handleResetPassword(event)">
+        <div class="form-group"><label>New Password</label><input type="password" id="resetPassword" placeholder="••••••••" minlength="6" required /></div>
+        <div class="form-group"><label>Confirm Password</label><input type="password" id="resetPasswordConfirm" placeholder="••••••••" minlength="6" required /></div>
+        <button type="submit" class="btn btn-primary" id="resetBtn">Reset Password</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ DASHBOARD ════════════════════ -->
+<div id="dashView" class="view">
+  <header class="dash-topbar">
+    <div class="dash-logo">📚 DocVia</div>
+    <div class="dash-user">
+      <span class="dash-username" id="dashUsername"></span>
+      <img class="dash-avatar" id="dashAvatar" src="" alt="" />
+      <button class="sign-out-btn" onclick="handleLogout()">Sign out</button>
+    </div>
+  </header>
+
+  <div class="dash-body">
+    <!-- Left: upload + list -->
+    <aside class="dash-left">
+      <div class="panel-label">📤 Upload PDF</div>
+      <div id="uploadMsg"></div>
+
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('pdfFileInput').click()">
+        <div class="upload-zone-icon">📄</div>
+        <p>Click to upload or drag & drop</p>
+        <small>PDF only · max 50 MB · AI roadmap auto-generated</small>
+      </div>
+      <input type="file" id="pdfFileInput" accept=".pdf" />
+      <div class="file-chip" id="fileChip"></div>
+      <button class="upload-go-btn" id="uploadGoBtn" onclick="doUpload()">
+        <span id="uploadGoText">📤 Upload & Generate Roadmap</span>
+      </button>
+
+      <div class="pdf-list-section">
+        <div class="pdf-list-header">
+          <div class="panel-label" style="margin:0;">📋 Documents</div>
+          <button class="icon-btn" onclick="loadPDFList()" title="Refresh">🔄</button>
+        </div>
+        <div id="pdfList"></div>
+      </div>
+    </aside>
+
+    <!-- Right: roadmap -->
+    <main class="dash-right">
+      <div id="rmEmpty" class="rm-empty">
+        <div class="rm-empty-icon">🗺️</div>
+        <h3>Your roadmap appears here</h3>
+        <p>Upload a PDF or click 📖 on a document<br>to generate your learning path.</p>
+      </div>
+      <div id="rmLoading" style="display:none;" class="rm-loading">
+        <div class="rm-loading-icon">🤖</div>
+        <h3>AI is reading your document…</h3>
+        <p>Building your personalised learning path</p>
+      </div>
+      <div id="rmContent" style="display:none;"></div>
+    </main>
+  </div>
+</div>
+
+<!-- ════════════════════ LESSON VIEW ════════════════════ -->
+<div id="lessonView" class="view">
+
+  <header class="lesson-topbar">
+    <button class="lesson-back" onclick="exitLesson()">← Roadmap</button>
+    <div class="lesson-nav-title" id="lessonNavTitle"></div>
+    <div class="lesson-nav-right">
+      <span class="nav-counter" id="navCounter"></span>
+      <button class="nav-btn" id="prevBtn"  onclick="goSegment(-1)">← Prev</button>
+      <button class="nav-btn" id="nextBtn"  onclick="goSegment(+1)">Next →</button>
+    </div>
+  </header>
+
+  <div class="lesson-body">
+
+    <!-- Reading pane -->
+    <div class="lesson-main">
+      <div class="lesson-scroll" id="lessonScroll">
+        <!-- injected by renderLesson() -->
+      </div>
+      <!-- Micro-task panel (hidden until requested) -->
+      <div id="microtaskPanel" style="display:none;"></div>
+
+      <div class="lesson-bottom">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="complete-btn do" id="completeBtn" onclick="toggleComplete()">✓ Mark as Complete</button>
+          <button class="quiz-btn" id="quizBtn" onclick="requestMicrotask()">📝 Take Quiz</button>
+        </div>
+        <div class="paging">
+          <button class="page-btn" id="prevBtn2" onclick="goSegment(-1)">← Previous</button>
+          <button class="page-btn" id="nextBtn2" onclick="goSegment(+1)">Next →</button>
         </div>
       </div>
     </div>
 
-    <!-- REGISTER VIEW -->
-    <div id="registerView" class="view">
-      <div class="auth-container">
-        <div class="auth-box">
-          <button class="back-btn" onclick="showView('loginView')">← Back</button>
-
-          <div class="logo">
-            <h1>📚 DocVia</h1>
-            <p>Create Your Account</p>
-          </div>
-
-          <div id="registerMessage"></div>
-
-          <button class="google-btn" onclick="googleSignIn()">
-            <svg width="18" height="18" viewBox="0 0 18 18">
-              <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"></path>
-              <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"></path>
-              <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"></path>
-              <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"></path>
-            </svg>
-            Sign up with Google
-          </button>
-
-          <div class="divider"><span>OR</span></div>
-
-          <form id="registerForm" onsubmit="handleRegister(event)">
-            <div class="form-group">
-              <label for="registerEmail">Email Address</label>
-              <input type="email" id="registerEmail" placeholder="you@example.com" required />
-              <div class="error-message" id="registerEmailError"></div>
-            </div>
-
-            <div class="form-group">
-              <label for="registerPassword">Password</label>
-              <input type="password" id="registerPassword" placeholder="••••••••" minlength="6" required />
-              <div class="error-message" id="registerPasswordError"></div>
-            </div>
-
-            <button type="submit" id="registerBtn">Create Account</button>
-          </form>
-
-          <div class="text-center">
-            <button class="link-btn" onclick="showView('loginView')">
-              Already have an account? Sign in
-            </button>
-          </div>
+    <!-- Chat sidebar -->
+    <aside class="lesson-chat">
+      <div class="chat-hdr">
+        <h4>🤖 AI Tutor</h4>
+        <p>Ask anything about this lesson</p>
+      </div>
+      <div class="chat-msgs" id="chatMsgs">
+        <div class="chat-hint-box" id="chatHint">
+          <strong>💡 How to use</strong><br>
+          Ask me to explain a concept, give examples, or quiz you on this section.<br><br>
+          <strong>✨ Tip:</strong> Select any word or phrase in the lesson text and tap <em>"Explain this"</em> for an instant explanation.
         </div>
       </div>
-    </div>
-
-    <!-- FORGOT PASSWORD VIEW -->
-    <div id="forgotView" class="view">
-      <div class="auth-container">
-        <div class="auth-box">
-          <button class="back-btn" onclick="showView('loginView')">← Back</button>
-
-          <div class="logo">
-            <h1>📚 DocVia</h1>
-            <p>Reset Your Password</p>
-          </div>
-
-          <div id="forgotMessage"></div>
-
-          <div class="info-box">
-            Enter your email and we'll send you a link to reset your password.
-          </div>
-
-          <form id="forgotForm" onsubmit="handleForgotPassword(event)">
-            <div class="form-group">
-              <label for="forgotEmail">Email Address</label>
-              <input type="email" id="forgotEmail" placeholder="you@example.com" required />
-              <div class="error-message" id="forgotEmailError"></div>
-            </div>
-
-            <button type="submit" id="forgotBtn">Send Reset Link</button>
-          </form>
-        </div>
+      <div class="chat-input-area">
+        <input class="chat-input" id="chatInput" placeholder="Ask a question…"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}" />
+        <button class="chat-send" id="chatSendBtn" onclick="sendChat()">↑</button>
       </div>
-    </div>
+    </aside>
 
-    <!-- RESET PASSWORD VIEW -->
-    <div id="resetView" class="view">
-      <div class="auth-container">
-        <div class="auth-box">
-          <button class="back-btn" onclick="showView('loginView')">← Back</button>
+  </div>
+</div>
 
-          <div class="logo">
-            <h1>📚 DocVia</h1>
-            <p>Reset Your Password</p>
+<!-- Floating "Explain this" tooltip -->
+<div id="explainTip" onclick="explainSelection()">💡 Explain this</div>
+
+<!-- ════════════════════ SCRIPT ════════════════════ -->
+<script>
+const API     = 'http://localhost:3001/api/auth';
+const PDF_API = 'http://localhost:3001/api/pdf';
+
+let authToken         = localStorage.getItem('authToken');
+let currentUser       = null;
+let currentSeg        = null;   // full segmentation { title, overview, segments, … }
+let currentSegIdx     = 0;      // index of segment currently in lesson view
+let completedSegments = new Set();
+let selectedText      = '';
+
+/* ── ROUTING ──────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.location.pathname.includes('reset-password')) { checkForResetToken(); return; }
+  handleOAuthCallback();
+  checkAuthState();
+});
+
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function checkAuthState() {
+  if (new URLSearchParams(window.location.search).get('token')) return;
+  if (authToken) { loadProfile(); showView('dashView'); }
+  else showView('loginView');
+}
+
+/* ── UTILS ────────────────────────────────────────── */
+function showMsg(id, text, type) {
+  const el = document.getElementById(id);
+  if (el) { el.className = `msg msg-${type}`; el.textContent = text; }
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtAI(raw) {
+  return esc(raw)
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>')
+    .replace(/^/,'<p>').replace(/$/,'</p>');
+}
+
+/* ── AUTH ─────────────────────────────────────────── */
+async function handleLogin(e) {
+  e.preventDefault();
+  const btn=document.getElementById('loginBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Signing in…';
+  try {
+    const r=await fetch(`${API}/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('loginEmail').value,password:document.getElementById('loginPassword').value})});
+    const d=await r.json();
+    if(d.success){authToken=d.data.token;currentUser=d.data.user;localStorage.setItem('authToken',authToken);loadProfile();showView('dashView');}
+    else showMsg('loginMsg',d.error,'error');
+  } catch{showMsg('loginMsg','Network error.','error');}
+  finally{btn.disabled=false;btn.textContent='Sign In';}
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const btn=document.getElementById('registerBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Creating…';
+  try {
+    const r=await fetch(`${API}/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('registerEmail').value,password:document.getElementById('registerPassword').value})});
+    const d=await r.json();
+    if(d.success){authToken=d.data.token;currentUser=d.data.user;localStorage.setItem('authToken',authToken);loadProfile();showView('dashView');}
+    else showMsg('registerMsg',d.error,'error');
+  } catch{showMsg('registerMsg','Network error.','error');}
+  finally{btn.disabled=false;btn.textContent='Create Account';}
+}
+
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  const btn=document.getElementById('forgotBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Sending…';
+  try {
+    const r=await fetch(`${API}/forgot-password`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('forgotEmail').value.trim()})});
+    const d=await r.json();
+    if(d.success) showMsg('forgotMsg','✅ Reset link sent! Check your inbox.','success');
+    else showMsg('forgotMsg',d.error,'error');
+  } catch{showMsg('forgotMsg','Network error.','error');}
+  finally{btn.disabled=false;btn.textContent='Send Reset Link';}
+}
+
+async function handleResetPassword(e) {
+  e.preventDefault();
+  const pwd=document.getElementById('resetPassword').value;
+  const cfm=document.getElementById('resetPasswordConfirm').value;
+  if(pwd!==cfm){showMsg('resetMsg','Passwords do not match.','error');return;}
+  const btn=document.getElementById('resetBtn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Resetting…';
+  let token=new URLSearchParams(window.location.search).get('token')||sessionStorage.getItem('resetToken');
+  if(!token&&window.location.hash){const hp=new URLSearchParams(window.location.hash.substring(1));token=hp.get('token')||hp.get('access_token');}
+  if(!token){showMsg('resetMsg','Invalid or expired link.','error');btn.disabled=false;btn.textContent='Reset Password';return;}
+  try {
+    const r=await fetch(`${API}/reset-password`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,newPassword:pwd})});
+    const d=await r.json();
+    if(d.success){showMsg('resetMsg','✅ Password reset! Redirecting…','success');setTimeout(()=>{window.location.href='/';},2500);}
+    else showMsg('resetMsg',d.error||'Reset failed.','error');
+  } catch{showMsg('resetMsg','Network error.','error');}
+  finally{btn.disabled=false;btn.textContent='Reset Password';}
+}
+
+function checkForResetToken() {
+  let token=null,type=null;
+  const sp=new URLSearchParams(window.location.search); token=sp.get('token'); type=sp.get('type');
+  if(!token&&window.location.hash){const hp=new URLSearchParams(window.location.hash.substring(1));token=hp.get('token')||hp.get('access_token');type=hp.get('type');}
+  if(token&&(type==='recovery'||type==='magiclink')){localStorage.removeItem('authToken');authToken=null;sessionStorage.setItem('resetToken',token);window.history.replaceState({},'','/reset-password');showView('resetView');}
+  else{window.history.replaceState({},'','/');showView('loginView');}
+}
+
+async function googleSignIn() {
+  try{const r=await fetch(`${API}/google`);const d=await r.json();if(d.success&&d.data.url)window.location.href=d.data.url;else showMsg('loginMsg','Google sign-in failed.','error');}
+  catch{showMsg('loginMsg','Network error.','error');}
+}
+
+function handleOAuthCallback() {
+  const hp=new URLSearchParams(window.location.hash.substring(1));
+  const at=hp.get('access_token');
+  if(at){verifyGoogleToken(at);window.history.replaceState({},'',window.location.pathname);}
+}
+
+async function verifyGoogleToken(access_token) {
+  try{
+    const r=await fetch(`${API}/google/verify`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({access_token})});
+    const d=await r.json();
+    if(d.success){authToken=d.data.token;currentUser=d.data.user;localStorage.setItem('authToken',authToken);loadProfile();showView('dashView');}
+    else showMsg('loginMsg',d.error||'Google sign-in failed.','error');
+  }catch{showMsg('loginMsg','Verification failed.','error');}
+}
+
+async function loadProfile() {
+  try{
+    const r=await fetch(`${API}/profile`,{headers:{Authorization:`Bearer ${authToken}`}});
+    const d=await r.json();
+    if(d.success){
+      currentUser=d.data.user;
+      document.getElementById('dashUsername').textContent=currentUser.email.split('@')[0];
+      document.getElementById('dashAvatar').src=`https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.email)}&background=5b5ef6&color=fff&size=80`;
+      loadPDFList();
+    }
+  }catch(e){console.error(e);}
+}
+
+async function handleLogout() {
+  localStorage.removeItem('authToken');authToken=null;currentUser=null;currentSeg=null;completedSegments.clear();
+  showView('loginView');
+}
+
+/* ── UPLOAD ───────────────────────────────────────── */
+const pdfInput  = document.getElementById('pdfFileInput');
+const uploadZone= document.getElementById('uploadZone');
+
+pdfInput.addEventListener('change', () => {
+  const f=pdfInput.files[0]; if(!f) return;
+  const chip=document.getElementById('fileChip');
+  chip.textContent=`✓  ${f.name}  (${(f.size/1024/1024).toFixed(2)} MB)`;
+  chip.style.display='block';
+  document.getElementById('uploadGoBtn').style.display='block';
+});
+
+uploadZone.addEventListener('dragover', e=>{e.preventDefault();uploadZone.classList.add('drag-over');});
+uploadZone.addEventListener('dragleave', ()=>uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e=>{
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type==='application/pdf'){const dt=new DataTransfer();dt.items.add(f);pdfInput.files=dt.files;pdfInput.dispatchEvent(new Event('change'));}
+});
+
+async function doUpload() {
+  const file=pdfInput.files[0]; if(!file) return;
+  const btn=document.getElementById('uploadGoBtn');
+  const txt=document.getElementById('uploadGoText');
+  btn.disabled=true; txt.innerHTML='<span class="spinner"></span> Uploading…';
+  showMsg('uploadMsg','Uploading your PDF…','info');
+  const fd=new FormData(); fd.append('pdf',file);
+  try{
+    const r=await fetch(`${PDF_API}/upload`,{method:'POST',body:fd});
+    const d=await r.json();
+    if(d.success){
+      showMsg('uploadMsg',`✓ "${d.data.originalFilename}" uploaded! Generating roadmap…`,'success');
+      document.getElementById('fileChip').style.display='none';
+      btn.style.display='none'; pdfInput.value='';
+      setTimeout(()=>loadPDFList(), 600);
+      setTimeout(()=>openDocument(d.data.filename), 700);
+    } else {
+      showMsg('uploadMsg',`Upload failed: ${d.error}`,'error');
+    }
+  }catch(err){showMsg('uploadMsg',`Error: ${err.message}`,'error');}
+  finally{btn.disabled=false;txt.textContent='📤 Upload & Generate Roadmap';}
+}
+
+/* ── PDF LIST ─────────────────────────────────────── */
+async function loadPDFList() {
+  try{
+    const r=await fetch(`${PDF_API}/list`);
+    const d=await r.json();
+    const el=document.getElementById('pdfList');
+    if(d.success&&d.data.length>0){
+      el.innerHTML=d.data.map(f=>`
+        <div class="pdf-item" id="pi-${CSS.escape(f.name)}">
+          <div class="pdf-icon">📄</div>
+          <div class="pdf-info">
+            <div class="pdf-name" title="${esc(f.name)}">${esc(f.name)}</div>
+            <div class="pdf-date">${new Date(f.created_at).toLocaleDateString()}</div>
           </div>
+          <div class="pdf-actions">
+            <button class="icon-btn" title="Open roadmap" onclick="openDocument('${esc(f.name)}')">📖</button>
+            <button class="icon-btn del" title="Delete" onclick="deletePDF('${esc(f.name)}')">🗑️</button>
+          </div>
+        </div>`).join('');
+    } else {
+      el.innerHTML='<div style="padding:20px 0;text-align:center;color:var(--ink-muted);font-size:13px;">No documents yet</div>';
+    }
+  }catch(e){console.error(e);}
+}
 
-          <div id="resetMessage"></div>
+async function deletePDF(name) {
+  if(!confirm(`Delete "${name}"?`)) return;
+  try{
+    const r=await fetch(`${PDF_API}/${encodeURIComponent(name)}`,{method:'DELETE'});
+    const d=await r.json();
+    if(d.success){showMsg('uploadMsg','✓ Deleted','success');loadPDFList();}
+    else showMsg('uploadMsg',`Delete failed: ${d.error}`,'error');
+  }catch(err){showMsg('uploadMsg',err.message,'error');}
+}
 
-          <form id="resetForm" onsubmit="handleResetPassword(event)">
-            <div class="form-group">
-              <label for="resetPassword">New Password</label>
-              <input type="password" id="resetPassword" placeholder="••••••••" minlength="6" required />
-              <div class="error-message" id="resetPasswordError"></div>
-            </div>
+/* ── OPEN DOCUMENT / SEGMENT ─────────────────────── */
+async function openDocument(pdfId) {
+  if(!currentUser){showMsg('uploadMsg','Please log in first.','error');return;}
 
-            <div class="form-group">
-              <label for="resetPasswordConfirm">Confirm Password</label>
-              <input type="password" id="resetPasswordConfirm" placeholder="••••••••" minlength="6" required />
-              <div class="error-message" id="resetPasswordConfirmError"></div>
-            </div>
+  document.querySelectorAll('.pdf-item').forEach(i=>i.classList.remove('active'));
+  const itm=document.getElementById(`pi-${CSS.escape(pdfId)}`);
+  if(itm) itm.classList.add('active');
 
-            <button type="submit" id="resetBtn">Reset Password</button>
-          </form>
+  document.getElementById('rmEmpty').style.display='none';
+  document.getElementById('rmContent').style.display='none';
+  document.getElementById('rmLoading').style.display='block';
+
+  try{
+    // Fetch segmentation and saved progress in parallel
+    const [segRes, progRes] = await Promise.all([
+      fetch(`${PDF_API}/segment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfId,userId:currentUser.id})}),
+      fetch(`${PDF_API}/progress/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(currentUser.id)}`)
+    ]);
+    const segData  = await segRes.json();
+    const progData = await progRes.json().catch(()=>({success:false,completedIds:[]}));
+
+    document.getElementById('rmLoading').style.display='none';
+
+    if(segData.success){
+      currentSeg = segData.data;
+      // Restore saved progress (fall back to empty if none saved yet)
+      const savedIds = progData.success ? (progData.completedIds || []) : [];
+      completedSegments = new Set(savedIds);
+      renderRoadmap();
+    } else {
+      showMsg('uploadMsg',`Segmentation failed: ${segData.error}`,'error');
+      document.getElementById('rmEmpty').style.display='block';
+    }
+  }catch(err){
+    document.getElementById('rmLoading').style.display='none';
+    document.getElementById('rmEmpty').style.display='block';
+    showMsg('uploadMsg',`Error: ${err.message}`,'error');
+  }
+}
+
+/* ── RENDER ROADMAP ───────────────────────────────── */
+function renderRoadmap() {
+  if(!currentSeg) return;
+  const segs=currentSeg.segments;
+  const done=completedSegments.size;
+  const total=segs.length;
+  const pct=total?Math.round((done/total)*100):0;
+
+  const nodes=segs.map((seg,idx)=>{
+    const isDone=completedSegments.has(seg.id);
+    const isLast=idx===segs.length-1;
+    return `
+      <div class="rm-node" style="animation-delay:${idx*.06}s">
+        <div class="rm-rail">
+          <div class="rm-circle ${isDone?'done':''}">${isDone?'✓':seg.id}</div>
+          ${!isLast?`<div class="rm-line ${isDone?'done':''}"></div>`:''}
         </div>
-      </div>
-    </div>
-
-    <!-- PROFILE/DASHBOARD VIEW -->
-    <div id="profileView" class="view">
-      <div class="profile-container">
-        <div class="profile-header">
-          <div class="user-card">
-            <img id="userAvatar" src="" alt="Avatar" class="user-avatar" />
-            <div class="user-info">
-              <h2 id="userName">Welcome</h2>
-              <p id="userEmail">Loading...</p>
-            </div>
-          </div>
-          <button class="logout-btn" onclick="handleLogout()">Sign Out</button>
-        </div>
-
-        <div id="profileMessage"></div>
-
-        <!-- PDF SECTION -->
-        <div class="section">
-          <h3>📤 Upload Academic PDF</h3>
-          <div id="pdfMessage"></div>
-
-          <form id="pdfForm" onsubmit="handlePDFUpload(event)">
-            <div class="form-group">
-              <label for="pdfFile">Select PDF Document</label>
-              <div class="upload-area" onclick="document.getElementById('pdfFile').click()">
-                <p>📁 Click to upload or drag & drop</p>
-                <small>PDF files only (max 50MB)</small>
-              </div>
-              <input type="file" id="pdfFile" accept=".pdf" required />
-              <div id="fileInfo" style="display: none; background: var(--bg-light); border-left: 4px solid var(--primary); padding: 12px; margin-top: 12px; border-radius: 10px; font-size: 13px; color: var(--text-dark);"></div>
-            </div>
-
-            <button type="submit" id="pdfUploadBtn" style="margin-top: 20px;">
-              <span id="pdfUploadBtnText">📤 Upload PDF</span>
-            </button>
-          </form>
-
-          <div id="pdfResponse" style="display: none; background: var(--bg-light); padding: 16px; border-radius: 10px; margin-top: 24px;">
-            <h4 style="color: var(--text-dark); margin-bottom: 12px; font-size: 14px; font-weight: 600;">Upload Response:</h4>
-            <pre id="pdfResponseJson" style="background: var(--bg-white); padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 11px; color: var(--text-gray); line-height: 1.4; max-height: 300px; overflow-y: auto;"></pre>
-          </div>
-
-          <div style="margin-top: 40px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-              <h3 style="margin: 0;">📋 Your PDFs</h3>
-              <button type="button" onclick="loadPDFList()" class="link-btn" style="margin: 0; width: auto;">🔄 Refresh</button>
-            </div>
-            <div id="pdfList" class="pdf-list"></div>
-          </div>
-        </div>
-
-        <!-- ROADMAP SECTION -->
-        <div class="section roadmap-section">
-          <h3>🗺️ Learning Roadmap</h3>
-          <div id="roadmapDisplay" style="display: none;"></div>
-          <div id="roadmapEmpty" class="empty-state">
-            <div class="empty-state-icon">🚀</div>
-            <p>Select a document and click "Segment"</p>
-            <p style="font-size: 13px;">to generate a learning roadmap</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <script>
-      const API_URL = "http://localhost:3001/api/auth";
-      const PDF_API_URL = "http://localhost:3001/api/pdf";
-      let authToken = localStorage.getItem("authToken");
-      let currentUser = null;
-      let currentSegmentation = null;
-
-      window.addEventListener('DOMContentLoaded', () => {
-        handleRouting();  // Handle URL routing FIRST
-      });
-
-      function handleRouting() {
-        const path = window.location.pathname;
-        
-        // Handle different routes
-        if (path === '/reset-password' || path.includes('reset-password')) {
-          checkForResetToken();  // Check for token and show reset form
-        } else {
-          // Normal flow for other routes
-          handleOAuthCallback();
-          checkAuthState();
-        }
-      }
-
-      function showView(viewName) {
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        document.getElementById(viewName).classList.add('active');
-      }
-
-      function showMessage(elementId, message, type) {
-        const element = document.getElementById(elementId);
-        if (element) {
-          element.className = `message ${type}`;
-          element.textContent = message;
-        }
-      }
-
-      function clearMessages() {
-        document.querySelectorAll('.message').forEach(m => m.textContent = '');
-        document.querySelectorAll('.error-message').forEach(e => e.classList.remove('show'));
-      }
-
-      function checkAuthState() {
-        // Check for reset token in BOTH query params and hash
-        const searchParams = new URLSearchParams(window.location.search);
-        let resetToken = searchParams.get("token");
-        
-        if (!resetToken) {
-          const hash = window.location.hash.substring(1);
-          const hashParams = new URLSearchParams(hash);
-          resetToken = hashParams.get("token");
-        }
-        
-        if (resetToken) {
-          // Skip auto-login when resetting password
-          console.log("🔐 Reset token detected - skipping auto-login");
-          return;
-        }
-        
-        if (authToken) {
-          loadProfile();
-          showView('profileView');
-        } else {
-          showView('loginView');
-        }
-      }
-
-      async function handleLogin(e) {
-        e.preventDefault();
-        const email = document.getElementById("loginEmail").value;
-        const password = document.getElementById("loginPassword").value;
-
-        try {
-          const response = await fetch(`${API_URL}/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            authToken = data.data.token;
-            currentUser = data.data.user;
-            localStorage.setItem("authToken", authToken);
-            showMessage("loginMessage", "✓ Logged in successfully!", "success");
-            setTimeout(() => {
-              loadProfile();
-              showView("profileView");
-            }, 500);
-          } else {
-            showMessage("loginMessage", data.error, "error");
-          }
-        } catch (error) {
-          showMessage("loginMessage", "Network error. Please try again.", "error");
-        }
-      }
-
-      async function handleRegister(e) {
-        e.preventDefault();
-        const email = document.getElementById("registerEmail").value;
-        const password = document.getElementById("registerPassword").value;
-
-        try {
-          const response = await fetch(`${API_URL}/register`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password }),
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            authToken = data.data.token;
-            currentUser = data.data.user;
-            localStorage.setItem("authToken", authToken);
-            showMessage("registerMessage", "✓ Account created successfully!", "success");
-            setTimeout(() => {
-              loadProfile();
-              showView("profileView");
-            }, 500);
-          } else {
-            showMessage("registerMessage", data.error, "error");
-          }
-        } catch (error) {
-          showMessage("registerMessage", "Network error. Please try again.", "error");
-        }
-      }
-
-      async function handleForgotPassword(event) {
-        event.preventDefault();
-        clearMessages();
-        
-        const btn = document.getElementById("forgotBtn");
-        const originalText = btn.textContent;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span>Sending email...';
-
-        const email = document.getElementById("forgotEmail").value.trim();
-
-        try {
-          const response = await fetch(`${API_URL}/forgot-password`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            showMessage("forgotMessage", 
-              "✅ Password reset email sent! Check your inbox (and spam folder) for a link to reset your password.", 
-              "success"
-            );
-            document.getElementById("forgotForm").reset();
-            
-            // Show additional info
-            setTimeout(() => {
-              const currentMsg = document.getElementById("forgotMessage").innerHTML;
-              document.getElementById("forgotMessage").innerHTML = currentMsg + 
-                '<div class="info-box" style="margin-top: 16px;"><strong>📧 What\'s next?</strong> Click the link in the email to reset your password. The link will expire in 1 hour for security.</div>';
-            }, 500);
-          } else {
-            showMessage("forgotMessage", data.error, "error");
-          }
-        } catch (error) {
-          showMessage("forgotMessage", "Network error. Please check your connection.", "error");
-        } finally {
-          btn.disabled = false;
-          btn.textContent = originalText;
-        }
-      }
-
-      /**
-       * Handle Reset Password Form Submission
-       */
-      async function handleResetPassword(event) {
-        event.preventDefault();
-        clearMessages();
-
-        const password = document.getElementById("resetPassword").value.trim();
-        const confirmPassword = document.getElementById("resetPasswordConfirm").value.trim();
-
-        // Validation
-        if (!password || !confirmPassword) {
-          showMessage("resetMessage", "Please enter and confirm your new password.", "error");
-          return;
-        }
-
-        if (password.length < 6) {
-          showMessage("resetMessage", "Password must be at least 6 characters long.", "error");
-          return;
-        }
-
-        if (password !== confirmPassword) {
-          showMessage("resetMessage", "Passwords do not match.", "error");
-          return;
-        }
-
-        const btn = document.getElementById("resetBtn");
-        const originalText = btn.textContent;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span>Resetting password...';
-
-        try {
-          // Get token from URL or sessionStorage
-          let token = null;
-          
-          // Try getting from URL first
-          const searchParams = new URLSearchParams(window.location.search);
-          token = searchParams.get("token");
-          
-          // If not in URL, check hash
-          if (!token && window.location.hash) {
-            const hash = window.location.hash.substring(1);
-            const hashParams = new URLSearchParams(hash);
-            token = hashParams.get("token");
-            
-            // Also check for access_token format
-            if (!token) {
-              token = hashParams.get("access_token");
-            }
-          }
-          
-          // If still not found, try sessionStorage
-          if (!token) {
-            token = sessionStorage.getItem("resetToken");
-          }
-
-          if (!token) {
-            console.error("❌ No token found");
-            showMessage("resetMessage", "Invalid or expired reset link. Please request a new password reset.", "error");
-            btn.disabled = false;
-            btn.textContent = originalText;
-            return;
-          }
-
-          console.log("🔄 Sending reset password request...");
-          console.log("Token length:", token.length);
-
-          const response = await fetch(`${API_URL}/reset-password`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: token,
-              newPassword: password
-            }),
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            console.log("✅ Password reset successful");
-            showMessage("resetMessage", 
-              "✅ " + data.message + " You'll be redirected to login in 3 seconds...", 
-              "success"
-            );
-            
-            // Clear the stored token
-            sessionStorage.removeItem("resetToken");
-            
-            // Clear the form
-            document.getElementById("resetForm").reset();
-
-            // Redirect to login after 3 seconds
-            setTimeout(() => {
-              window.history.replaceState({}, document.title, '/');
-              window.location.href = '/';
-            }, 3000);
-          } else {
-            console.error("❌ Password reset failed:", data.error);
-            showMessage("resetMessage", data.error || "Failed to reset password.", "error");
-          }
-        } catch (error) {
-          console.error("Reset password error:", error);
-          showMessage("resetMessage", "Network error. Please check your connection.", "error");
-        } finally {
-          btn.disabled = false;
-          btn.textContent = originalText;
-        }
-      }
-
-      /**
-       * Check if user clicked password reset link from email
-       * This should run on page load when visiting /reset-password route
-       */
-      function checkForResetToken() {
-        console.log("🔍 Checking for reset token...");
-        console.log("Current URL:", window.location.href);
-        console.log("Search:", window.location.search);
-        console.log("Hash:", window.location.hash);
-        
-        let token = null;
-        let type = null;
-
-        // Method 1: Check query parameters (?token=...)
-        const searchParams = new URLSearchParams(window.location.search);
-        token = searchParams.get("token");
-        type = searchParams.get("type");
-
-        console.log("From search params - Token:", token, "Type:", type);
-
-        // Method 2: If not found, check hash (#token=...)
-        if (!token && window.location.hash) {
-          const hash = window.location.hash.substring(1);
-          const hashParams = new URLSearchParams(hash);
-          token = hashParams.get("token");
-          type = hashParams.get("type");
-          console.log("From hash - Token:", token, "Type:", type);
-        }
-
-        // Method 3: Check if access_token in hash (Supabase OAuth format)
-        if (!token && window.location.hash) {
-          const hash = window.location.hash.substring(1);
-          const hashParams = new URLSearchParams(hash);
-          const accessToken = hashParams.get("access_token");
-          const hashType = hashParams.get("type");
-          
-          if (accessToken && hashType === "recovery") {
-            token = accessToken;
-            type = "recovery";
-            console.log("From access_token - Token:", token, "Type:", type);
-          }
-        }
-
-        console.log("Final extracted - Token:", token ? "✅ Found" : "❌ Not found", "Type:", type);
-
-        // If we have a valid reset token, show the reset password view
-        if (token && (type === "recovery" || type === "magiclink")) {
-          console.log("✅ Valid reset token found! Showing reset password form.");
-          
-          // IMPORTANT: Clear the auth token so profile doesn't auto-load
-          localStorage.removeItem("authToken");
-          authToken = null;
-          currentUser = null;
-          
-          // Store token for later use
-          sessionStorage.setItem("resetToken", token);
-          
-          // Clean up URL - remove hash/query params but keep /reset-password path
-          window.history.replaceState({}, document.title, '/reset-password');
-          showView('resetView');
-        } else if (token || type) {
-          // Token exists but invalid format
-          console.warn("⚠️  Invalid token format - Token:", token, "Type:", type);
-          window.history.replaceState({}, document.title, '/');
-          showView('loginView');
-          showMessage("loginMessage", "Invalid or expired reset link. Please request a new password reset.", "error");
-        } else {
-          // No token found - check if we're on reset-password route without a token
-          const path = window.location.pathname;
-          if (path === '/reset-password' || path.includes('reset-password')) {
-            console.log("⚠️  On reset-password route but no token found");
-            window.history.replaceState({}, document.title, '/');
-            showView('loginView');
-            showMessage("loginMessage", "Invalid or expired reset link. Please request a new password reset from the forgot password page.", "error");
-          } else {
-            console.log("ℹ️  No reset token found in URL");
-          }
-        }
-      }
-
-      async function googleSignIn() {
-        try {
-          const response = await fetch(`${API_URL}/google`);
-          const data = await response.json();
-
-          if (data.success && data.data.url) {
-            window.location.href = data.data.url;
-          } else {
-            showMessage("loginMessage", "Failed to initiate Google sign-in", "error");
-          }
-        } catch (error) {
-          showMessage("loginMessage", "Network error. Please try again.", "error");
-        }
-      }
-
-      // Handle OAuth callback
-      function handleOAuthCallback() {
-        const hash = window.location.hash.substring(1);
-        const hashParams = new URLSearchParams(hash);
-        const access_token = hashParams.get('access_token');
-        
-        const params = new URLSearchParams(window.location.search);
-        const error = params.get('error');
-
-        if (access_token) {
-          verifyGoogleToken(access_token);
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } else if (error) {
-          let errorMsg = 'Google sign-in failed';
-          if (error === 'no_code') errorMsg = 'No authorization code received';
-          if (error === 'auth_failed') errorMsg = 'Google authentication failed';
-          if (error === 'server_error') errorMsg = 'Server error occurred';
-          showMessage('loginMessage', errorMsg, 'error');
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      }
-
-      async function verifyGoogleToken(access_token) {
-        try {
-          showMessage('loginMessage', 'Verifying your Google account...', 'info');
-          
-          const response = await fetch(`${API_URL}/google/verify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ access_token })
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            authToken = data.data.token;
-            currentUser = data.data.user;
-            localStorage.setItem("authToken", authToken);
-            showMessage('loginMessage', `Welcome, ${data.data.user.name}!`, 'success');
-            
-            setTimeout(() => {
-              showView('profileView');
-              loadProfile();
-            }, 1000);
-          } else {
-            showMessage('loginMessage', data.error || 'Google sign-in verification failed', 'error');
-          }
-        } catch (error) {
-          console.error('Google verification error:', error);
-          showMessage('loginMessage', 'Failed to verify Google sign-in. Please try again.', 'error');
-        }
-      }
-
-      async function loadProfile() {
-        try {
-          const response = await fetch(`${API_URL}/profile`, {
-            headers: { Authorization: `Bearer ${authToken}` },
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            currentUser = data.data.user;
-            const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.email)}&background=667eea&color=fff&size=200`;
-            document.getElementById("userAvatar").src = avatar;
-            document.getElementById("userName").textContent = currentUser.email.split('@')[0];
-            document.getElementById("userEmail").textContent = currentUser.email;
-            loadPDFList();
-          }
-        } catch (error) {
-          console.error('Profile error:', error);
-        }
-      }
-
-      async function handleLogout() {
-        localStorage.removeItem("authToken");
-        authToken = null;
-        currentUser = null;
-        showView("loginView");
-        showMessage("loginMessage", "✓ You've been signed out", "success");
-      }
-
-      document.getElementById('pdfFile').addEventListener('change', function(e) {
-        const file = this.files[0];
-        const infoDiv = document.getElementById('fileInfo');
-        
-        if (file) {
-          const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-          infoDiv.innerHTML = `✓ <strong>${file.name}</strong> (${sizeMB} MB)`;
-          infoDiv.style.display = 'block';
-        } else {
-          infoDiv.style.display = 'none';
-        }
-      });
-
-      async function handlePDFUpload(e) {
-        e.preventDefault();
-        const file = document.getElementById('pdfFile').files[0];
-
-        if (!file) {
-          showMessage('pdfMessage', 'Please select a file', 'error');
-          return;
-        }
-
-        const formData = new FormData();
-        formData.append('pdf', file);
-        const uploadBtn = document.getElementById('pdfUploadBtn');
-        uploadBtn.disabled = true;
-
-        try {
-          showMessage('pdfMessage', '⏳ Uploading...', 'info');
-          const response = await fetch(`${PDF_API_URL}/upload`, {
-            method: 'POST',
-            body: formData
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            showMessage('pdfMessage', `✓ ${data.data.originalFilename} uploaded!`, 'success');
-            document.getElementById('pdfForm').reset();
-            document.getElementById('fileInfo').style.display = 'none';
-            setTimeout(() => loadPDFList(), 500);
-          } else {
-            showMessage('pdfMessage', `Upload failed: ${data.error}`, 'error');
-          }
-        } catch (error) {
-          showMessage('pdfMessage', `Upload error: ${error.message}`, 'error');
-        } finally {
-          uploadBtn.disabled = false;
-        }
-      }
-
-      async function loadPDFList() {
-        try {
-          const response = await fetch(`${PDF_API_URL}/list`);
-          const data = await response.json();
-          const pdfList = document.getElementById('pdfList');
-
-          if (data.success && data.data.length > 0) {
-            pdfList.innerHTML = data.data.map(file => `
-              <div class="pdf-card">
-                <div class="pdf-name">📄 ${file.name}</div>
-                <div class="pdf-date">${new Date(file.created_at).toLocaleDateString()}</div>
-                <div class="pdf-actions">
-                  <button class="segment-btn" onclick="segmentDocument('${file.name}')">✨ Segment</button>
-                  <button class="delete-btn" onclick="deletePDF('${file.name}')">🗑️ Delete</button>
-                </div>
-              </div>
-            `).join('');
-          } else {
-            pdfList.innerHTML = '<div class="empty-state" style="padding: 40px 20px; grid-column: 1/-1;"><div class="empty-state-icon">📭</div><p>No PDFs yet</p></div>';
-          }
-        } catch (error) {
-          console.error('List error:', error);
-        }
-      }
-
-      async function deletePDF(filename) {
-        if (!confirm(`Delete "${filename}"?`)) return;
-
-        try {
-          const response = await fetch(`${PDF_API_URL}/${filename}`, {
-            method: 'DELETE'
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            showMessage('pdfMessage', `✓ PDF deleted`, 'success');
-            loadPDFList();
-          } else {
-            showMessage('pdfMessage', `Delete failed: ${data.error}`, 'error');
-          }
-        } catch (error) {
-          showMessage('pdfMessage', `Delete error: ${error.message}`, 'error');
-        }
-      }
-
-      async function segmentDocument(pdfId) {
-        const authToken = localStorage.getItem('authToken');
-        if (!authToken || !currentUser) {
-          showMessage('pdfMessage', 'Please log in first', 'error');
-          return;
-        }
-
-        try {
-          showMessage('pdfMessage', '🤖 AI is analyzing your document...', 'info');
-
-          const response = await fetch(`http://localhost:3001/api/pdf/segment`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              pdfId: pdfId,
-              userId: currentUser.id
-            })
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            currentSegmentation = data.data;
-            displayRoadmap();
-            showMessage('pdfMessage', '✅ Document segmented successfully!', 'success');
-          } else {
-            showMessage('pdfMessage', `Segmentation failed: ${data.error}`, 'error');
-          }
-        } catch (error) {
-          showMessage('pdfMessage', `Segmentation error: ${error.message}`, 'error');
-          console.error('Segmentation error:', error);
-        }
-      }
-
-      function displayRoadmap() {
-        if (!currentSegmentation) return;
-
-        const roadmapDiv = document.getElementById('roadmapDisplay');
-        if (!roadmapDiv) return;
-
-        const data = currentSegmentation;
-
-        let html = `
-          <div class="roadmap-header">
-            <h2 class="roadmap-title">📚 ${data.title}</h2>
-            <p class="roadmap-overview">${data.overview}</p>
-            <div class="roadmap-meta">
-              <span>📖 ${data.totalSegments} segments</span>
-              <span>⏱️ ${data.estimatedTime}</span>
-              <span>💰 ${data.cost}</span>
-            </div>
-          </div>
-          <div>
-        `;
-
-        data.segments.forEach((segment) => {
-          const diffColor = segment.difficulty === 'beginner' ? '#10b981' : 
-                           segment.difficulty === 'intermediate' ? '#f59e0b' : '#ef4444';
-          
-          html += `
-            <div class="segment-card">
-              <div class="segment-number">${segment.id}</div>
-              <div class="segment-content">
-                <div class="segment-title">${segment.title}</div>
-                <p class="segment-description">${segment.description}</p>
-                <div class="segment-meta">
-                  <span class="difficulty-badge difficulty-${segment.difficulty}">${segment.difficulty}</span>
-                  <span class="time-badge">⏱️ ${segment.estimatedTime}</span>
-                </div>
-                <div class="key-points">
-                  <div class="key-points-title">Key Points:</div>
-                  <ul>
-                    ${segment.keyPoints.map(point => `<li>${point}</li>`).join('')}
-                  </ul>
-                </div>
+        <div class="rm-card ${isDone?'done':''}">
+          <div class="rm-card-head">
+            <div class="rm-card-info">
+              <div class="rm-card-title">${esc(seg.title)}</div>
+              <div class="rm-card-badges">
+                <span class="badge badge-${seg.difficulty}">${seg.difficulty}</span>
+                <span class="badge badge-time">⏱ ${esc(seg.estimatedTime)}</span>
+                ${isDone?'<span class="badge badge-done">✓ Done</span>':''}
               </div>
             </div>
-          `;
-        });
+            <button class="open-btn" onclick="openLesson(${idx})">${isDone?'📖 Review':'▶ Start'}</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
 
-        html += '</div>';
-        roadmapDiv.innerHTML = html;
-        roadmapDiv.style.display = 'block';
-        document.getElementById('roadmapEmpty').style.display = 'none';
-      }
-    </script>
-  </body>
+  document.getElementById('rmContent').innerHTML=`
+    <div class="rm-banner">
+      <div class="rm-inner">
+        <div class="rm-label">Learning Roadmap</div>
+        <div class="rm-title">📚 ${esc(currentSeg.title)}</div>
+        <p class="rm-overview">${esc(currentSeg.overview)}</p>
+        <div class="rm-stats">
+          <span>📖 ${total} segments</span>
+          <span>⏱ ${esc(currentSeg.estimatedTime||'')}</span>
+          <span>✅ ${done} of ${total} completed</span>
+        </div>
+        <div class="rm-prog">
+          <div class="rm-prog-labels"><span>${done} of ${total} completed</span><span>${pct}%</span></div>
+          <div class="rm-prog-track"><div class="rm-prog-fill" style="width:${pct}%"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="rm-nodes">${nodes}</div>`;
+
+  document.getElementById('rmContent').style.display='block';
+}
+
+/* ── LESSON ───────────────────────────────────────── */
+function openLesson(segIdx) {
+  currentSegIdx=segIdx;
+  showView('lessonView');
+  renderLesson();
+  resetChat();
+}
+
+function exitLesson() {
+  showView('dashView');
+  renderRoadmap();
+}
+
+function renderLesson() {
+  const segs=currentSeg.segments;
+  const seg=segs[currentSegIdx];
+  const isDone=completedSegments.has(seg.id);
+  const total=segs.length;
+
+  // Nav bar
+  document.getElementById('lessonNavTitle').textContent=seg.title;
+  document.getElementById('navCounter').textContent=`${currentSegIdx+1} / ${total}`;
+  ['prevBtn','prevBtn2'].forEach(id=>{ document.getElementById(id).disabled=currentSegIdx===0; });
+  ['nextBtn','nextBtn2'].forEach(id=>{ document.getElementById(id).disabled=currentSegIdx===total-1; });
+
+  // Complete btn
+  const cb=document.getElementById('completeBtn');
+  if(isDone){ cb.className='complete-btn undo'; cb.textContent='↩ Mark Incomplete'; }
+  else       { cb.className='complete-btn do';   cb.textContent='✓ Mark as Complete'; }
+
+  // Build HTML
+  const kpHTML=(seg.keyPoints||[]).map(p=>`<div class="seg-kp"><div class="kp-dot"></div><span>${esc(p)}</span></div>`).join('');
+  const objHTML=(seg.learningObjectives||[]).map(o=>`<div class="seg-obj"><span>🎯</span><span>${esc(o)}</span></div>`).join('');
+  const pageRange=seg.startPage?`<span class="badge badge-time">Pages ${seg.startPage}–${seg.endPage}</span>`:'';
+
+  document.getElementById('lessonScroll').innerHTML=`
+    <div class="seg-hero">
+      <div class="seg-num">${seg.id}</div>
+      <div class="seg-title">${esc(seg.title)}</div>
+      <p class="seg-desc">${esc(seg.description)}</p>
+      <div class="seg-meta">
+        <span class="badge badge-${seg.difficulty}">${seg.difficulty}</span>
+        <span class="badge badge-time">⏱ ${esc(seg.estimatedTime)}</span>
+        ${pageRange}
+      </div>
+    </div>
+
+    ${kpHTML?`<div class="seg-kps"><div class="seg-kps-title">Key Points</div>${kpHTML}</div>`:''}
+
+    <div class="content-label">Lesson Content</div>
+    <div class="lesson-text" id="lessonText">${buildContent(seg.content)}</div>
+
+    ${objHTML?`<div class="seg-objs"><div class="seg-objs-title">Learning Objectives</div>${objHTML}</div>`:''}`;
+
+  document.getElementById('lessonScroll').scrollTop=0;
+  attachSelectionListener();
+}
+
+/** Convert raw PDF text into readable paragraphs */
+function buildContent(raw) {
+  if(!raw||!raw.trim()){
+    return '<p style="color:var(--ink-muted);font-style:italic;">Content could not be extracted from this section of the PDF.</p>';
+  }
+  // Clean artefacts from PDF extraction
+  let t=raw
+    .replace(/\s{3,}/g,'  ')
+    .replace(/([a-z,;])\s*\n\s*([A-Z])/g,'$1\n\n$2')
+    .replace(/\. ([A-Z])/g,'.\n\n$1')
+    .trim();
+
+  const paras=t.split(/\n{2,}/)
+    .map(p=>p.replace(/\n/g,' ').replace(/\s+/g,' ').trim())
+    .filter(p=>p.length>25);
+
+  return paras.length ? paras.map(p=>`<p>${esc(p)}</p>`).join('') : `<p>${esc(t)}</p>`;
+}
+
+function goSegment(dir) {
+  const next=currentSegIdx+dir;
+  if(next<0||next>=currentSeg.segments.length) return;
+  currentSegIdx=next;
+  renderLesson();
+  resetChat();
+}
+
+function toggleComplete() {
+  const seg=currentSeg.segments[currentSegIdx];
+  if(completedSegments.has(seg.id)) completedSegments.delete(seg.id);
+  else completedSegments.add(seg.id);
+  renderLesson();
+  persistProgress();
+}
+
+/** Fire-and-forget: save progress to backend. Silent on failure. */
+async function persistProgress() {
+  if(!currentUser || !currentSeg) return;
+  try {
+    await fetch(`${PDF_API}/progress`, {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        pdfId:        currentSeg.id || '',   // segmentation row id
+        userId:       currentUser.id,
+        completedIds: [...completedSegments],
+      }),
+    });
+  } catch(e) {
+    // Silent fail — progress is still held in memory for this session
+    console.warn('[Progress] Could not persist:', e.message);
+  }
+}
+
+/* ── TEXT SELECTION / EXPLAIN ─────────────────────── */
+function attachSelectionListener() {
+  // Use a named handler so we can re-attach without stacking listeners
+  document.removeEventListener('mouseup', handleSel);
+  document.removeEventListener('touchend', handleSel);
+  document.addEventListener('mouseup', handleSel);
+  document.addEventListener('touchend', handleSel);
+}
+
+function handleSel() {
+  const sel=window.getSelection();
+  if(!sel||sel.isCollapsed){ hideTip(); return; }
+  const text=sel.toString().trim();
+  if(text.length<2||text.length>300){ hideTip(); return; }
+  const range=sel.getRangeAt(0);
+  const area=document.getElementById('lessonText');
+  if(!area||!area.contains(range.commonAncestorContainer)){ hideTip(); return; }
+  selectedText=text;
+  const rect=range.getBoundingClientRect();
+  const tip=document.getElementById('explainTip');
+  tip.style.display='flex';
+  tip.style.top=`${rect.top+window.scrollY-46}px`;
+  tip.style.left=`${rect.left+window.scrollX+rect.width/2-tip.offsetWidth/2}px`;
+}
+
+function hideTip(){ document.getElementById('explainTip').style.display='none'; }
+
+async function explainSelection() {
+  if(!selectedText) return;
+  hideTip();
+  const seg=currentSeg.segments[currentSegIdx];
+  const q=`In the context of "${seg.title}", explain this in simple terms: "${selectedText}"`;
+  removeHint();
+  const msgs=document.getElementById('chatMsgs');
+  msgs.innerHTML+=`<div class="explain-chip"><strong>📌 Selected text</strong>"${esc(selectedText)}"</div>`;
+  msgs.scrollTop=msgs.scrollHeight;
+  await callChat(q, seg);
+  window.getSelection()?.removeAllRanges();
+}
+
+/* ── CHAT ─────────────────────────────────────────── */
+function resetChat() {
+  document.getElementById('chatMsgs').innerHTML=`
+    <div class="chat-hint-box" id="chatHint">
+      <strong>💡 How to use</strong><br>
+      Ask me to explain a concept, give examples, or quiz you.<br><br>
+      <strong>✨ Tip:</strong> Select text in the lesson and tap <em>"Explain this"</em>.
+    </div>`;
+  document.getElementById('chatInput').value='';
+}
+
+function removeHint(){ document.getElementById('chatHint')?.remove(); }
+
+async function sendChat() {
+  const input=document.getElementById('chatInput');
+  const q=input.value.trim(); if(!q) return;
+  input.value='';
+  removeHint();
+  const seg=currentSeg.segments[currentSegIdx];
+  const msgs=document.getElementById('chatMsgs');
+  msgs.innerHTML+=`<div class="bubble bubble-user"><div class="blabel">You</div><div class="binner">${esc(q)}</div></div>`;
+  msgs.scrollTop=msgs.scrollHeight;
+  await callChat(q, seg);
+}
+
+async function callChat(question, seg) {
+  const msgs=document.getElementById('chatMsgs');
+  const btn=document.getElementById('chatSendBtn');
+  btn.disabled=true;
+  const tid=`t${Date.now()}`;
+  msgs.innerHTML+=`<div class="bubble bubble-ai" id="${tid}"><div class="blabel">AI Tutor</div><div class="binner typing"><span></span><span></span><span></span></div></div>`;
+  msgs.scrollTop=msgs.scrollHeight;
+  try{
+    const r=await fetch(`${PDF_API}/chat`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question,segmentTitle:seg.title,segmentContent:seg.content||'',documentTitle:currentSeg.title})
+    });
+    const d=await r.json();
+    document.getElementById(tid)?.remove();
+    if(d.success){
+      msgs.innerHTML+=`<div class="bubble bubble-ai"><div class="blabel">AI Tutor</div><div class="binner">${fmtAI(d.answer)}</div></div>`;
+    } else {
+      msgs.innerHTML+=`<div class="bubble bubble-ai"><div class="binner" style="color:var(--danger)">Sorry, couldn't answer that. Try again.</div></div>`;
+    }
+  }catch(err){
+    document.getElementById(tid)?.remove();
+    msgs.innerHTML+=`<div class="bubble bubble-ai"><div class="binner" style="color:var(--danger)">Network error: ${esc(err.message)}</div></div>`;
+  }finally{
+    btn.disabled=false;
+    msgs.scrollTop=msgs.scrollHeight;
+    document.getElementById('chatInput').focus();
+  }
+}
+
+
+/* ── MICRO-TASKS ───────────────────────────────────── */
+let activeMicrotask   = null;  // current task object
+let selectedOptionIdx = null;  // for multiple choice
+
+async function requestMicrotask() {
+  const seg = currentSeg.segments[currentSegIdx];
+  const panel = document.getElementById('microtaskPanel');
+
+  // Show loading state
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div class="microtask-panel">
+      <div class="mt-header">
+        <div class="mt-title">📝 Quick Quiz</div>
+        <button class="mt-close" onclick="closeMicrotask()">✕</button>
+      </div>
+      <div class="mt-loading">
+        <span class="spinner" style="border-color:rgba(245,158,11,.25);border-top-color:var(--warn);"></span>
+        Generating a question based on this lesson…
+      </div>
+    </div>`;
+
+  // Scroll panel into view
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const r = await fetch(`${PDF_API}/microtask/generate`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        segmentTitle:   seg.title,
+        segmentContent: seg.content || '',
+        documentTitle:  currentSeg.title,
+        taskType:       'auto',
+      }),
+    });
+    const d = await r.json();
+
+    if (d.success) {
+      activeMicrotask   = d.task;
+      selectedOptionIdx = null;
+      renderMicrotask(d.task, seg);
+    } else {
+      panel.innerHTML = `<div class="microtask-panel"><p style="color:var(--danger);font-size:14px;">Could not generate a question: ${esc(d.error)}</p></div>`;
+    }
+  } catch (err) {
+    panel.innerHTML = `<div class="microtask-panel"><p style="color:var(--danger);font-size:14px;">Network error: ${esc(err.message)}</p></div>`;
+  }
+}
+
+function renderMicrotask(task, seg) {
+  const panel = document.getElementById('microtaskPanel');
+
+  if (task.type === 'multiple_choice') {
+    const optionsHTML = task.options.map((opt, i) => `
+      <button class="mt-option" id="mt-opt-${i}" onclick="selectOption(${i})">
+        <span class="mt-opt-letter">${String.fromCharCode(65 + i)}</span>
+        <span>${esc(opt.replace(/^[A-D]\.\s*/,''))}</span>
+      </button>`).join('');
+
+    panel.innerHTML = `
+      <div class="microtask-panel">
+        <div class="mt-header">
+          <div class="mt-title">📝 Quick Quiz <span class="badge badge-time" style="font-size:11px;">Multiple Choice</span></div>
+          <button class="mt-close" onclick="closeMicrotask()">✕</button>
+        </div>
+        <div class="mt-question">${esc(task.question)}</div>
+        <div class="mt-options" id="mtOptions">${optionsHTML}</div>
+        <div class="mt-actions">
+          <button class="mt-submit" id="mtSubmit" onclick="submitMicrotask()" disabled>Submit Answer</button>
+        </div>
+        <div id="mtFeedback"></div>
+      </div>`;
+
+  } else {
+    // short_answer
+    panel.innerHTML = `
+      <div class="microtask-panel">
+        <div class="mt-header">
+          <div class="mt-title">📝 Quick Quiz <span class="badge badge-time" style="font-size:11px;">Short Answer</span></div>
+          <button class="mt-close" onclick="closeMicrotask()">✕</button>
+        </div>
+        <div class="mt-question">${esc(task.question)}</div>
+        <textarea class="mt-textarea" id="mtAnswer" placeholder="Write your answer here…" oninput="document.getElementById('mtSubmit').disabled=this.value.trim().length<5"></textarea>
+        <div class="mt-actions">
+          <button class="mt-submit" id="mtSubmit" onclick="submitMicrotask()" disabled>Submit Answer</button>
+        </div>
+        <div id="mtFeedback"></div>
+      </div>`;
+  }
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function selectOption(idx) {
+  // Only allow selection before submission
+  if (document.getElementById(`mt-opt-${idx}`)?.disabled) return;
+  selectedOptionIdx = idx;
+  document.querySelectorAll('.mt-option').forEach((btn, i) => {
+    btn.classList.toggle('selected', i === idx);
+  });
+  document.getElementById('mtSubmit').disabled = false;
+}
+
+async function submitMicrotask() {
+  const seg    = currentSeg.segments[currentSegIdx];
+  const task   = activeMicrotask;
+  const submit = document.getElementById('mtSubmit');
+
+  let userAnswer;
+  if (task.type === 'multiple_choice') {
+    if (selectedOptionIdx === null) return;
+    userAnswer = selectedOptionIdx;
+    // Disable all options
+    document.querySelectorAll('.mt-option').forEach(b => b.disabled = true);
+  } else {
+    userAnswer = document.getElementById('mtAnswer')?.value.trim();
+    if (!userAnswer) return;
+    document.getElementById('mtAnswer').disabled = true;
+  }
+
+  submit.disabled = true;
+  submit.innerHTML = '<span class="spinner" style="border-color:rgba(255,255,255,.3);border-top-color:#fff;"></span>';
+
+  try {
+    const r = await fetch(`${PDF_API}/microtask/evaluate`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task,
+        userAnswer,
+        segmentTitle:   seg.title,
+        segmentContent: seg.content || '',
+      }),
+    });
+    const d = await r.json();
+
+    if (d.success) {
+      showMicrotaskFeedback(d, task, userAnswer);
+    } else {
+      document.getElementById('mtFeedback').innerHTML =
+        `<div class="mt-feedback fail"><div class="mt-fb-main">Could not evaluate your answer.</div></div>`;
+    }
+  } catch (err) {
+    document.getElementById('mtFeedback').innerHTML =
+      `<div class="mt-feedback fail"><div class="mt-fb-main">Network error: ${esc(err.message)}</div></div>`;
+  } finally {
+    // Replace submit with retry
+    document.getElementById('mtSubmit')?.replaceWith((() => {
+      const b = document.createElement('button');
+      b.className = 'mt-retry'; b.textContent = '🔄 Try another question';
+      b.onclick = requestMicrotask;
+      return b;
+    })());
+  }
+}
+
+function showMicrotaskFeedback(result, task, userAnswer) {
+  // For multiple choice: highlight correct / incorrect options visually
+  if (task.type === 'multiple_choice') {
+    document.querySelectorAll('.mt-option').forEach((btn, i) => {
+      if (i === task.correctIndex) btn.classList.add('correct');
+      else if (i === userAnswer && !result.correct) btn.classList.add('incorrect');
+    });
+  }
+
+  const pct  = result.score;
+  const pass = result.correct || pct >= 60;
+  const cls  = pass ? 'pass' : 'fail';
+  const icon = pass ? '🎉' : '💪';
+
+  let modelBlock = '';
+  if (task.type === 'short_answer' && task.modelAnswer) {
+    modelBlock = `<div class="mt-fb-model"><strong>Model answer</strong>${esc(task.modelAnswer)}</div>`;
+  }
+  if (task.explanation && task.type === 'multiple_choice') {
+    modelBlock = `<div class="mt-fb-model"><strong>Explanation</strong>${esc(task.explanation)}</div>`;
+  }
+
+  let improveBlock = '';
+  if (result.improve) {
+    improveBlock = `<div style="margin-top:8px;font-size:13px;opacity:.85;">💡 ${esc(result.improve)}</div>`;
+  }
+
+  document.getElementById('mtFeedback').innerHTML = `
+    <div class="mt-feedback ${cls}">
+      ${task.type === 'short_answer' ? `<div class="mt-fb-score">${pct}%</div>` : ''}
+      <div class="mt-fb-main">${icon} ${esc(result.feedback)}</div>
+      ${result.highlight ? `<div class="mt-fb-sub">✨ "${esc(result.highlight)}"</div>` : ''}
+      ${improveBlock}
+      ${modelBlock}
+    </div>`;
+
+  document.getElementById('mtFeedback').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function closeMicrotask() {
+  const panel = document.getElementById('microtaskPanel');
+  panel.style.display = 'none';
+  panel.innerHTML     = '';
+  activeMicrotask     = null;
+  selectedOptionIdx   = null;
+}
+
+// Hide microtask panel when navigating segments
+const _origGoSegment = goSegment;
+function goSegment(dir) {
+  closeMicrotask();
+  _origGoSegment(dir);
+}
+
+// Hide tooltip on outside click
+document.addEventListener('mousedown', e=>{ if(e.target.id!=='explainTip') hideTip(); });
+</script>
+</body>
 </html>

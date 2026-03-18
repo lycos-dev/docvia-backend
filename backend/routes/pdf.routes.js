@@ -1,102 +1,74 @@
 const express = require('express');
-const router = express.Router();
-const multer = require('multer');
-const { authenticateToken } = require('../middleware/auth.middleware');
-const {
-  uploadPDF,
-  listPDFs,
-  deletePDF
-} = require('../controllers/pdf.controller');
+const router  = express.Router();
+const multer  = require('multer');
+
+const { uploadPDF, listPDFs, deletePDF } = require('../controllers/pdf.controller');
 const {
   segmentPDFEndpoint,
   getSegmentsEndpoint,
-  deleteSegmentsEndpoint
+  deleteSegmentsEndpoint,
+  chatWithSegmentEndpoint,
+  generateMicrotaskEndpoint,
+  evaluateMicrotaskEndpoint,
 } = require('../controllers/segmentation.controller');
+const {
+  saveProgressEndpoint,
+  getProgressEndpoint,
+} = require('../controllers/progress.controller');
 
-// Configure multer for PDF uploads
-const storage = multer.memoryStorage();
-
+// ── Multer ────────────────────────────────────────────────────────────────────
+const storage    = multer.memoryStorage();
 const fileFilter = (req, file, cb) => {
-  // Accept only PDF files
   if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
     cb(null, true);
   } else {
     cb(new Error('Only PDF files are allowed'), false);
   }
 };
+const upload = multer({ storage, fileFilter, limits: { fileSize: 50 * 1024 * 1024 } });
 
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB max size
-  }
-});
-
-/**
- * @route   POST /api/pdf/upload
- * @desc    Upload academic PDF document with integrated validation
- *          The system checks PDF validity and notifies users if a file is unsupported
- * @access  Public
- */
+// ── PDF CRUD ──────────────────────────────────────────────────────────────────
 router.post('/upload', upload.single('pdf'), uploadPDF);
-
-/**
- * @route   GET /api/pdf/list
- * @desc    Get list of uploaded PDFs
- * @access  Public
- */
 router.get('/list', listPDFs);
 
+// ── SEGMENTATION ──────────────────────────────────────────────────────────────
+router.post('/segment', segmentPDFEndpoint);
+
+// ── AI CHAT ───────────────────────────────────────────────────────────────────
+router.post('/chat', chatWithSegmentEndpoint);
+
+// ── MICRO-TASKS ───────────────────────────────────────────────────────────────
+router.post('/microtask/generate', generateMicrotaskEndpoint);
+router.post('/microtask/evaluate', evaluateMicrotaskEndpoint);
+
+// ── PROGRESS TRACKING ─────────────────────────────────────────────────────────
 /**
- * @route   DELETE /api/pdf/:filename
- * @desc    Delete a PDF from storage
- * @access  Public (for testing) - Can be made Private with authenticateToken
+ * POST /api/pdf/progress
+ * Body: { pdfId, userId, completedIds: number[] }
+ * Upserts the user's completed segment IDs for a document.
  */
-router.delete('/:filename', deletePDF);
+router.post('/progress', saveProgressEndpoint);
 
 /**
- * SEGMENTATION ROUTES - AI-Powered Document Analysis (Groq)
+ * GET /api/pdf/progress/:pdfId?userId=...
+ * Returns saved completedIds for this user+pdf. Returns [] if none yet.
  */
-router.post('/segment', segmentPDFEndpoint);
+router.get('/progress/:pdfId', getProgressEndpoint);
+
+// ── PER-PDF SEGMENT DATA ──────────────────────────────────────────────────────
+// NOTE: wildcard routes MUST come after all fixed-path routes above
 router.get('/:pdfId/segments', getSegmentsEndpoint);
 router.delete('/:pdfId/segments', deleteSegmentsEndpoint);
+router.delete('/:filename', deletePDF);
 
-// Error handling middleware for multer
+// ── Multer error handler ──────────────────────────────────────────────────────
 router.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    if (error.code === 'FILE_TOO_LARGE') {
-      return res.status(400).json({
-        success: false,
-        error: 'File too large',
-        message: 'Maximum file size is 50MB'
-      });
-    }
-    if (error.code === 'LIMIT_FILE_COUNT') {
-      return res.status(400).json({
-        success: false,
-        error: 'Too many files',
-        message: 'Only one file can be uploaded at a time'
-      });
-    }
+    if (error.code === 'FILE_TOO_LARGE')   return res.status(400).json({ success:false, error:'File too large', message:'Maximum file size is 50MB' });
+    if (error.code === 'LIMIT_FILE_COUNT') return res.status(400).json({ success:false, error:'Too many files', message:'Only one file at a time' });
   }
-
-  if (error.message === 'Only PDF files are allowed') {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid file type',
-      message: 'Only PDF files are supported. Please upload a valid PDF document.'
-    });
-  }
-
-  if (error) {
-    return res.status(400).json({
-      success: false,
-      error: error.message || 'File upload error',
-      message: error.message
-    });
-  }
-
+  if (error.message === 'Only PDF files are allowed') return res.status(400).json({ success:false, error:'Invalid file type', message:'Only PDF files are supported.' });
+  if (error) return res.status(400).json({ success:false, error:error.message||'Upload error' });
   next();
 });
 
