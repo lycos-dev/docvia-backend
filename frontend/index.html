@@ -98,63 +98,143 @@
   #dashView.active { display:flex !important; flex-direction:column; min-height:100vh; }
   #lessonView.active { display:flex !important; flex-direction:column; min-height:100vh; }
 
-  /* ── DASHBOARD TOP BAR ── */
-  .dash-topbar {
-    position:sticky; top:0; z-index:100; background:var(--surface); border-bottom:1px solid var(--border);
-    padding:0 32px; height:60px; display:flex; align-items:center; justify-content:space-between;
-    box-shadow:var(--shadow-sm);
-  }
-  .dash-logo { font-family:'Sora',sans-serif; font-size:20px; font-weight:800; letter-spacing:-.5px; color:var(--primary); }
-  .dash-user { display:flex; align-items:center; gap:12px; }
-  .dash-avatar { width:34px; height:34px; border-radius:50%; border:2px solid var(--primary); }
-  .dash-username { font-size:13px; font-weight:600; color:var(--ink-soft); }
-  .sign-out-btn { padding:7px 14px; background:var(--danger); color:#fff; border:none; border-radius:var(--radius-sm); font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .2s; }
-  .sign-out-btn:hover { background:#dc2626; }
+  /* ── NEW DASHBOARD LAYOUT ── */
+  #dashView.active { display:flex !important; flex-direction:row; height:100vh; overflow:hidden; }
 
-  /* ── DASHBOARD BODY ── */
-  .dash-body { flex:1; display:grid; grid-template-columns:320px 1fr; }
+  /* Sidebar */
+  .db-sidebar { width:260px;min-width:260px;height:100vh;background:#fff;border-right:1px solid #e8eaed;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0; }
+  .db-sidebar-brand { padding:20px 20px 12px;display:flex;align-items:center;gap:10px; }
+  .db-brand-icon { width:38px;height:38px;background:var(--primary);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:19px;flex-shrink:0; }
+  .db-brand-name { font-family:'Sora',sans-serif;font-size:17px;font-weight:800;color:var(--ink);letter-spacing:-.3px; }
+  .db-upload-bar { padding:4px 14px 14px; }
+  .db-upload-main { width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 16px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;box-shadow:0 2px 8px rgba(91,94,246,.3); }
+  .db-upload-main:hover { background:var(--primary-dk);transform:translateY(-1px); }
+  .db-nav { padding:0 10px;margin-bottom:6px; }
+  .db-nav-item { width:100%;display:flex;align-items:center;gap:10px;padding:10px 14px;border:none;background:none;border-radius:var(--radius-sm);text-align:left;font-size:13.5px;font-weight:500;color:#5f6368;cursor:pointer;font-family:inherit;transition:all .15s;margin-bottom:2px; }
+  .db-nav-item:hover { background:#f1f3f4;color:var(--ink); }
+  .db-nav-item.active { background:#e8f0fe;color:var(--primary);font-weight:700; }
+  .db-nav-icon { font-size:16px;width:20px;text-align:center;flex-shrink:0; }
+  .db-divider { height:1px;background:#e8eaed;margin:6px 16px; }
+  .db-fb-section { padding:0 10px;flex:1; }
+  .db-fb-toggle { width:100%;display:flex;align-items:center;gap:8px;padding:9px 14px;border:none;background:none;font-size:13px;font-weight:600;color:#5f6368;cursor:pointer;font-family:inherit;transition:all .15s;border-radius:var(--radius-sm); }
+  .db-fb-toggle:hover { background:#f1f3f4; }
+  .db-fb-arrow { font-size:11px;transition:transform .2s;display:inline-block;line-height:1; }
+  .db-fb-arrow.open { transform:rotate(90deg); }
+  .db-fb-list { padding:2px 0;display:none; }
+  .db-fb-list.open { display:block; }
+  .db-fb-item { display:flex;align-items:center;gap:8px;padding:7px 14px 7px 28px;font-size:12px;color:#5f6368;cursor:pointer;border-radius:var(--radius-sm);transition:all .15s;border:none;background:none;width:100%;text-align:left;font-family:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .db-fb-item:hover { background:#f1f3f4;color:var(--ink); }
+  .db-sidebar-footer { padding:14px;border-top:1px solid #e8eaed;margin-top:auto;display:flex;align-items:center;gap:9px;flex-shrink:0; }
+  .db-sf-avatar { width:30px;height:30px;border-radius:50%;border:2px solid var(--primary);flex-shrink:0; }
+  .db-sf-name { font-size:12px;font-weight:600;color:var(--ink);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+  .db-sf-out { background:none;border:none;cursor:pointer;color:var(--ink-muted);font-size:15px;padding:5px;border-radius:6px;transition:all .15s; }
+  .db-sf-out:hover { background:var(--danger-lt);color:var(--danger); }
 
-  .dash-left {
-    border-right:1px solid var(--border); padding:24px 20px; overflow-y:auto;
-    height:calc(100vh - 60px); position:sticky; top:60px;
-  }
-  .panel-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:var(--ink-muted); margin-bottom:14px; }
+  /* Main */
+  .db-main { flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#f8f9fa;min-width:0; }
+  .db-topbar { background:#fff;border-bottom:1px solid #e8eaed;padding:0 24px;height:54px;display:flex;align-items:center;gap:14px;flex-shrink:0; }
+  .db-menu-btn { background:none;border:none;cursor:pointer;font-size:17px;color:#5f6368;padding:6px;border-radius:6px;transition:all .15s; }
+  .db-menu-btn:hover { background:#f1f3f4; }
+  .db-search-wrap { flex:1;max-width:460px;display:flex;align-items:center;gap:0;background:#f1f3f4;border-radius:99px;padding:0 16px;height:38px; }
+  .db-search-wrap input { flex:1;border:none;background:none;font-size:14px;color:var(--ink);outline:none;font-family:inherit; }
+  .db-search-wrap input::placeholder { color:#9aa0a6; }
+  .db-search-icon { color:#9aa0a6;font-size:15px; }
+  .db-content-area { flex:1;overflow-y:auto;padding:26px 28px; }
 
-  /* Upload zone */
-  .upload-zone {
-    border:2px dashed var(--border); border-radius:var(--radius); padding:26px 16px;
-    text-align:center; cursor:pointer; transition:all .25s; margin-bottom:8px;
-    background:repeating-linear-gradient(45deg,transparent,transparent 6px,rgba(91,94,246,.015) 6px,rgba(91,94,246,.015) 12px);
-  }
-  .upload-zone:hover, .upload-zone.drag-over { border-color:var(--primary); background:var(--primary-lt); }
-  .upload-zone-icon { font-size:28px; margin-bottom:6px; }
-  .upload-zone p    { font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:3px; }
-  .upload-zone small{ font-size:11px; color:var(--ink-muted); }
+  /* Welcome card */
+  .db-welcome-card { background:linear-gradient(135deg,#dceefb 0%,#c7e3f8 100%);border-radius:18px;padding:26px 30px;margin-bottom:28px;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden;min-height:140px; }
+  .db-welcome-card::before { content:'';position:absolute;top:-50px;right:100px;width:200px;height:200px;background:rgba(255,255,255,.25);border-radius:50%; }
+  .db-welcome-text { position:relative;z-index:1; }
+  .db-welcome-hello { font-family:'Sora',sans-serif;font-size:22px;font-weight:800;color:#1a56a0;margin-bottom:7px; }
+  .db-welcome-sub { font-size:13px;color:#2d73b8;line-height:1.55;max-width:340px; }
+  .db-welcome-mascot { position:relative;z-index:1;flex-shrink:0;margin-left:16px; }
+  .db-mascot-svg { width:105px;height:105px;filter:drop-shadow(0 4px 14px rgba(0,0,0,.13)); }
+
+  /* Docs section */
+  .db-docs-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px; }
+  .db-docs-title { font-family:'Sora',sans-serif;font-size:17px;font-weight:700;color:var(--ink); }
+  .db-docs-controls { display:flex;align-items:center;gap:8px; }
+  .db-filter-btn { display:flex;align-items:center;gap:5px;padding:6px 13px;background:#fff;border:1px solid #e0e0e0;border-radius:99px;font-size:12px;font-weight:500;color:#5f6368;cursor:pointer;font-family:inherit;transition:all .15s; }
+  .db-filter-btn:hover { border-color:var(--primary);color:var(--primary); }
+  .db-view-btns { display:flex;border:1px solid #e0e0e0;border-radius:var(--radius-sm);overflow:hidden;background:#fff; }
+  .db-view-btn { padding:6px 11px;border:none;background:none;cursor:pointer;color:#9aa0a6;font-size:15px;transition:all .15s;line-height:1; }
+  .db-view-btn.active { background:var(--primary);color:#fff; }
+  .db-view-btn:hover:not(.active) { background:#f1f3f4; }
+
+  /* Doc cards */
+  .doc-card-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px; }
+  .doc-card { background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.07);overflow:hidden;cursor:pointer;transition:all .22s;border:2px solid transparent;position:relative; }
+  .doc-card:hover { transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.12);border-color:var(--primary-lt); }
+  .doc-card.active { border-color:var(--primary);box-shadow:0 4px 16px rgba(91,94,246,.25); }
+  .doc-card-thumb { height:148px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden; }
+  .doc-card-thumb-pattern { position:absolute;inset:0;opacity:.07;background-image:repeating-linear-gradient(45deg,#fff 0px,#fff 1px,transparent 1px,transparent 50%);background-size:14px 14px; }
+  .doc-card-thumb-icon { font-size:44px;position:relative;z-index:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,.2)); }
+  .doc-card-body { padding:12px 12px 10px;display:flex;align-items:flex-start;justify-content:space-between;gap:6px; }
+  .doc-card-info { min-width:0;flex:1; }
+  .doc-card-name { font-family:'Sora',sans-serif;font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px; }
+  .doc-card-date { font-size:11px;color:#9aa0a6; }
+  .doc-card-menu-btn { background:none;border:none;cursor:pointer;color:#9aa0a6;font-size:17px;padding:2px 5px;border-radius:6px;flex-shrink:0;line-height:1;transition:all .15s;letter-spacing:1px; }
+  .doc-card-menu-btn:hover { background:#f1f3f4;color:var(--ink); }
+  .doc-card-dropdown { position:absolute;right:8px;bottom:46px;background:#fff;border:1px solid #e0e0e0;border-radius:var(--radius-sm);box-shadow:0 4px 18px rgba(0,0,0,.13);min-width:130px;z-index:50;display:none;overflow:hidden; }
+  .doc-card-dropdown.open { display:block;animation:popIn .15s ease; }
+  .doc-menu-item { display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:12.5px;color:var(--ink-soft);cursor:pointer;transition:all .15s;width:100%;border:none;background:none;font-family:inherit;text-align:left; }
+  .doc-menu-item:hover { background:#f1f3f4; }
+  .doc-menu-item.danger { color:var(--danger); }
+  .doc-menu-item.danger:hover { background:var(--danger-lt); }
+  .doc-card-grid-empty { text-align:center;padding:56px 20px;color:var(--ink-muted);grid-column:1/-1; }
+  .doc-card-grid-empty-icon { font-size:44px;margin-bottom:12px;opacity:.35;display:block; }
+
+  /* List view variant */
+  .doc-list-view { grid-template-columns:1fr !important; }
+  .doc-list-view .doc-card { display:flex;flex-direction:row; }
+  .doc-list-view .doc-card-thumb { width:72px;height:58px;flex-shrink:0; }
+  .doc-list-view .doc-card-body { flex:1;align-items:center; }
+
+  /* Roadmap section in main */
+  .db-roadmap-back-btn { display:flex;align-items:center;gap:7px;padding:8px 18px;background:#fff;border:1px solid #e0e0e0;border-radius:99px;font-size:13px;font-weight:600;color:#5f6368;cursor:pointer;font-family:inherit;transition:all .15s;margin-bottom:22px; }
+  .db-roadmap-back-btn:hover { border-color:var(--primary);color:var(--primary);background:var(--primary-lt); }
+
+  /* Upload helpers */
   #pdfFileInput { display:none; }
-
-  .file-chip { display:none; background:var(--primary-lt); border:1.5px solid var(--primary); border-radius:var(--radius-sm); padding:9px 12px; font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
-  .upload-go-btn { display:none; width:100%; padding:11px; background:linear-gradient(135deg,var(--primary),var(--primary-dk)); color:#fff; border:none; border-radius:var(--radius-sm); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .2s; }
+  .file-chip { display:none;background:var(--primary-lt);border:1.5px solid var(--primary);border-radius:var(--radius-sm);padding:9px 12px;font-size:12px;color:var(--ink-soft);margin-bottom:8px; }
+  .upload-go-btn { display:none;width:100%;padding:11px;background:linear-gradient(135deg,var(--primary),var(--primary-dk));color:#fff;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;margin-bottom:16px; }
   .upload-go-btn:hover:not(:disabled) { transform:translateY(-1px); }
-  .upload-go-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .upload-go-btn:disabled { opacity:.6;cursor:not-allowed; }
 
-  /* PDF list */
-  .pdf-list-section { margin-top:28px; }
-  .pdf-list-header  { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .icon-btn { background:none; border:none; cursor:pointer; padding:5px; border-radius:6px; font-size:14px; color:var(--ink-muted); transition:all .15s; }
-  .icon-btn:hover { background:var(--bg); color:var(--ink); }
-  .icon-btn.del:hover { background:var(--danger-lt); color:var(--danger); }
+  /* Progress tab */
+  .progress-viz { background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);padding:18px 18px 14px;box-shadow:var(--shadow-sm); }
+  .viz-title { font-family:'Sora',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.1px;color:var(--ink-muted);margin-bottom:14px; }
+  .viz-stats { display:flex;gap:0;margin-bottom:14px; }
+  .viz-stat  { flex:1;text-align:center;padding:8px 4px;border-right:1px solid var(--border); }
+  .viz-stat:last-child { border-right:none; }
+  .viz-stat-num  { font-family:'Sora',sans-serif;font-size:22px;font-weight:800;color:var(--primary);line-height:1;margin-bottom:3px; }
+  .viz-stat-lbl  { font-size:10px;color:var(--ink-muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px; }
+  .viz-doc-list  { display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto; }
+  .viz-doc-row   { display:flex;flex-direction:column;gap:4px; }
+  .viz-doc-name  { font-size:11px;font-weight:600;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+  .viz-doc-track { height:4px;background:var(--border);border-radius:99px;overflow:hidden; }
+  .viz-doc-fill  { height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));border-radius:99px;transition:width .4s ease; }
+  .viz-doc-pct   { font-size:10px;color:var(--ink-muted);text-align:right; }
+  .viz-empty     { font-size:12px;color:var(--ink-muted);text-align:center;padding:8px 0; }
 
-  .pdf-item { display:flex; align-items:center; gap:9px; padding:10px 11px; border-radius:var(--radius-sm); border:1px solid var(--border); margin-bottom:7px; cursor:pointer; transition:all .2s; background:var(--surface); }
-  .pdf-item:hover  { border-color:var(--primary); box-shadow:var(--shadow-sm); }
-  .pdf-item.active { border-color:var(--primary); background:var(--primary-lt); }
-  .pdf-icon { font-size:18px; flex-shrink:0; }
-  .pdf-info { flex:1; min-width:0; }
-  .pdf-name { font-size:12px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .pdf-date { font-size:10px; color:var(--ink-muted); }
-  .pdf-actions { display:flex; gap:2px; flex-shrink:0; }
+  /* Rename row */
+  .rename-row { display:flex;gap:6px;align-items:center;padding:8px 11px;border-radius:var(--radius-sm);border:1.5px solid var(--primary);background:var(--primary-lt);margin-bottom:7px; }
+  .rename-input { flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--ink); }
+  .rename-input:focus { outline:none;border-color:var(--primary); }
+  .rename-ok  { padding:6px 12px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s; }
+  .rename-ok:hover { background:var(--primary-dk); }
+  .rename-cancel { padding:6px 10px;background:none;color:var(--ink-muted);border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit; }
 
-  /* Roadmap panel */
-  .dash-right { padding:32px 36px; overflow-y:auto; height:calc(100vh - 60px); }
+  /* Responsive */
+  @media(max-width:900px) {
+    .db-sidebar { width:220px;min-width:220px; }
+    .db-content-area { padding:18px 16px; }
+  }
+  @media(max-width:640px) {
+    #dashView.active { flex-direction:column; }
+    .db-sidebar { width:100%;height:auto;flex-direction:row;flex-wrap:wrap;min-width:unset; }
+  }
+
 
   .rm-empty { text-align:center; padding:80px 40px; color:var(--ink-muted); }
   .rm-empty-icon { font-size:60px; margin-bottom:14px; opacity:.45; }
@@ -378,11 +458,15 @@
   .mt-sum-wrong   { color:var(--danger); }
 
   /* Deep Dive */
-  .deep-btn { padding:11px 20px; border-radius:var(--radius-sm); font-size:14px; font-weight:600; border:none; cursor:pointer; font-family:inherit; transition:all .2s; background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; box-shadow:0 3px 10px rgba(124,58,237,.35); display:flex; align-items:center; gap:7px; }
-  .deep-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 6px 18px rgba(124,58,237,.45); }
-  .deep-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .deep-teaser { display:flex; align-items:center; gap:14px; margin:36px 52px 0; cursor:pointer; }
+  .deep-teaser-line { flex:1; height:1px; background:linear-gradient(90deg,var(--border),#ede9fe 60%,var(--border)); }
+  .deep-teaser-pill { display:flex; align-items:center; gap:7px; padding:8px 18px; border-radius:99px; border:1.5px dashed #c4b5fd; color:#7c3aed; font-size:13px; font-weight:600; font-family:inherit; background:var(--surface); transition:all .2s; white-space:nowrap; cursor:pointer; flex-shrink:0; }
+  .deep-teaser-pill:hover { background:#faf5ff; border-color:#7c3aed; box-shadow:0 2px 12px rgba(124,58,237,.18); }
+  .deep-teaser-pill:disabled { opacity:.65; cursor:not-allowed; }
+  .deep-teaser-arrow { font-size:10px; transition:transform .25s; display:inline-block; }
+  .deep-teaser-pill.open .deep-teaser-arrow { transform:rotate(180deg); }
 
-  .deep-panel { margin:28px 52px 0; border-radius:var(--radius); border:2px solid #ede9fe; background:#faf5ff; overflow:hidden; animation:fadeUp .3s ease; }
+  .deep-panel { margin:14px 52px 0; border-radius:var(--radius); border:2px solid #ede9fe; background:#faf5ff; overflow:hidden; animation:fadeUp .3s ease; }
   .deep-panel-hdr { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; }
   .deep-panel-hdr h4 { font-family:'Sora',sans-serif; font-size:14px; font-weight:700; margin:0; }
   .deep-panel-close { background:none; border:none; color:rgba(255,255,255,.8); font-size:18px; cursor:pointer; line-height:1; padding:0; }
@@ -396,9 +480,8 @@
   .deep-explanation p:last-child { margin-bottom:0; }
   .deep-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px; }
   .deep-list li { background:#fff; border:1px solid #ede9fe; border-radius:var(--radius-sm); padding:10px 14px; font-size:14px; color:var(--ink-soft); line-height:1.55; }
-  .deep-list li::before { content:''; }
   .deep-matters { background:linear-gradient(135deg,#ede9fe,#f5f3ff); border-radius:var(--radius-sm); padding:14px 16px; font-size:14px; line-height:1.65; color:var(--ink); border-left:4px solid #7c3aed; }
-  @media(max-width:700px){ .deep-panel { margin:16px 0 0; } }
+  @media(max-width:700px){ .deep-panel,.deep-teaser { margin-left:0; margin-right:0; } }
 
   /* ── CHAT SIDEBAR ── */
   .lesson-chat {
@@ -567,63 +650,162 @@
 
 <!-- ════════════════════ DASHBOARD ════════════════════ -->
 <div id="dashView" class="view">
-  <header class="dash-topbar">
-    <div class="dash-logo">📚 DocVia</div>
-    <div class="dash-user">
-      <span class="dash-username" id="dashUsername"></span>
-      <img class="dash-avatar" id="dashAvatar" src="" alt="" />
-      <button class="sign-out-btn" onclick="handleLogout()">Sign out</button>
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="db-sidebar">
+    <div class="db-sidebar-brand">
+      <div class="db-brand-icon">📚</div>
+      <div class="db-brand-name">DocVia</div>
     </div>
-  </header>
 
-  <div class="dash-body">
-    <!-- Left: upload + list -->
-    <aside class="dash-left">
-      <!-- Progress visualization -->
-      <div class="progress-viz" id="progressViz" style="display:none;">
-        <div class="viz-title">📊 Your Progress</div>
-        <div class="viz-stats" id="vizStats"></div>
-        <div class="viz-doc-list" id="vizDocList"></div>
+    <div class="db-upload-bar">
+      <button class="db-upload-main" onclick="document.getElementById('pdfFileInput').click()">
+        📎 Upload File
+      </button>
+    </div>
+
+    <input type="file" id="pdfFileInput" accept=".pdf" />
+    <div id="uploadZone" style="display:none;"></div>
+
+    <nav class="db-nav">
+      <button class="db-nav-item active" id="navDashboard" onclick="showDashTab('dashboard')">
+        <span class="db-nav-icon">🏠</span> Dashboard
+      </button>
+      <button class="db-nav-item" id="navProgress" onclick="showDashTab('progress')">
+        <span class="db-nav-icon">📊</span> Progress
+      </button>
+      <button class="db-nav-item" id="navSettings" onclick="showDashTab('settings')">
+        <span class="db-nav-icon">⚙️</span> Settings
+      </button>
+    </nav>
+
+    <div class="db-divider"></div>
+
+    <div class="db-fb-section">
+      <button class="db-fb-toggle" onclick="toggleFileBrowser()">
+        <span class="db-fb-arrow" id="fbArrow">›</span>
+        File Browser
+      </button>
+      <div class="db-fb-list" id="sbFileList"></div>
+    </div>
+
+    <div class="db-sidebar-footer">
+      <img class="db-sf-avatar" id="dashAvatar" src="" alt="" />
+      <span class="db-sf-name" id="dashUsername"></span>
+      <button class="db-sf-out" onclick="handleLogout()" title="Sign out">↪</button>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═══ -->
+  <div class="db-main">
+    <header class="db-topbar">
+      <button class="db-menu-btn">☰</button>
+      <div class="db-search-wrap">
+        <input placeholder="Search here" id="dashSearch" />
+        <span class="db-search-icon">🔍</span>
       </div>
+    </header>
 
-      <div class="panel-label">📤 Upload PDF</div>
-      <div id="uploadMsg"></div>
+    <div class="db-content-area" id="dbContentArea">
 
-      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('pdfFileInput').click()">
-        <div class="upload-zone-icon">📄</div>
-        <p>Click to upload or drag & drop</p>
-        <small>PDF only · max 50 MB · AI roadmap auto-generated</small>
-      </div>
-      <input type="file" id="pdfFileInput" accept=".pdf" />
+      <!-- Upload helpers (always present, shown by JS) -->
+      <div id="uploadMsg" style="margin-bottom:10px;"></div>
       <div class="file-chip" id="fileChip"></div>
       <button class="upload-go-btn" id="uploadGoBtn" onclick="doUpload()">
         <span id="uploadGoText">📤 Upload & Generate Roadmap</span>
       </button>
 
-      <div class="pdf-list-section">
-        <div class="pdf-list-header">
-          <div class="panel-label" style="margin:0;">📋 Documents</div>
-          <button class="icon-btn" onclick="loadPDFList()" title="Refresh">🔄</button>
-        </div>
-        <div id="pdfList"></div>
-      </div>
-    </aside>
+      <!-- ── Dashboard tab ── -->
+      <div id="dashTab">
 
-    <!-- Right: roadmap -->
-    <main class="dash-right">
-      <div id="rmEmpty" class="rm-empty">
-        <div class="rm-empty-icon">🗺️</div>
-        <h3>Your roadmap appears here</h3>
-        <p>Upload a PDF or click 📖 on a document<br>to generate your learning path.</p>
+        <!-- Welcome card -->
+        <div class="db-welcome-card">
+          <div class="db-welcome-text">
+            <div class="db-welcome-hello">Hello, <span id="dashWelcomeName">there</span>! 👋</div>
+            <div class="db-welcome-sub">Ready to learn? Pick up where you left off<br>or dive into something new today.</div>
+          </div>
+          <div class="db-welcome-mascot">
+            <svg class="db-mascot-svg" viewBox="0 0 110 125" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="55" cy="84" rx="32" ry="34" fill="#1e293b"/>
+              <ellipse cx="55" cy="88" rx="20" ry="24" fill="#e2e8f0"/>
+              <circle cx="55" cy="42" r="26" fill="#1e293b"/>
+              <circle cx="46" cy="37" r="7" fill="white"/>
+              <circle cx="64" cy="37" r="7" fill="white"/>
+              <circle cx="47" cy="37" r="4" fill="#0f172a"/>
+              <circle cx="65" cy="37" r="4" fill="#0f172a"/>
+              <circle cx="49" cy="35" r="1.5" fill="white"/>
+              <circle cx="67" cy="35" r="1.5" fill="white"/>
+              <ellipse cx="55" cy="48" rx="5" ry="4" fill="#f59e0b"/>
+              <ellipse cx="39" cy="44" rx="5" ry="3" fill="rgba(251,146,60,.3)"/>
+              <ellipse cx="71" cy="44" rx="5" ry="3" fill="rgba(251,146,60,.3)"/>
+              <ellipse cx="21" cy="76" rx="13" ry="26" fill="#1e293b" transform="rotate(-12 21 76)"/>
+              <ellipse cx="89" cy="76" rx="13" ry="26" fill="#1e293b" transform="rotate(12 89 76)"/>
+              <rect x="30" y="96" width="50" height="22" rx="3" fill="#3b82f6"/>
+              <rect x="30" y="96" width="25" height="22" rx="2" fill="#2563eb"/>
+              <line x1="55" y1="96" x2="55" y2="118" stroke="#1d4ed8" stroke-width="1.5"/>
+              <line x1="34" y1="102" x2="50" y2="102" stroke="rgba(255,255,255,.5)" stroke-width="1.2" stroke-linecap="round"/>
+              <line x1="34" y1="106" x2="50" y2="106" stroke="rgba(255,255,255,.5)" stroke-width="1.2" stroke-linecap="round"/>
+              <line x1="34" y1="110" x2="46" y2="110" stroke="rgba(255,255,255,.5)" stroke-width="1.2" stroke-linecap="round"/>
+              <line x1="58" y1="102" x2="74" y2="102" stroke="rgba(255,255,255,.4)" stroke-width="1.2" stroke-linecap="round"/>
+              <line x1="58" y1="106" x2="74" y2="106" stroke="rgba(255,255,255,.4)" stroke-width="1.2" stroke-linecap="round"/>
+              <ellipse cx="42" cy="118" rx="13" ry="5" fill="#f59e0b"/>
+              <ellipse cx="68" cy="118" rx="13" ry="5" fill="#f59e0b"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Documents section -->
+        <div class="db-docs-header">
+          <div class="db-docs-title">Your Reading Documents 📋</div>
+          <div class="db-docs-controls">
+            <button class="db-filter-btn">Most Recent ▾</button>
+            <button class="db-filter-btn">Type ▾</button>
+            <div class="db-view-btns">
+              <button class="db-view-btn active" id="gridViewBtn" onclick="setDocView('grid')" title="Grid view">⊞</button>
+              <button class="db-view-btn" id="listViewBtn" onclick="setDocView('list')" title="List view">☰</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="doc-card-grid" id="docGrid"></div>
       </div>
-      <div id="rmLoading" style="display:none;" class="rm-loading">
-        <div class="rm-loading-icon">🤖</div>
-        <h3>AI is reading your document…</h3>
-        <p>Building your personalised learning path</p>
+
+      <!-- ── Progress tab ── -->
+      <div id="progressTab" style="display:none;">
+        <div class="db-docs-title" style="margin-bottom:20px;">📊 Your Progress</div>
+        <div class="progress-viz" id="progressViz">
+          <div class="viz-stats" id="vizStats"></div>
+          <div class="viz-doc-list" id="vizDocList"></div>
+        </div>
       </div>
-      <div id="rmContent" style="display:none;"></div>
-    </main>
-  </div>
+
+      <!-- ── Settings tab ── -->
+      <div id="settingsTab" style="display:none;">
+        <div class="db-docs-title" style="margin-bottom:16px;">⚙️ Settings</div>
+        <p style="color:var(--ink-muted);font-size:14px;">Settings coming soon.</p>
+      </div>
+
+      <!-- ── Roadmap area ── -->
+      <div id="roadmapArea" style="display:none;">
+        <button class="db-roadmap-back-btn" onclick="exitToDocuments()">← Back to Documents</button>
+        <div id="rmEmpty" class="rm-empty">
+          <div class="rm-empty-icon">🗺️</div>
+          <h3>Select a document to begin</h3>
+          <p>Click a document card to generate your learning path.</p>
+        </div>
+        <div id="rmLoading" style="display:none;" class="rm-loading">
+          <div class="rm-loading-icon">🤖</div>
+          <h3>AI is reading your document…</h3>
+          <p>Building your personalised learning path</p>
+        </div>
+        <div id="rmContent" style="display:none;"></div>
+      </div>
+
+    </div><!-- /db-content-area -->
+  </div><!-- /db-main -->
+
+  <!-- Hidden legacy element for JS compatibility -->
+  <div id="pdfList" style="display:none;"></div>
 </div>
 
 <!-- ════════════════════ LESSON VIEW ════════════════════ -->
@@ -654,7 +836,6 @@
         <div style="display:flex;gap:10px;align-items:center;">
           <button class="complete-btn do" id="completeBtn" onclick="toggleComplete()">✓ Mark as Complete</button>
           <button class="quiz-btn" id="quizBtn" onclick="toggleQuizPicker()">📝 Take Quiz</button>
-          <button class="deep-btn" id="deepBtn" onclick="requestDeepDive()">🔬 Deep Dive</button>
         </div>
         <div class="paging">
           <button class="page-btn" id="prevBtn2" onclick="goSegment(-1)">← Previous</button>
@@ -823,7 +1004,9 @@ async function loadProfile() {
     const d=await r.json();
     if(d.success){
       currentUser=d.data.user;
-      document.getElementById('dashUsername').textContent=currentUser.email.split('@')[0];
+      const uname = currentUser.email.split('@')[0];
+      document.getElementById('dashUsername').textContent=uname;
+      const wn = document.getElementById('dashWelcomeName'); if(wn) wn.textContent=uname;
       document.getElementById('dashAvatar').src=`https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.email)}&background=5b5ef6&color=fff&size=80`;
       loadPDFList();
     }
@@ -879,32 +1062,65 @@ async function doUpload() {
 }
 
 /* ── PDF LIST ─────────────────────────────────────── */
+// ── doc gradient helper ──
+function docGradient(name) {
+  const p=[['#667eea','#764ba2'],['#f093fb','#f5576c'],['#4facfe','#00f2fe'],
+    ['#43e97b','#38f9d7'],['#fa709a','#fee140'],['#a18cd1','#fbc2eb'],
+    ['#fd7043','#ff8a65'],['#a1c4fd','#c2e9fb'],['#96fbc4','#f9f586'],['#43e97b','#38f9d7']];
+  let h=0; for(const c of name) h=((h<<5)-h)+c.charCodeAt(0);
+  const [a,b]=p[Math.abs(h)%p.length]; return `${a},${b}`;
+}
+function docDisplayName(n) { return n.replace(/^\d+_[a-z0-9]+_/i,'').replace(/\.pdf$/i,''); }
+
 async function loadPDFList() {
   try{
     const r=await fetch(`${PDF_API}/list`);
     const d=await r.json();
-    const el=document.getElementById('pdfList');
+    const grid=document.getElementById('docGrid');
+    const sb=document.getElementById('sbFileList');
     if(d.success&&d.data.length>0){
-      el.innerHTML=d.data.map(f=>`
-        <div class="pdf-item" id="pi-${CSS.escape(f.name)}">
-          <div class="pdf-icon">📄</div>
-          <div class="pdf-info">
-            <div class="pdf-name" title="${esc(f.name)}">${esc(f.name)}</div>
-            <div class="pdf-date">${new Date(f.created_at).toLocaleDateString()}</div>
+      const items = d.data;
+      grid.innerHTML=items.map(f=>`
+        <div class="doc-card pdf-item" id="pi-${CSS.escape(f.name)}" onclick="openDocument('${esc(f.name)}')">
+          <div class="doc-card-thumb" style="background:linear-gradient(135deg,${docGradient(f.name)})">
+            <div class="doc-card-thumb-pattern"></div>
+            <div class="doc-card-thumb-icon">📄</div>
           </div>
-          <div class="pdf-actions">
-            <button class="icon-btn" title="Open roadmap" onclick="openDocument('${esc(f.name)}')">📖</button>
-            <button class="icon-btn" title="Rename" onclick="startRename('${esc(f.name)}')">✏️</button>
-            <button class="icon-btn del" title="Delete" onclick="deletePDF('${esc(f.name)}')">🗑️</button>
+          <div class="doc-card-body">
+            <div class="doc-card-info">
+              <div class="doc-card-name" title="${esc(f.name)}">${esc(docDisplayName(f.name))}</div>
+              <div class="doc-card-date">${new Date(f.created_at).toLocaleDateString()}</div>
+            </div>
+            <button class="doc-card-menu-btn" onclick="event.stopPropagation();toggleDocMenu('${esc(f.name)}')">⋮</button>
+          </div>
+          <div class="doc-card-dropdown" id="dd-${CSS.escape(f.name)}">
+            <button class="doc-menu-item" onclick="event.stopPropagation();openDocument('${esc(f.name)}');closeAllDocMenus()">📖 Open</button>
+            <button class="doc-menu-item" onclick="event.stopPropagation();startRename('${esc(f.name)}');closeAllDocMenus()">✏️ Rename</button>
+            <button class="doc-menu-item danger" onclick="event.stopPropagation();deletePDF('${esc(f.name)}');closeAllDocMenus()">🗑️ Delete</button>
           </div>
         </div>`).join('');
-    loadProgressViz();
+      if(sb) sb.innerHTML=items.map(f=>`
+        <button class="db-fb-item" onclick="openDocument('${esc(f.name)}')" title="${esc(f.name)}">
+          📄 <span style="overflow:hidden;text-overflow:ellipsis;">${esc(docDisplayName(f.name))}</span>
+        </button>`).join('');
+      loadProgressViz();
     } else {
-      el.innerHTML='<div style="padding:20px 0;text-align:center;color:var(--ink-muted);font-size:13px;">No documents yet</div>';
-    loadProgressViz();
+      grid.innerHTML=`<div class="doc-card-grid-empty"><span class="doc-card-grid-empty-icon">📭</span><p style="font-size:14px;font-weight:600;color:var(--ink-soft);">No documents yet</p><p style="font-size:13px;margin-top:6px;">Click "Upload File" to add your first PDF</p></div>`;
+      if(sb) sb.innerHTML='<div style="padding:8px 14px;font-size:11px;color:var(--ink-muted);">No files yet</div>';
+      loadProgressViz();
     }
   }catch(e){console.error(e);}
 }
+
+function toggleDocMenu(name) {
+  const dd=document.getElementById(`dd-${CSS.escape(name)}`);
+  if(!dd) return;
+  const wasOpen=dd.classList.contains('open');
+  closeAllDocMenus();
+  if(!wasOpen) dd.classList.add('open');
+}
+function closeAllDocMenus() { document.querySelectorAll('.doc-card-dropdown.open').forEach(d=>d.classList.remove('open')); }
+document.addEventListener('click', closeAllDocMenus);
 
 async function deletePDF(name) {
   if(!confirm(`Delete "${name}"?`)) return;
@@ -919,6 +1135,13 @@ async function deletePDF(name) {
 /* ── OPEN DOCUMENT / SEGMENT ─────────────────────── */
 async function openDocument(pdfId) {
   if(!currentUser){showMsg('uploadMsg','Please log in first.','error');return;}
+
+  // Switch main content to roadmap view
+  document.getElementById('dashTab').style.display='none';
+  document.getElementById('progressTab').style.display='none';
+  document.getElementById('settingsTab').style.display='none';
+  document.getElementById('roadmapArea').style.display='block';
+  document.getElementById('dbContentArea').scrollTop=0;
 
   document.querySelectorAll('.pdf-item').forEach(i=>i.classList.remove('active'));
   const itm=document.getElementById(`pi-${CSS.escape(pdfId)}`);
@@ -1074,7 +1297,15 @@ function renderLesson() {
     ${kpHTML?`<div class="seg-kps"><div class="seg-kps-title">Key Takeaways</div>${kpHTML}</div>`:''}
 
     <div class="content-label">Lesson Content</div>
-    <div class="lesson-text" id="lessonText">${buildContent(seg.content)}</div>`;
+    <div class="lesson-text" id="lessonText">${buildContent(seg.content)}</div>
+
+    <div class="deep-teaser" id="deepTeaser">
+      <div class="deep-teaser-line"></div>
+      <button class="deep-teaser-pill" id="deepTeaserBtn" onclick="toggleDeepDive()">
+        🔬 Go Deeper on this Lesson <span class="deep-teaser-arrow">▾</span>
+      </button>
+      <div class="deep-teaser-line"></div>
+    </div>`;
 
 
 
@@ -1104,6 +1335,7 @@ function buildContent(raw) {
 function goSegment(dir) {
   closeMicrotask();
   closeDeepDive();
+  deepGenerated = false;
   const pp = document.getElementById('quizPickerPanel');
   if (pp) { pp.style.display='none'; pp.innerHTML=''; }
   const next=currentSegIdx+dir;
@@ -1665,20 +1897,40 @@ function closeMicrotask() {
 }
 
 /* ── DEEP DIVE ──────────────────────────────────────── */
-let deepPanel = null;
+let deepPanel     = null;
+let deepGenerated = false; // true once AI content has been fetched for this lesson
 
-async function requestDeepDive() {
-  const seg = currentSeg.segments[currentSegIdx];
-  const btn = document.getElementById('deepBtn');
+async function toggleDeepDive() {
+  const existing = document.getElementById('deepDivePanel');
 
-  // Remove existing panel if open
-  closeDeepDive();
+  // If panel is open, close it (toggle off)
+  if (existing) {
+    closeDeepDive();
+    return;
+  }
 
-  // Insert panel right after the lesson text
-  const scroll = document.getElementById('lessonScroll');
+  const seg     = currentSeg.segments[currentSegIdx];
+  const teaserBtn = document.getElementById('deepTeaserBtn');
+  const teaser    = document.getElementById('deepTeaser');
+  if (!teaser) return;
+
+  // Insert panel immediately after the teaser row
   deepPanel = document.createElement('div');
   deepPanel.className = 'deep-panel';
   deepPanel.id = 'deepDivePanel';
+
+  // Mark pill as open
+  if (teaserBtn) teaserBtn.classList.add('open');
+
+  // If already generated for this lesson, just show the cached content
+  if (deepGenerated && deepPanel._cached) {
+    teaser.insertAdjacentElement('afterend', deepPanel);
+    deepPanel.innerHTML = deepPanel._cached;
+    deepPanel.scrollIntoView({ behavior:'smooth', block:'start' });
+    return;
+  }
+
+  // Show loading state inline
   deepPanel.innerHTML = `
     <div class="deep-panel-hdr">
       <h4>🔬 Deep Dive — ${esc(seg.title)}</h4>
@@ -1687,13 +1939,14 @@ async function requestDeepDive() {
     <div class="deep-panel-body">
       <div style="display:flex;align-items:center;gap:10px;color:#7c3aed;font-size:14px;">
         <span class="spinner" style="border-color:rgba(124,58,237,.25);border-top-color:#7c3aed;width:18px;height:18px;"></span>
-        AI is generating a detailed explanation…
+        Generating your deep dive…
       </div>
     </div>`;
-  scroll.appendChild(deepPanel);
-  deepPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  btn.disabled = true;
+  teaser.insertAdjacentElement('afterend', deepPanel);
+  deepPanel.scrollIntoView({ behavior:'smooth', block:'start' });
+
+  if (teaserBtn) teaserBtn.disabled = true;
 
   try {
     const r = await fetch(`${PDF_API}/lessons/deep-explain`, {
@@ -1707,20 +1960,23 @@ async function requestDeepDive() {
       }),
     });
     const d = await r.json();
-
     if (d.success) {
       renderDeepDive(d.data, seg.title);
+      deepGenerated = true;
     } else {
       deepPanel.querySelector('.deep-panel-body').innerHTML =
-        `<p style="color:var(--danger);font-size:14px;">Could not generate deep explanation: ${esc(d.error)}</p>`;
+        `<p style="color:var(--danger);font-size:14px;">Could not generate: ${esc(d.error)}</p>`;
     }
   } catch (err) {
     deepPanel.querySelector('.deep-panel-body').innerHTML =
       `<p style="color:var(--danger);font-size:14px;">Network error: ${esc(err.message)}</p>`;
   } finally {
-    btn.disabled = false;
+    if (teaserBtn) teaserBtn.disabled = false;
   }
 }
+
+// Keep old name as alias so goSegment close still works
+function requestDeepDive() { toggleDeepDive(); }
 
 function renderDeepDive(data, title) {
   if (!deepPanel) return;
@@ -1777,6 +2033,8 @@ function closeDeepDive() {
   const existing = document.getElementById('deepDivePanel');
   if (existing) existing.remove();
   deepPanel = null;
+  const btn = document.getElementById('deepTeaserBtn');
+  if (btn) btn.classList.remove('open');
 }
 
 // microtask panel is closed inside goSegment above
@@ -1919,6 +2177,47 @@ async function confirmRename(filename) {
     showMsg('uploadMsg', `Error: ${err.message}`, 'error');
     cancelRename(filename);
   }
+}
+
+/* ── DASHBOARD TAB SWITCHING ─────────────────────── */
+function showDashTab(tab) {
+  ['dashboard','progress','settings'].forEach(t => {
+    const ids = {dashboard:'dashTab', progress:'progressTab', settings:'settingsTab'};
+    const nav = {dashboard:'navDashboard', progress:'navProgress', settings:'navSettings'};
+    const el  = document.getElementById(ids[t]);
+    const btn = document.getElementById(nav[t]);
+    if(el)  el.style.display  = t===tab ? 'block' : 'none';
+    if(btn) btn.classList.toggle('active', t===tab);
+  });
+  document.getElementById('roadmapArea').style.display='none';
+  if(tab==='progress') loadProgressViz();
+}
+
+function exitToDocuments() {
+  document.getElementById('roadmapArea').style.display='none';
+  document.getElementById('dashTab').style.display='block';
+  document.getElementById('navDashboard').classList.add('active');
+  document.getElementById('navProgress').classList.remove('active');
+  document.getElementById('navSettings').classList.remove('active');
+  document.querySelectorAll('.doc-card').forEach(c=>c.classList.remove('active'));
+  currentSeg=null; completedSegments.clear();
+}
+
+function toggleFileBrowser() {
+  const list  = document.getElementById('sbFileList');
+  const arrow = document.getElementById('fbArrow');
+  list.classList.toggle('open');
+  if(arrow) arrow.classList.toggle('open');
+}
+
+function setDocView(view) {
+  const grid   = document.getElementById('docGrid');
+  const gridBtn= document.getElementById('gridViewBtn');
+  const listBtn= document.getElementById('listViewBtn');
+  if(!grid) return;
+  grid.className = view==='list' ? 'doc-card-grid doc-list-view' : 'doc-card-grid';
+  if(gridBtn) gridBtn.classList.toggle('active', view==='grid');
+  if(listBtn) listBtn.classList.toggle('active', view==='list');
 }
 
 // Hide tooltip on outside click
