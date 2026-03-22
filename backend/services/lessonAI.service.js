@@ -185,4 +185,43 @@ async function generateLessonsFromText(fullText, fileName) {
   return { title: meta.title, overview: meta.overview, lessons, totalLessons: lessons.length };
 }
 
-module.exports = { generateLessonsFromText, chunkText };
+// ─── DEEP EXPLANATION ─────────────────────────────────────────────────────────
+
+/**
+ * Takes a single lesson and returns a rich, detailed explanation
+ * broken into: full explanation, examples, common misconceptions, study tips.
+ */
+async function deepExplainLesson({ title, explanation, key_points, documentTitle }) {
+  const response = await getGroq().chat.completions.create({
+    model:       GROQ_MODEL,
+    max_tokens:  2048,
+    temperature: 0.6,
+    stream:      false,
+    messages: [{
+      role: 'user',
+      content: `You are an expert educator. A student is studying the lesson below and wants a DEEP, detailed explanation.
+
+Document: "${documentTitle || 'Uploaded PDF'}"
+Lesson Title: "${title}"
+Current Summary: "${explanation}"
+Key Points: ${(key_points || []).map(p => `- ${p}`).join('\n')}
+
+Write a rich, thorough explanation of this lesson. Go beyond the summary — teach it properly.
+
+Structure your response EXACTLY as this JSON (no markdown fences):
+{
+  "detailed_explanation": "4-8 paragraph deep explanation. Teach this concept from the ground up. Use clear language.",
+  "examples": ["Concrete real-world example 1", "Concrete real-world example 2"],
+  "why_it_matters": "2-3 sentences on why this concept is important and how it connects to bigger ideas.",
+  "common_misconceptions": ["Misconception students often have 1", "Misconception students often have 2"],
+  "study_tips": ["Specific tip for remembering or applying this concept", "Another study tip"]
+}`,
+    }],
+  });
+
+  const raw = response.choices[0].message.content
+    .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  return JSON.parse(raw);
+}
+
+module.exports = { generateLessonsFromText, deepExplainLesson, chunkText };

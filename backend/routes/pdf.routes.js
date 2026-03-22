@@ -15,6 +15,7 @@ const {
   generateLessonsEndpoint,
   getLessonsEndpoint,
   deleteLessonsEndpoint,
+  deepExplainEndpoint,
 } = require('../controllers/lessons.controller');
 const {
   saveProgressEndpoint,
@@ -43,10 +44,11 @@ router.post('/segment', segmentPDFEndpoint);
 // ── AI CHAT ───────────────────────────────────────────────────────────────────
 router.post('/chat', chatWithSegmentEndpoint);
 
-// ── LESSON GENERATION (Claude AI) ────────────────────────────────────────────
-router.post('/lessons/generate', generateLessonsEndpoint);
-router.get('/lessons/:pdfId',    getLessonsEndpoint);
-router.delete('/lessons/:pdfId', deleteLessonsEndpoint);
+// ── LESSON GENERATION (GROQ AI) ───────────────────────────────────────────────
+router.post('/lessons/generate',      generateLessonsEndpoint);
+router.post('/lessons/deep-explain',  deepExplainEndpoint);
+router.get('/lessons/:pdfId',         getLessonsEndpoint);
+router.delete('/lessons/:pdfId',      deleteLessonsEndpoint);
 
 // ── MICRO-TASKS ───────────────────────────────────────────────────────────────
 router.post('/microtask/generate', generateMicrotaskEndpoint);

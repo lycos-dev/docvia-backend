@@ -9,7 +9,7 @@
 
 const pdfParse = require('pdf-parse');
 const { supabase } = require('../config/supabase');
-const { generateLessonsFromText } = require('../services/lessonAI.service');
+const { generateLessonsFromText, deepExplainLesson } = require('../services/lessonAI.service');
 
 // ─── PDF TEXT EXTRACTION ──────────────────────────────────────────────────────
 
@@ -224,8 +224,33 @@ async function deleteLessonsEndpoint(req, res) {
   }
 }
 
+// ─── ENDPOINT: DEEP EXPLAIN ───────────────────────────────────────────────────
+
+async function deepExplainEndpoint(req, res) {
+  const { title, explanation, key_points, documentTitle } = req.body;
+
+  if (!title || !explanation) {
+    return res.status(400).json({
+      success:  false,
+      error:    'Missing required fields',
+      required: ['title', 'explanation'],
+    });
+  }
+
+  console.log(`[Lessons] Deep explain: "${title}"`);
+
+  try {
+    const result = await deepExplainLesson({ title, explanation, key_points, documentTitle });
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    console.error('[Lessons] Deep explain error:', err.message);
+    return res.status(500).json({ success: false, error: 'Deep explanation failed', message: err.message });
+  }
+}
+
 module.exports = {
   generateLessonsEndpoint,
   getLessonsEndpoint,
   deleteLessonsEndpoint,
+  deepExplainEndpoint,
 };
