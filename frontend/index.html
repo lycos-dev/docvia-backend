@@ -340,6 +340,41 @@
   .quiz-btn { padding:11px 20px; border-radius:var(--radius-sm); font-size:14px; font-weight:600; border:none; cursor:pointer; font-family:inherit; transition:all .2s; background:linear-gradient(135deg,var(--warn),#d97706); color:#fff; box-shadow:0 3px 10px rgba(245,158,11,.3); display:flex; align-items:center; gap:7px; }
   .quiz-btn:hover { transform:translateY(-1px); }
 
+  /* Quiz mode picker */
+  .quiz-picker { background:var(--surface); border:2px solid var(--warn); border-radius:var(--radius); padding:20px 24px; margin-bottom:0; animation:fadeUp .2s ease; }
+  .quiz-picker-title { font-family:'Sora',sans-serif; font-size:13px; font-weight:700; color:var(--ink); margin-bottom:14px; }
+  .quiz-picker-btns { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .qp-btn { padding:10px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; border:2px solid var(--border); background:var(--surface); color:var(--ink-soft); cursor:pointer; font-family:inherit; transition:all .2s; }
+  .qp-btn:hover { border-color:var(--warn); color:var(--warn); }
+  .qp-btn.active { border-color:var(--warn); background:#fef3c7; color:#92400e; }
+  .quiz-picker-count { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--ink-soft); }
+  .quiz-picker-count input[type=range] { flex:1; accent-color:var(--warn); }
+  .quiz-picker-count span { font-family:'Sora',sans-serif; font-weight:700; color:var(--warn); font-size:16px; min-width:20px; }
+  .qp-start { width:100%; margin-top:14px; padding:12px; border-radius:var(--radius-sm); font-size:14px; font-weight:700; border:none; cursor:pointer; font-family:inherit; background:linear-gradient(135deg,var(--warn),#d97706); color:#fff; transition:all .2s; }
+  .qp-start:hover { transform:translateY(-1px); }
+
+  /* Quiz progress bar */
+  .mt-progress { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .mt-progress-bar { flex:1; height:6px; background:var(--border); border-radius:99px; overflow:hidden; }
+  .mt-progress-fill { height:100%; background:linear-gradient(90deg,var(--warn),#d97706); border-radius:99px; transition:width .4s ease; }
+  .mt-progress-label { font-size:12px; font-weight:700; color:var(--ink-muted); white-space:nowrap; }
+
+  /* Hint button + box */
+  .mt-hint-btn { padding:7px 14px; border-radius:var(--radius-sm); font-size:12px; font-weight:600; border:1.5px solid var(--primary); background:var(--surface); color:var(--primary); cursor:pointer; font-family:inherit; transition:all .2s; display:flex; align-items:center; gap:5px; }
+  .mt-hint-btn:hover { background:var(--primary-lt); }
+  .mt-hint-box { background:var(--primary-lt); border-left:3px solid var(--primary); border-radius:var(--radius-sm); padding:10px 14px; font-size:13px; color:var(--ink-soft); margin-top:10px; animation:fadeIn .2s; }
+
+  /* Quiz summary */
+  .mt-summary { padding:20px 0 4px; text-align:center; }
+  .mt-summary-score { font-family:'Sora',sans-serif; font-size:48px; font-weight:800; background:linear-gradient(135deg,var(--warn),#d97706); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; margin-bottom:6px; }
+  .mt-summary-label { font-size:14px; color:var(--ink-soft); margin-bottom:18px; }
+  .mt-summary-breakdown { display:flex; justify-content:center; gap:24px; margin-bottom:20px; }
+  .mt-sum-item { text-align:center; }
+  .mt-sum-num { font-family:'Sora',sans-serif; font-size:22px; font-weight:800; }
+  .mt-sum-lbl { font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.5px; }
+  .mt-sum-correct { color:var(--accent); }
+  .mt-sum-wrong   { color:var(--danger); }
+
   /* Deep Dive */
   .deep-btn { padding:11px 20px; border-radius:var(--radius-sm); font-size:14px; font-weight:600; border:none; cursor:pointer; font-family:inherit; transition:all .2s; background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; box-shadow:0 3px 10px rgba(124,58,237,.35); display:flex; align-items:center; gap:7px; }
   .deep-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 6px 18px rgba(124,58,237,.45); }
@@ -611,11 +646,12 @@
       </div>
       <!-- Micro-task panel (hidden until requested) -->
       <div id="microtaskPanel" style="display:none;"></div>
+      <div id="quizPickerPanel" style="display:none;padding:0 52px 0;"></div>
 
       <div class="lesson-bottom">
         <div style="display:flex;gap:10px;align-items:center;">
           <button class="complete-btn do" id="completeBtn" onclick="toggleComplete()">✓ Mark as Complete</button>
-          <button class="quiz-btn" id="quizBtn" onclick="requestMicrotask()">📝 Take Quiz</button>
+          <button class="quiz-btn" id="quizBtn" onclick="toggleQuizPicker()">📝 Take Quiz</button>
           <button class="deep-btn" id="deepBtn" onclick="requestDeepDive()">🔬 Deep Dive</button>
         </div>
         <div class="paging">
@@ -1066,6 +1102,8 @@ function buildContent(raw) {
 function goSegment(dir) {
   closeMicrotask();
   closeDeepDive();
+  const pp = document.getElementById('quizPickerPanel');
+  if (pp) { pp.style.display='none'; pp.innerHTML=''; }
   const next=currentSegIdx+dir;
   if(next<0||next>=currentSeg.segments.length) return;
   currentSegIdx=next;
@@ -1195,111 +1233,188 @@ async function callChat(question, seg) {
 }
 
 
-/* ── MICRO-TASKS ───────────────────────────────────── */
-let activeMicrotask   = null;  // current task object
-let selectedOptionIdx = null;  // for multiple choice
+/* ── QUIZ ────────────────────────────────────────────── */
+let activeMicrotask   = null;
+let selectedOptionIdx = null;
 
-async function requestMicrotask() {
+// Quiz session state
+let quizTasks       = [];   // all generated questions for this session
+let quizIdx         = 0;    // current question index
+let quizResults     = [];   // { correct: bool } per question
+let quizAskedQs     = [];   // question strings asked so far (for variety)
+
+/* ── QUIZ PICKER ─────────────────────────────────────── */
+let quizPickerMode  = 'quick'; // 'quick' | 'custom'
+let quizPickerCount = 5;
+
+function toggleQuizPicker() {
+  const pp = document.getElementById('quizPickerPanel');
+  if (pp.style.display !== 'none') { pp.style.display = 'none'; pp.innerHTML = ''; return; }
+  closeMicrotask();
+  closeDeepDive();
+  pp.style.display = 'block';
+  renderQuizPicker();
+  pp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function renderQuizPicker() {
+  const pp = document.getElementById('quizPickerPanel');
+  pp.innerHTML = `
+    <div class="quiz-picker">
+      <div class="quiz-picker-title">How do you want to quiz yourself?</div>
+      <div class="quiz-picker-btns">
+        <button class="qp-btn ${quizPickerMode==='quick'?'active':''}" onclick="setQuizMode('quick')">⚡ Quick Quiz <span style="font-weight:400;font-size:11px;">(1 question)</span></button>
+        <button class="qp-btn ${quizPickerMode==='custom'?'active':''}" onclick="setQuizMode('custom')">🎯 Custom Quiz <span style="font-weight:400;font-size:11px;">(you choose)</span></button>
+      </div>
+      ${quizPickerMode==='custom'?`
+      <div class="quiz-picker-count">
+        <span>Questions:</span>
+        <input type="range" min="2" max="10" value="${quizPickerCount}" id="quizCountSlider" oninput="updateQuizCount(this.value)">
+        <span id="quizCountDisplay">${quizPickerCount}</span>
+      </div>`:``}
+      <button class="qp-start" onclick="startQuiz()">
+        Start ${quizPickerMode==='quick'?'Quick Quiz':`${quizPickerCount}-Question Quiz`} →
+      </button>
+    </div>`;
+}
+
+function setQuizMode(mode) {
+  quizPickerMode = mode;
+  if (mode === 'quick') quizPickerCount = 1;
+  renderQuizPicker();
+}
+
+function updateQuizCount(val) {
+  quizPickerCount = parseInt(val);
+  document.getElementById('quizCountDisplay').textContent = val;
+}
+
+async function startQuiz() {
+  const pp  = document.getElementById('quizPickerPanel');
   const seg = currentSeg.segments[currentSegIdx];
-  const panel = document.getElementById('microtaskPanel');
+  pp.style.display = 'none'; pp.innerHTML = '';
 
-  // Show loading state
+  const panel = document.getElementById('microtaskPanel');
   panel.style.display = 'block';
+  quizTasks   = [];
+  quizIdx     = 0;
+  quizResults = [];
+  quizAskedQs = [];
+
+  const count = quizPickerMode === 'quick' ? 1 : quizPickerCount;
+
   panel.innerHTML = `
     <div class="microtask-panel">
       <div class="mt-header">
-        <div class="mt-title">📝 Quick Quiz</div>
+        <div class="mt-title">📝 ${count === 1 ? 'Quick Quiz' : `Quiz — ${count} Questions`}</div>
         <button class="mt-close" onclick="closeMicrotask()">✕</button>
       </div>
       <div class="mt-loading">
         <span class="spinner" style="border-color:rgba(245,158,11,.25);border-top-color:var(--warn);"></span>
-        Generating a question based on this lesson…
+        Generating ${count === 1 ? 'your question' : `${count} questions`}…
       </div>
     </div>`;
-
-  // Scroll panel into view
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   try {
     const r = await fetch(`${PDF_API}/microtask/generate`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        segmentTitle:   seg.title,
-        segmentContent: seg.content || '',
-        documentTitle:  currentSeg.title,
-        taskType:       'auto',
+        segmentTitle:      seg.title,
+        segmentContent:    seg.content || seg.explanation || '',
+        documentTitle:     currentSeg.title,
+        taskType:          'auto',
+        count,
+        previousQuestions: quizAskedQs,
       }),
     });
     const d = await r.json();
-
-    if (d.success) {
-      activeMicrotask   = d.task;
-      selectedOptionIdx = null;
-      renderMicrotask(d.task, seg);
+    if (d.success && d.tasks?.length) {
+      quizTasks = d.tasks;
+      quizAskedQs.push(...d.tasks.map(t => t.question));
+      renderQuizQuestion();
     } else {
-      panel.innerHTML = `<div class="microtask-panel"><p style="color:var(--danger);font-size:14px;">Could not generate a question: ${esc(d.error)}</p></div>`;
+      panel.innerHTML = `<div class="microtask-panel"><p style="color:var(--danger);font-size:14px;">Could not generate questions: ${esc(d.error||'Unknown error')}</p></div>`;
     }
   } catch (err) {
     panel.innerHTML = `<div class="microtask-panel"><p style="color:var(--danger);font-size:14px;">Network error: ${esc(err.message)}</p></div>`;
   }
 }
 
-function renderMicrotask(task, seg) {
+/* ── RENDER QUESTION ─────────────────────────────────── */
+function renderQuizQuestion() {
   const panel = document.getElementById('microtaskPanel');
+  const task  = quizTasks[quizIdx];
+  const total = quizTasks.length;
+  const pct   = Math.round((quizIdx / total) * 100);
+  activeMicrotask   = task;
+  selectedOptionIdx = null;
+
+  const progressHTML = total > 1 ? `
+    <div class="mt-progress">
+      <div class="mt-progress-bar"><div class="mt-progress-fill" style="width:${pct}%"></div></div>
+      <div class="mt-progress-label">Q ${quizIdx + 1} / ${total}</div>
+    </div>` : '';
 
   if (task.type === 'multiple_choice') {
     const optionsHTML = task.options.map((opt, i) => `
       <button class="mt-option" id="mt-opt-${i}" onclick="selectOption(${i})">
-        <span class="mt-opt-letter">${String.fromCharCode(65 + i)}</span>
+        <span class="mt-opt-letter">${String.fromCharCode(65+i)}</span>
         <span>${esc(opt.replace(/^[A-D]\.\s*/,''))}</span>
       </button>`).join('');
 
     panel.innerHTML = `
       <div class="microtask-panel">
         <div class="mt-header">
-          <div class="mt-title">📝 Quick Quiz <span class="badge badge-time" style="font-size:11px;">Multiple Choice</span></div>
+          <div class="mt-title">📝 ${total>1?`Quiz — Q${quizIdx+1} of ${total}`:'Quick Quiz'} <span class="badge badge-time" style="font-size:11px;">Multiple Choice</span></div>
           <button class="mt-close" onclick="closeMicrotask()">✕</button>
         </div>
+        ${progressHTML}
         <div class="mt-question">${esc(task.question)}</div>
         <div class="mt-options" id="mtOptions">${optionsHTML}</div>
         <div class="mt-actions">
-          <button class="mt-submit" id="mtSubmit" onclick="submitMicrotask()" disabled>Submit Answer</button>
+          ${task.hint?`<button class="mt-hint-btn" onclick="showHint()">💡 Hint</button>`:''}
+          <button class="mt-submit" id="mtSubmit" onclick="submitCurrentQuestion()" disabled>Submit Answer</button>
         </div>
+        <div id="mtHintBox"></div>
         <div id="mtFeedback"></div>
       </div>`;
-
   } else {
-    // short_answer
     panel.innerHTML = `
       <div class="microtask-panel">
         <div class="mt-header">
-          <div class="mt-title">📝 Quick Quiz <span class="badge badge-time" style="font-size:11px;">Short Answer</span></div>
+          <div class="mt-title">📝 ${total>1?`Quiz — Q${quizIdx+1} of ${total}`:'Quick Quiz'} <span class="badge badge-time" style="font-size:11px;">Short Answer</span></div>
           <button class="mt-close" onclick="closeMicrotask()">✕</button>
         </div>
+        ${progressHTML}
         <div class="mt-question">${esc(task.question)}</div>
         <textarea class="mt-textarea" id="mtAnswer" placeholder="Write your answer here…" oninput="document.getElementById('mtSubmit').disabled=this.value.trim().length<5"></textarea>
         <div class="mt-actions">
-          <button class="mt-submit" id="mtSubmit" onclick="submitMicrotask()" disabled>Submit Answer</button>
+          ${task.hint?`<button class="mt-hint-btn" onclick="showHint()">💡 Hint</button>`:''}
+          <button class="mt-submit" id="mtSubmit" onclick="submitCurrentQuestion()" disabled>Submit Answer</button>
         </div>
+        <div id="mtHintBox"></div>
         <div id="mtFeedback"></div>
       </div>`;
   }
+  panel.scrollIntoView({ behavior:'smooth', block:'start' });
+}
 
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+function showHint() {
+  const task = activeMicrotask;
+  if (!task?.hint) return;
+  const box = document.getElementById('mtHintBox');
+  if (box) box.innerHTML = `<div class="mt-hint-box">💡 <strong>Hint:</strong> ${esc(task.hint)}</div>`;
 }
 
 function selectOption(idx) {
-  // Only allow selection before submission
   if (document.getElementById(`mt-opt-${idx}`)?.disabled) return;
   selectedOptionIdx = idx;
-  document.querySelectorAll('.mt-option').forEach((btn, i) => {
-    btn.classList.toggle('selected', i === idx);
-  });
+  document.querySelectorAll('.mt-option').forEach((btn, i) => btn.classList.toggle('selected', i===idx));
   document.getElementById('mtSubmit').disabled = false;
 }
 
-async function submitMicrotask() {
+async function submitCurrentQuestion() {
   const seg    = currentSeg.segments[currentSegIdx];
   const task   = activeMicrotask;
   const submit = document.getElementById('mtSubmit');
@@ -1308,7 +1423,6 @@ async function submitMicrotask() {
   if (task.type === 'multiple_choice') {
     if (selectedOptionIdx === null) return;
     userAnswer = selectedOptionIdx;
-    // Disable all options
     document.querySelectorAll('.mt-option').forEach(b => b.disabled = true);
   } else {
     userAnswer = document.getElementById('mtAnswer')?.value.trim();
@@ -1321,74 +1435,94 @@ async function submitMicrotask() {
 
   try {
     const r = await fetch(`${PDF_API}/microtask/evaluate`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        task,
-        userAnswer,
-        segmentTitle:   seg.title,
-        segmentContent: seg.content || '',
-      }),
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ task, userAnswer, segmentTitle: seg.title, segmentContent: seg.content||'' }),
     });
     const d = await r.json();
-
     if (d.success) {
-      showMicrotaskFeedback(d, task, userAnswer);
-    } else {
-      document.getElementById('mtFeedback').innerHTML =
-        `<div class="mt-feedback fail"><div class="mt-fb-main">Could not evaluate your answer.</div></div>`;
+      quizResults.push({ correct: d.correct, score: d.score });
+      showQuestionFeedback(d, task, userAnswer);
     }
   } catch (err) {
     document.getElementById('mtFeedback').innerHTML =
       `<div class="mt-feedback fail"><div class="mt-fb-main">Network error: ${esc(err.message)}</div></div>`;
   } finally {
-    // Replace submit with retry
-    document.getElementById('mtSubmit')?.replaceWith((() => {
+    // Replace submit with next/finish button
+    const isLast = quizIdx >= quizTasks.length - 1;
+    submit.replaceWith((() => {
       const b = document.createElement('button');
-      b.className = 'mt-retry'; b.textContent = '🔄 Try another question';
-      b.onclick = requestMicrotask;
+      b.className = 'mt-submit';
+      b.style.marginTop = '10px';
+      b.textContent = isLast
+        ? (quizTasks.length > 1 ? '📊 See Results' : '🔄 Try another question')
+        : `Next Question →`;
+      b.onclick = isLast
+        ? (quizTasks.length > 1 ? showQuizSummary : () => { closeMicrotask(); toggleQuizPicker(); })
+        : nextQuizQuestion;
       return b;
     })());
   }
 }
 
-function showMicrotaskFeedback(result, task, userAnswer) {
-  // For multiple choice: highlight correct / incorrect options visually
+function showQuestionFeedback(result, task, userAnswer) {
   if (task.type === 'multiple_choice') {
     document.querySelectorAll('.mt-option').forEach((btn, i) => {
       if (i === task.correctIndex) btn.classList.add('correct');
       else if (i === userAnswer && !result.correct) btn.classList.add('incorrect');
     });
   }
-
-  const pct  = result.score;
-  const pass = result.correct || pct >= 60;
-  const cls  = pass ? 'pass' : 'fail';
+  const pass = result.correct || result.score >= 60;
   const icon = pass ? '🎉' : '💪';
-
   let modelBlock = '';
-  if (task.type === 'short_answer' && task.modelAnswer) {
+  if (task.type==='short_answer' && task.modelAnswer)
     modelBlock = `<div class="mt-fb-model"><strong>Model answer</strong>${esc(task.modelAnswer)}</div>`;
-  }
-  if (task.explanation && task.type === 'multiple_choice') {
+  if (task.explanation && task.type==='multiple_choice')
     modelBlock = `<div class="mt-fb-model"><strong>Explanation</strong>${esc(task.explanation)}</div>`;
-  }
-
-  let improveBlock = '';
-  if (result.improve) {
-    improveBlock = `<div style="margin-top:8px;font-size:13px;opacity:.85;">💡 ${esc(result.improve)}</div>`;
-  }
 
   document.getElementById('mtFeedback').innerHTML = `
-    <div class="mt-feedback ${cls}">
-      ${task.type === 'short_answer' ? `<div class="mt-fb-score">${pct}%</div>` : ''}
+    <div class="mt-feedback ${pass?'pass':'fail'}">
+      ${task.type==='short_answer'?`<div class="mt-fb-score">${result.score}%</div>`:''}
       <div class="mt-fb-main">${icon} ${esc(result.feedback)}</div>
-      ${result.highlight ? `<div class="mt-fb-sub">✨ "${esc(result.highlight)}"</div>` : ''}
-      ${improveBlock}
+      ${result.highlight?`<div class="mt-fb-sub">✨ "${esc(result.highlight)}"</div>`:''}
+      ${result.improve?`<div style="margin-top:8px;font-size:13px;opacity:.85;">💡 ${esc(result.improve)}</div>`:''}
       ${modelBlock}
     </div>`;
-
   document.getElementById('mtFeedback').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+function nextQuizQuestion() {
+  quizIdx++;
+  renderQuizQuestion();
+}
+
+function showQuizSummary() {
+  const panel   = document.getElementById('microtaskPanel');
+  const total   = quizTasks.length;
+  const correct = quizResults.filter(r => r.correct || r.score >= 60).length;
+  const wrong   = total - correct;
+  const pct     = Math.round((correct / total) * 100);
+  const emoji   = pct >= 80 ? '🎉' : pct >= 50 ? '👏' : '💪';
+
+  panel.innerHTML = `
+    <div class="microtask-panel">
+      <div class="mt-header">
+        <div class="mt-title">📊 Quiz Results</div>
+        <button class="mt-close" onclick="closeMicrotask()">✕</button>
+      </div>
+      <div class="mt-summary">
+        <div class="mt-summary-score">${pct}%</div>
+        <div class="mt-summary-label">${emoji} ${pct>=80?'Excellent work!':pct>=50?'Good effort!':'Keep practicing!'}</div>
+        <div class="mt-summary-breakdown">
+          <div class="mt-sum-item"><div class="mt-sum-num mt-sum-correct">${correct}</div><div class="mt-sum-lbl">Correct</div></div>
+          <div class="mt-sum-item"><div class="mt-sum-num" style="color:var(--ink-muted);">${total}</div><div class="mt-sum-lbl">Total</div></div>
+          <div class="mt-sum-item"><div class="mt-sum-num mt-sum-wrong">${wrong}</div><div class="mt-sum-lbl">Missed</div></div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button class="mt-retry" onclick="toggleQuizPicker()">🔄 Quiz Again</button>
+          <button class="mt-retry" onclick="closeMicrotask()" style="border-color:var(--accent);color:var(--accent);">✓ Done</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function closeMicrotask() {
@@ -1397,6 +1531,11 @@ function closeMicrotask() {
   panel.innerHTML     = '';
   activeMicrotask     = null;
   selectedOptionIdx   = null;
+  quizTasks           = [];
+  quizIdx             = 0;
+  quizResults         = [];
+  const pp = document.getElementById('quizPickerPanel');
+  if (pp) { pp.style.display = 'none'; pp.innerHTML = ''; }
 }
 
 /* ── DEEP DIVE ──────────────────────────────────────── */

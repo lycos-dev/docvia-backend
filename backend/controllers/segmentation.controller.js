@@ -119,7 +119,7 @@ JSON FORMAT:
 }`,
       },
     ],
-    model: 'mixtral-8x7b-32768',
+    model: 'llama-3.3-70b-versatile',
     max_tokens: 2048,
     temperature: 0.5,
     stream: false,
@@ -464,7 +464,7 @@ Your role:
           content: question,
         },
       ],
-      model:       'mixtral-8x7b-32768',
+      model:       'llama-3.3-70b-versatile',
       max_tokens:  600,
       temperature: 0.7,
       stream:      false,
@@ -495,75 +495,86 @@ Your role:
  */
 async function generateMicrotaskEndpoint(req, res) {
   try {
-    const { segmentTitle, segmentContent, documentTitle, taskType = 'auto' } = req.body;
+    const {
+      segmentTitle, segmentContent, documentTitle,
+      taskType = 'auto', count = 1, previousQuestions = [],
+    } = req.body;
 
     if (!segmentTitle || !segmentContent) {
       return res.status(400).json({
-        success:  false,
-        error:    'Missing required fields',
+        success: false, error: 'Missing required fields',
         required: ['segmentTitle', 'segmentContent'],
       });
     }
 
-    console.log(`[Microtask] Generating task for "${segmentTitle}" (type: ${taskType})`);
+    const safeCount = Math.min(Math.max(parseInt(count) || 1, 1), 10);
+    console.log(`[Microtask] Generating ${safeCount} task(s) for "${segmentTitle}" (type: ${taskType})`);
 
-    // Trim content to keep prompt small
-    const content = segmentContent.substring(0, 3000);
+    const content  = segmentContent.substring(0, 4000);
+    const avoidStr = previousQuestions.length
+      ? `\nDo NOT repeat or closely resemble these already-asked questions:\n${previousQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
+      : '';
+
+    const angles = [
+      'cause and effect','compare and contrast','definition and application',
+      'chronology or sequence','significance or impact','critical analysis',
+      'real-world connection','misconception correction',
+    ];
+    const angle = angles[Math.floor(Math.random() * angles.length)];
 
     const message = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: `You are an expert educational assessment designer. Create a single micro-task for a student who just finished reading a section of "${documentTitle || 'a document'}".
+          content: `You are an expert educational assessment designer creating quiz questions for a student studying "${documentTitle || 'a document'}".
 
-Rules:
-- Base the question entirely on the provided segment content
-- Make it test genuine understanding, not just recall
-- For multiple_choice: provide exactly 4 options, only one correct
-- For short_answer: provide a concise model answer (1-2 sentences)
-- Difficulty should be appropriate for the content
-- Return ONLY valid JSON — no markdown fences, no extra text
+RULES:
+- Base every question entirely on the provided content.
+- Test genuine understanding, not word-for-word recall.
+- Focus your questions around the angle: "${angle}".${avoidStr}
+- multiple_choice: exactly 4 options, only one correct, options must be meaningfully different.
+- short_answer: model answer is 1-2 concise sentences.
+- If taskType is "auto", mix multiple_choice and short_answer across questions.
+- For each question include a HINT: a 1-sentence nudge that helps the student think in the right direction WITHOUT giving away the answer.
+- Return ONLY valid JSON — no markdown fences, no extra text.
 
-If taskType is "auto", choose whichever format best suits the content.
-
-JSON FORMAT for multiple_choice:
-{
-  "type": "multiple_choice",
-  "question": "...",
-  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-  "correctIndex": 0,
-  "explanation": "Brief explanation of why the answer is correct"
-}
-
-JSON FORMAT for short_answer:
-{
-  "type": "short_answer",
-  "question": "...",
-  "modelAnswer": "The ideal answer in 1-2 sentences",
-  "keyTerms": ["term1", "term2"]
-}`,
+Return an array of exactly ${safeCount} question object(s):
+[
+  {
+    "type": "multiple_choice",
+    "question": "...",
+    "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+    "correctIndex": 0,
+    "explanation": "Why the correct answer is right.",
+    "hint": "One-sentence nudge without giving away the answer."
+  }
+]
+OR for short_answer objects inside the same array:
+  {
+    "type": "short_answer",
+    "question": "...",
+    "modelAnswer": "Ideal 1-2 sentence answer.",
+    "keyTerms": ["term1", "term2"],
+    "hint": "One-sentence nudge without giving away the answer."
+  }`,
         },
         {
           role: 'user',
-          content: `Segment: "${segmentTitle}"
-Task type: ${taskType}
-
-Content:
-${content}`,
+          content: `Segment: "${segmentTitle}"\nTask type: ${taskType}\nCount: ${safeCount}\n\nContent:\n${content}`,
         },
       ],
-      model:       'mixtral-8x7b-32768',
-      max_tokens:  512,
-      temperature: 0.6,
+      model:       'llama-3.3-70b-versatile',
+      max_tokens:  safeCount * 450,
+      temperature: 0.92,
       stream:      false,
     });
 
-    const raw  = message.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-    const task = JSON.parse(raw);
+    const raw   = message.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    const tasks = JSON.parse(raw);
+    const arr   = Array.isArray(tasks) ? tasks : [tasks];
 
-    console.log(`[Microtask] Generated ${task.type} task`);
-
-    res.status(200).json({ success: true, task });
+    console.log(`[Microtask] Generated ${arr.length} task(s)`);
+    res.status(200).json({ success: true, tasks: arr });
 
   } catch (error) {
     console.error('[Microtask] Generate error:', error.message);
@@ -647,7 +658,7 @@ Reference content:
 ${content}`,
         },
       ],
-      model:       'mixtral-8x7b-32768',
+      model:       'llama-3.3-70b-versatile',
       max_tokens:  300,
       temperature: 0.4,
       stream:      false,
