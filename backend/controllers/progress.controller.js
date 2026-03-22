@@ -120,7 +120,47 @@ async function getProgressEndpoint(req, res) {
   }
 }
 
+
+// ─── ALL PROGRESS FOR A USER ─────────────────────────────────────────────────
+
+/**
+ * GET /api/pdf/progress?userId=...
+ *
+ * Returns every progress row for a user — one per document they have started.
+ * The frontend uses this to build the progress visualization dashboard.
+ */
+async function getAllProgressEndpoint(req, res) {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ success:false, error:'Missing userId query param' });
+    }
+
+    const { data, error } = await supabase
+      .from('user_progress')
+      .select('pdf_id, completed_ids, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('[Progress] getAllProgress error:', error.message);
+      return res.status(500).json({ success:false, error:'Failed to fetch progress', message:error.message });
+    }
+
+    res.status(200).json({
+      success:   true,
+      progress:  data || [],   // [{ pdf_id, completed_ids, updated_at }]
+    });
+
+  } catch (error) {
+    console.error('[Progress] Unexpected error:', error.message);
+    res.status(500).json({ success:false, error:'Internal server error', message:error.message });
+  }
+}
+
 module.exports = {
   saveProgressEndpoint,
   getProgressEndpoint,
+  getAllProgressEndpoint,
 };

@@ -380,6 +380,35 @@
   .chat-send:hover:not(:disabled) { transform:scale(1.05); }
   .chat-send:disabled { opacity:.5; cursor:not-allowed; }
 
+
+  /* ── PROGRESS VISUALIZATION ── */
+  .progress-viz {
+    background:var(--surface); border-radius:var(--radius); border:1px solid var(--border);
+    padding:18px 18px 14px; margin-bottom:20px; box-shadow:var(--shadow-sm);
+  }
+  .viz-title { font-family:'Sora',sans-serif; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.1px; color:var(--ink-muted); margin-bottom:14px; }
+  .viz-stats { display:flex; gap:0; margin-bottom:14px; }
+  .viz-stat  { flex:1; text-align:center; padding:8px 4px; border-right:1px solid var(--border); }
+  .viz-stat:last-child { border-right:none; }
+  .viz-stat-num  { font-family:'Sora',sans-serif; font-size:22px; font-weight:800; color:var(--primary); line-height:1; margin-bottom:3px; }
+  .viz-stat-lbl  { font-size:10px; color:var(--ink-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .viz-doc-list  { display:flex; flex-direction:column; gap:8px; max-height:180px; overflow-y:auto; }
+  .viz-doc-row   { display:flex; flex-direction:column; gap:4px; }
+  .viz-doc-name  { font-size:11px; font-weight:600; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .viz-doc-track { height:4px; background:var(--border); border-radius:99px; overflow:hidden; }
+  .viz-doc-fill  { height:100%; background:linear-gradient(90deg,var(--primary),var(--accent)); border-radius:99px; transition:width .4s ease; }
+  .viz-doc-pct   { font-size:10px; color:var(--ink-muted); text-align:right; }
+  .viz-empty     { font-size:12px; color:var(--ink-muted); text-align:center; padding:8px 0; }
+
+  /* ── RENAME INLINE ── */
+  .rename-row { display:flex; gap:6px; align-items:center; padding:8px 11px; border-radius:var(--radius-sm); border:1.5px solid var(--primary); background:var(--primary-lt); margin-bottom:7px; }
+  .rename-input { flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:12px; font-family:inherit; background:var(--surface); color:var(--ink); }
+  .rename-input:focus { outline:none; border-color:var(--primary); }
+  .rename-ok  { padding:6px 12px; background:var(--primary); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
+  .rename-ok:hover { background:var(--primary-dk); }
+  .rename-cancel { padding:6px 10px; background:none; color:var(--ink-muted); border:none; border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit; }
+  .rename-cancel:hover { color:var(--ink); }
+
   /* ── RESPONSIVE ── */
   @media (max-width:900px) {
     .dash-body   { grid-template-columns:1fr; }
@@ -490,6 +519,13 @@
   <div class="dash-body">
     <!-- Left: upload + list -->
     <aside class="dash-left">
+      <!-- Progress visualization -->
+      <div class="progress-viz" id="progressViz" style="display:none;">
+        <div class="viz-title">📊 Your Progress</div>
+        <div class="viz-stats" id="vizStats"></div>
+        <div class="viz-doc-list" id="vizDocList"></div>
+      </div>
+
       <div class="panel-label">📤 Upload PDF</div>
       <div id="uploadMsg"></div>
 
@@ -796,11 +832,14 @@ async function loadPDFList() {
           </div>
           <div class="pdf-actions">
             <button class="icon-btn" title="Open roadmap" onclick="openDocument('${esc(f.name)}')">📖</button>
+            <button class="icon-btn" title="Rename" onclick="startRename('${esc(f.name)}')">✏️</button>
             <button class="icon-btn del" title="Delete" onclick="deletePDF('${esc(f.name)}')">🗑️</button>
           </div>
         </div>`).join('');
+    loadProgressViz();
     } else {
       el.innerHTML='<div style="padding:20px 0;text-align:center;color:var(--ink-muted);font-size:13px;">No documents yet</div>';
+    loadProgressViz();
     }
   }catch(e){console.error(e);}
 }
@@ -1326,6 +1365,146 @@ const _origGoSegment = goSegment;
 function goSegment(dir) {
   closeMicrotask();
   _origGoSegment(dir);
+}
+
+
+/* ── PROGRESS VISUALIZATION ──────────────────── */
+
+/** Called after loadPDFList — fetches all progress and renders the viz panel */
+async function loadProgressViz() {
+  if (!currentUser) return;
+  try {
+    const [listRes, progRes] = await Promise.all([
+      fetch(`${PDF_API}/list`),
+      fetch(`${PDF_API}/progress?userId=${encodeURIComponent(currentUser.id)}`)
+    ]);
+    const listData = await listRes.json();
+    const progData = await progRes.json().catch(() => ({ success:false, progress:[] }));
+
+    if (!listData.success || !listData.data.length) {
+      document.getElementById('progressViz').style.display = 'none';
+      return;
+    }
+
+    const allFiles    = listData.data;                              // [{name, …}]
+    const allProgress = progData.success ? progData.progress : []; // [{pdf_id, completed_ids}]
+
+    // Build a lookup by pdf_id
+    const progByPdf = {};
+    allProgress.forEach(p => { progByPdf[p.pdf_id] = p.completed_ids || []; });
+
+    // We need total segments per doc — stored in document_segments table.
+    // To avoid N extra requests we fetch all segments for the user once.
+    // For now, use the segmentation cache in currentSeg if open, else infer from completed count.
+    // We'll show what we have and update when the user opens a doc.
+
+    const docsStarted   = allProgress.filter(p => p.completed_ids && p.completed_ids.length > 0).length;
+    const totalCompleted= allProgress.reduce((sum, p) => sum + (p.completed_ids ? p.completed_ids.length : 0), 0);
+
+    // Stats row
+    document.getElementById('vizStats').innerHTML = `
+      <div class="viz-stat"><div class="viz-stat-num">${allFiles.length}</div><div class="viz-stat-lbl">Documents</div></div>
+      <div class="viz-stat"><div class="viz-stat-num">${docsStarted}</div><div class="viz-stat-lbl">Started</div></div>
+      <div class="viz-stat"><div class="viz-stat-num">${totalCompleted}</div><div class="viz-stat-lbl">Segments Done</div></div>
+    `;
+
+    // Per-doc rows — show docs that have some progress first
+    const sorted = [...allFiles].sort((a, b) => {
+      const aLen = (progByPdf[a.name] || []).length;
+      const bLen = (progByPdf[b.name] || []).length;
+      return bLen - aLen;
+    });
+
+    const rowsHTML = sorted.map(f => {
+      const done  = (progByPdf[f.name] || []).length;
+      // If this is the currently open doc we know the total; otherwise show raw count
+      const total = (currentSeg && (currentSeg.id === f.name || currentSeg.segments))
+        ? currentSeg.segments.length : null;
+      const pct   = total ? Math.round((done / total) * 100) : (done > 0 ? null : 0);
+      const label = total ? `${done}/${total}` : (done > 0 ? `${done} done` : 'Not started');
+      const fill  = pct !== null ? pct : (done > 0 ? 60 : 0);
+
+      return `
+        <div class="viz-doc-row">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="viz-doc-name" title="${esc(f.name)}">${esc(f.name)}</div>
+            <div class="viz-doc-pct">${label}</div>
+          </div>
+          <div class="viz-doc-track"><div class="viz-doc-fill" style="width:${fill}%"></div></div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('vizDocList').innerHTML = rowsHTML || '<div class="viz-empty">No progress yet</div>';
+    document.getElementById('progressViz').style.display = 'block';
+
+  } catch (e) {
+    console.warn('[ProgressViz]', e.message);
+  }
+}
+
+/* ── RENAME ───────────────────────────────────── */
+
+function startRename(filename) {
+  // Replace the pdf-item row with an inline rename form
+  const item = document.getElementById(`pi-${CSS.escape(filename)}`);
+  if (!item) return;
+
+  // Derive a friendly display name (strip the timestamp prefix if present)
+  const displayName = filename.replace(/^\d+_[a-z0-9]+_/, '');
+
+  item.outerHTML = `
+    <div class="rename-row" id="rename-row-${CSS.escape(filename)}">
+      <input class="rename-input" id="renameInput-${CSS.escape(filename)}"
+        value="${esc(displayName)}"
+        onkeydown="if(event.key==='Enter')confirmRename('${esc(filename)}');if(event.key==='Escape')cancelRename('${esc(filename)}')" />
+      <button class="rename-ok" onclick="confirmRename('${esc(filename)}')">Save</button>
+      <button class="rename-cancel" onclick="cancelRename('${esc(filename)}')">✕</button>
+    </div>`;
+
+  document.getElementById(`renameInput-${CSS.escape(filename)}`)?.select();
+}
+
+function cancelRename(filename) {
+  // Just reload the list to restore original state
+  loadPDFList();
+}
+
+async function confirmRename(filename) {
+  const input = document.getElementById(`renameInput-${CSS.escape(filename)}`);
+  if (!input) return;
+  const newName = input.value.trim();
+  if (!newName || newName === filename) { cancelRename(filename); return; }
+
+  // Disable input while saving
+  input.disabled = true;
+  showMsg('uploadMsg', 'Renaming…', 'info');
+
+  try {
+    const r = await fetch(`${PDF_API}/${encodeURIComponent(filename)}/rename`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ newName }),
+    });
+    const d = await r.json();
+
+    if (d.success) {
+      showMsg('uploadMsg', `✓ Renamed to "${d.newFilename}"`, 'success');
+      // If the renamed doc was open in the roadmap, clear it (stale filenames)
+      if (currentSeg) {
+        document.getElementById('rmContent').style.display = 'none';
+        document.getElementById('rmEmpty').style.display   = 'block';
+        currentSeg = null;
+      }
+      loadPDFList();
+      loadProgressViz();
+    } else {
+      showMsg('uploadMsg', `Rename failed: ${d.error}`, 'error');
+      cancelRename(filename);
+    }
+  } catch (err) {
+    showMsg('uploadMsg', `Error: ${err.message}`, 'error');
+    cancelRename(filename);
+  }
 }
 
 // Hide tooltip on outside click

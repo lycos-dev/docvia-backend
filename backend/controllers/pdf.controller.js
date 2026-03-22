@@ -258,9 +258,63 @@ const deletePDF = async (req, res) => {
   }
 };
 
+
+/**
+ * Rename a PDF in Supabase Storage.
+ * Supabase has no native rename, so: download → re-upload new name → delete old → update DB refs.
+ *
+ * @route PATCH /api/pdf/:filename/rename
+ * @body  { newName: string }
+ */
+const renamePDF = async (req, res) => {
+  try {
+    const { filename } = req.params;
+    let   { newName  } = req.body;
+
+    if (!filename || !newName) {
+      return res.status(400).json({ success:false, error:'Missing fields', required:['filename (param)','newName (body)'] });
+    }
+
+    if (!newName.toLowerCase().endsWith('.pdf')) newName += '.pdf';
+    newName = newName.replace(/[\/]/g, '_').trim();
+
+    const oldPath     = filename.startsWith('pdfs/') ? filename : `pdfs/${filename}`;
+    const oldFilename = filename.startsWith('pdfs/') ? filename.replace('pdfs/','') : filename;
+    const newFilename = `${Date.now()}_${Math.random().toString(36).substring(2,9)}_${newName}`;
+    const newPath     = `pdfs/${newFilename}`;
+
+    console.log(`[Rename] ${oldPath} → ${newPath}`);
+
+    // 1. Download original
+    const { data: fileData, error: dlErr } = await supabase.storage.from('academic-pdfs').download(oldPath);
+    if (dlErr) return res.status(404).json({ success:false, error:'Original file not found', message:dlErr.message });
+
+    // 2. Upload under new name
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+    const { error: upErr } = await supabase.storage.from('academic-pdfs').upload(newPath, buffer, { contentType:'application/pdf', upsert:false });
+    if (upErr) return res.status(500).json({ success:false, error:'Upload failed', message:upErr.message });
+
+    // 3. Delete original
+    await supabase.storage.from('academic-pdfs').remove([oldPath]);
+
+    // 4. Update document_segments + user_progress DB refs (non-fatal if they fail)
+    await supabase.from('document_segments').update({ pdf_id:newFilename, updated_at:new Date().toISOString() }).eq('pdf_id', oldFilename).catch(()=>{});
+    await supabase.from('user_progress').update({ pdf_id:newFilename }).eq('pdf_id', oldFilename).catch(()=>{});
+
+    const { data: urlData } = supabase.storage.from('academic-pdfs').getPublicUrl(newPath);
+
+    res.status(200).json({ success:true, message:'PDF renamed successfully', oldFilename, newFilename, publicUrl:urlData?.publicUrl });
+
+  } catch (error) {
+    console.error('[Rename] Error:', error);
+    res.status(500).json({ success:false, error:'Internal server error', message:error.message });
+  }
+};
+
 module.exports = {
   uploadPDF,
   listPDFs,
   deletePDF,
-  validatePDF // Export for internal use only
+  renamePDF,
+  validatePDF
 };

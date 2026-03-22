@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const multer  = require('multer');
 
-const { uploadPDF, listPDFs, deletePDF } = require('../controllers/pdf.controller');
+const { uploadPDF, listPDFs, deletePDF, renamePDF } = require('../controllers/pdf.controller');
 const {
   segmentPDFEndpoint,
   getSegmentsEndpoint,
@@ -14,6 +14,7 @@ const {
 const {
   saveProgressEndpoint,
   getProgressEndpoint,
+  getAllProgressEndpoint,
 } = require('../controllers/progress.controller');
 
 // ── Multer ────────────────────────────────────────────────────────────────────
@@ -42,21 +43,19 @@ router.post('/microtask/generate', generateMicrotaskEndpoint);
 router.post('/microtask/evaluate', evaluateMicrotaskEndpoint);
 
 // ── PROGRESS TRACKING ─────────────────────────────────────────────────────────
-/**
- * POST /api/pdf/progress
- * Body: { pdfId, userId, completedIds: number[] }
- * Upserts the user's completed segment IDs for a document.
- */
+// GET all progress for a user (for dashboard visualization)
+router.get('/progress', getAllProgressEndpoint);
+// POST save progress for one document
 router.post('/progress', saveProgressEndpoint);
-
-/**
- * GET /api/pdf/progress/:pdfId?userId=...
- * Returns saved completedIds for this user+pdf. Returns [] if none yet.
- */
+// GET progress for one document
 router.get('/progress/:pdfId', getProgressEndpoint);
 
+// ── RENAME ────────────────────────────────────────────────────────────────────
+// NOTE: must come before the generic /:filename DELETE wildcard
+router.patch('/:filename/rename', renamePDF);
+
 // ── PER-PDF SEGMENT DATA ──────────────────────────────────────────────────────
-// NOTE: wildcard routes MUST come after all fixed-path routes above
+// Wildcard routes last
 router.get('/:pdfId/segments', getSegmentsEndpoint);
 router.delete('/:pdfId/segments', deleteSegmentsEndpoint);
 router.delete('/:filename', deletePDF);
