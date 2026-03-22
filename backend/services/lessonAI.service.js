@@ -1,12 +1,5 @@
 /**
- * LESSON AI SERVICE — Powered by GROQ (Mixtral-8x7b)
- *
- * Uses the same GROQ_API_KEY already in your .env.
- * Pipeline:
- *  1. Receive full extracted PDF text
- *  2. Chunk text into ~10k char pieces
- *  3. For every chunk → call GROQ to generate structured lessons
- *  4. Merge all lessons, assign sequential IDs, return
+ * LESSON AI SERVICE — Powered by GROQ (Llama-3.3-70b)
  */
 
 const Groq = require('groq-sdk');
@@ -27,12 +20,8 @@ const GROQ_TOKENS = 4096;
 function chunkText(text, chunkSize = CHUNK_SIZE) {
   const chunks = [];
   let remaining = text.trim();
-
   while (remaining.length > 0 && chunks.length < MAX_CHUNKS) {
-    if (remaining.length <= chunkSize) {
-      chunks.push(remaining.trim());
-      break;
-    }
+    if (remaining.length <= chunkSize) { chunks.push(remaining.trim()); break; }
     let cut = remaining.lastIndexOf('\n\n', chunkSize);
     if (cut < chunkSize * 0.6) cut = remaining.lastIndexOf('\n', chunkSize);
     if (cut < chunkSize * 0.4) cut = remaining.lastIndexOf(' ', chunkSize);
@@ -47,40 +36,29 @@ function chunkText(text, chunkSize = CHUNK_SIZE) {
 
 async function extractDocumentMeta(preview, fileName) {
   const response = await getGroq().chat.completions.create({
-    model:       GROQ_MODEL,
-    max_tokens:  256,
-    temperature: 0.3,
-    stream:      false,
+    model: GROQ_MODEL, max_tokens: 256, temperature: 0.3, stream: false,
     messages: [{
       role: 'user',
-      content: `Given this document excerpt (filename: "${fileName}"), return ONLY valid JSON with no markdown fences:
+      content: `Given this document excerpt (filename: "${fileName}"), return ONLY valid JSON with no markdown:
 { "title": "descriptive document title", "overview": "2-sentence learning overview" }
 
-EXCERPT:
-${preview.slice(0, 3000)}`,
+EXCERPT:\n${preview.slice(0, 3000)}`,
     }],
   });
-
-  const raw = response.choices[0].message.content
-    .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const raw = response.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
   return JSON.parse(raw);
 }
 
-// ─── LESSON GENERATION FOR ONE CHUNK ─────────────────────────────────────────
+// ─── LESSON GENERATION ────────────────────────────────────────────────────────
 
-async function generateLessonsForChunk(chunkText, chunkIdx, totalChunks, docTitle = '') {
-  const continuationNote = totalChunks > 1
-    ? `\nThis is chunk ${chunkIdx + 1} of ${totalChunks} from the same document. Maintain continuity.`
-    : '';
+async function generateLessonsForChunk(chunk, chunkIdx, totalChunks, docTitle = '') {
+  const note = totalChunks > 1 ? `\nThis is chunk ${chunkIdx + 1} of ${totalChunks}. Maintain continuity.` : '';
 
   const response = await getGroq().chat.completions.create({
-    model:       GROQ_MODEL,
-    max_tokens:  GROQ_TOKENS,
-    temperature: 0.5,
-    stream:      false,
+    model: GROQ_MODEL, max_tokens: GROQ_TOKENS, temperature: 0.5, stream: false,
     messages: [{
       role: 'user',
-      content: `You are an expert educator and curriculum designer.${continuationNote}
+      content: `You are an expert educator and curriculum designer.${note}
 Document: "${docTitle || 'Uploaded PDF'}"
 
 Transform the following text into structured learning lessons.
@@ -91,31 +69,37 @@ REQUIREMENTS:
 3. Cover EVERY important idea — do NOT skip or compress content.
 4. If the content is rich, create MORE lessons.
 
-STRICT RULES:
-- NEVER create generic titles like "Introduction", "Overview", "Summary", or "Conclusion".
-- Use concept-focused titles like "Understanding X", "How Y Works", "Applying Z in Practice".
-- Each lesson must stand alone as something a student can study.
-- Use a clear teaching tone in the explanation (3-6 sentences).
-- Key points should be actionable takeaways, not just topic labels.
+STRICT RULES FOR TITLES:
+- NEVER use generic titles like "Introduction", "Overview", "Summary", or "Conclusion".
+- Use concept-focused titles: "Understanding X", "How Y Works", "Applying Z in Practice".
+
+STRICT RULES FOR THE EXPLANATION FIELD:
+- Write as if you are DIRECTLY TEACHING the student — not describing what the lesson covers.
+- NEVER use meta-language like "This lesson covers...", "In this section...", "This lesson explains...", "This topic discusses...".
+- Dive straight into the concept: what it IS, then how or why it works, then its consequences or context.
+- Use 4-5 natural, confident sentences. Each sentence must add a new detail, cause, or insight.
+- Write at the level of a smart high school student — clear, direct, and human.
+
+STRICT RULES FOR KEY POINTS:
+- Each key point must be a concrete, standalone fact or insight a student can remember.
+- Avoid vague labels. Bad: "Key factors of X". Good: "X happened because of Y, which led to Z."
 
 Return ONLY valid JSON with no markdown fences, no extra text:
 {
   "lessons": [
     {
       "title": "Concept-focused lesson title",
-      "explanation": "Clear 3-6 sentence teaching explanation.",
-      "key_points": ["Specific takeaway 1", "Specific takeaway 2", "Specific takeaway 3"]
+      "explanation": "Direct teaching of the concept — no meta-language, no vague summaries.",
+      "key_points": ["Concrete fact or insight 1", "Concrete fact or insight 2", "Concrete fact or insight 3"]
     }
   ]
 }
 
-TEXT TO PROCESS:
-${chunkText}`,
+TEXT TO PROCESS:\n${chunk}`,
     }],
   });
 
-  const raw = response.choices[0].message.content
-    .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const raw = response.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
   const parsed = JSON.parse(raw);
   return Array.isArray(parsed.lessons) ? parsed.lessons : [];
 }
@@ -142,85 +126,70 @@ async function generateLessonsFromText(fullText, fileName) {
     throw new Error('Insufficient text extracted from PDF.');
   }
 
-  // 1. Extract document meta
   console.log('[LessonAI] Extracting document meta...');
   let meta = { title: fileName.replace(/\.pdf$/i, ''), overview: '' };
-  try {
-    meta = await extractDocumentMeta(fullText, fileName);
-  } catch (e) {
-    console.warn('[LessonAI] Meta extraction failed, using filename:', e.message);
-  }
+  try { meta = await extractDocumentMeta(fullText, fileName); }
+  catch (e) { console.warn('[LessonAI] Meta extraction failed, using filename:', e.message); }
 
-  // 2. Chunk the text
   const chunks = chunkText(fullText);
   console.log(`[LessonAI] ${chunks.length} chunks from ${fullText.length} chars`);
 
-  // 3. Generate lessons per chunk (concurrency 3)
   const allRawLessons = [];
   const CONCURRENCY   = 3;
-
   for (let i = 0; i < chunks.length; i += CONCURRENCY) {
     const batch   = chunks.slice(i, i + CONCURRENCY);
     const results = await Promise.all(
-      batch.map((chunk, batchIdx) =>
-        generateLessonsForChunk(chunk, i + batchIdx, chunks.length, meta.title)
-          .catch(err => {
-            console.warn(`[LessonAI] Chunk ${i + batchIdx} failed:`, err.message);
-            return [];
-          })
+      batch.map((chunk, bIdx) =>
+        generateLessonsForChunk(chunk, i + bIdx, chunks.length, meta.title)
+          .catch(err => { console.warn(`[LessonAI] Chunk ${i + bIdx} failed:`, err.message); return []; })
       )
     );
     results.forEach(r => allRawLessons.push(...r));
     console.log(`[LessonAI] Processed chunks ${i + 1}–${Math.min(i + CONCURRENCY, chunks.length)} / ${chunks.length}`);
   }
 
-  // 4. Merge and normalise
   const lessons = mergeLessons(allRawLessons);
   console.log(`[LessonAI] Final lesson count: ${lessons.length}`);
-
-  if (lessons.length === 0) {
-    throw new Error('AI could not extract any lessons from this document.');
-  }
+  if (lessons.length === 0) throw new Error('AI could not extract any lessons from this document.');
 
   return { title: meta.title, overview: meta.overview, lessons, totalLessons: lessons.length };
 }
 
 // ─── DEEP EXPLANATION ─────────────────────────────────────────────────────────
 
-/**
- * Takes a single lesson and returns a rich, detailed explanation
- * broken into: full explanation, examples, common misconceptions, study tips.
- */
 async function deepExplainLesson({ title, explanation, key_points, documentTitle }) {
   const response = await getGroq().chat.completions.create({
-    model:       GROQ_MODEL,
-    max_tokens:  2048,
-    temperature: 0.6,
-    stream:      false,
+    model: GROQ_MODEL, max_tokens: 2048, temperature: 0.6, stream: false,
     messages: [{
       role: 'user',
-      content: `You are an expert educator. A student is studying the lesson below and wants a DEEP, detailed explanation.
+      content: `You are a friendly, expert tutor helping a student understand a lesson more deeply.
 
 Document: "${documentTitle || 'Uploaded PDF'}"
-Lesson Title: "${title}"
-Current Summary: "${explanation}"
-Key Points: ${(key_points || []).map(p => `- ${p}`).join('\n')}
+Lesson: "${title}"
+What they already know: "${explanation}"
+Key points covered: ${(key_points || []).map(p => `- ${p}`).join('\n')}
 
-Write a rich, thorough explanation of this lesson. Go beyond the summary — teach it properly.
+Expand this into a richer explanation — but keep it READABLE and DIGESTIBLE.
 
-Structure your response EXACTLY as this JSON (no markdown fences):
+RULES:
+- detailed_explanation: Write EXACTLY 3 short paragraphs, separated by \\n\\n. Each paragraph is 2-3 sentences. Cover: (1) what it is, (2) how or why it works, (3) its real-world significance. Teach directly — NEVER start with "In this explanation..." or "This lesson...".
+- examples: 2 short, concrete, relatable real-world examples. One sentence each. Make them feel real.
+- why_it_matters: One punchy sentence. Why should a student care about this right now?
+- common_misconceptions: 2 entries. One sentence each — state what students wrongly believe, then correct it in the same sentence.
+- study_tips: 2 practical, action-oriented tips for remembering or using this concept. One sentence each.
+
+Return ONLY valid JSON, no markdown fences:
 {
-  "detailed_explanation": "4-8 paragraph deep explanation. Teach this concept from the ground up. Use clear language.",
-  "examples": ["Concrete real-world example 1", "Concrete real-world example 2"],
-  "why_it_matters": "2-3 sentences on why this concept is important and how it connects to bigger ideas.",
-  "common_misconceptions": ["Misconception students often have 1", "Misconception students often have 2"],
-  "study_tips": ["Specific tip for remembering or applying this concept", "Another study tip"]
+  "detailed_explanation": "Paragraph 1.\\n\\nParagraph 2.\\n\\nParagraph 3.",
+  "examples": ["Example 1.", "Example 2."],
+  "why_it_matters": "One direct sentence.",
+  "common_misconceptions": ["Students think X, but actually Y.", "Students think A, but actually B."],
+  "study_tips": ["Tip 1.", "Tip 2."]
 }`,
     }],
   });
 
-  const raw = response.choices[0].message.content
-    .replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const raw = response.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
   return JSON.parse(raw);
 }
 

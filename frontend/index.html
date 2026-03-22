@@ -1460,16 +1460,19 @@ async function requestDeepDive() {
 function renderDeepDive(data, title) {
   if (!deepPanel) return;
 
-  const examplesHTML = (data.examples || []).map(e => `<li>${esc(e)}</li>`).join('');
-  const misconHTML   = (data.common_misconceptions || []).map(m => `<li>⚠️ ${esc(m)}</li>`).join('');
-  const tipsHTML     = (data.study_tips || []).map(t => `<li>💡 ${esc(t)}</li>`).join('');
+  const examplesHTML = (data.examples || []).map(e =>
+    `<li>💼 ${esc(e)}</li>`).join('');
+  const misconHTML   = (data.common_misconceptions || []).map(m =>
+    `<li>⚠️ ${esc(m)}</li>`).join('');
+  const tipsHTML     = (data.study_tips || []).map(t =>
+    `<li>💡 ${esc(t)}</li>`).join('');
 
-  // Split detailed_explanation into paragraphs
+  // Split on double newlines → short readable paragraphs
   const paras = (data.detailed_explanation || '')
     .split(/\n{2,}/)
     .map(p => p.replace(/\n/g, ' ').trim())
     .filter(Boolean)
-    .map(p => `<p>${esc(p)}</p>`)
+    .map(p => `<p style="margin-bottom:1em;">${esc(p)}</p>`)
     .join('');
 
   deepPanel.querySelector('.deep-panel-body').innerHTML = `
@@ -1486,13 +1489,13 @@ function renderDeepDive(data, title) {
 
     ${examplesHTML ? `
     <div class="deep-section">
-      <div class="deep-section-title">💼 Real-World Examples</div>
+      <div class="deep-section-title">Real-World Examples</div>
       <ul class="deep-list">${examplesHTML}</ul>
     </div>` : ''}
 
     ${misconHTML ? `
     <div class="deep-section">
-      <div class="deep-section-title">🚫 Common Misconceptions</div>
+      <div class="deep-section-title">Common Misconceptions</div>
       <ul class="deep-list">${misconHTML}</ul>
     </div>` : ''}
 
