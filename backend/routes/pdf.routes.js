@@ -12,6 +12,11 @@ const {
   evaluateMicrotaskEndpoint,
 } = require('../controllers/segmentation.controller');
 const {
+  generateLessonsEndpoint,
+  getLessonsEndpoint,
+  deleteLessonsEndpoint,
+} = require('../controllers/lessons.controller');
+const {
   saveProgressEndpoint,
   getProgressEndpoint,
   getAllProgressEndpoint,
@@ -37,6 +42,11 @@ router.post('/segment', segmentPDFEndpoint);
 
 // ── AI CHAT ───────────────────────────────────────────────────────────────────
 router.post('/chat', chatWithSegmentEndpoint);
+
+// ── LESSON GENERATION (Claude AI) ────────────────────────────────────────────
+router.post('/lessons/generate', generateLessonsEndpoint);
+router.get('/lessons/:pdfId',    getLessonsEndpoint);
+router.delete('/lessons/:pdfId', deleteLessonsEndpoint);
 
 // ── MICRO-TASKS ───────────────────────────────────────────────────────────────
 router.post('/microtask/generate', generateMicrotaskEndpoint);

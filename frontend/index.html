@@ -804,7 +804,7 @@ async function doUpload() {
     const r=await fetch(`${PDF_API}/upload`,{method:'POST',body:fd});
     const d=await r.json();
     if(d.success){
-      showMsg('uploadMsg',`✓ "${d.data.originalFilename}" uploaded! Generating roadmap…`,'success');
+      showMsg('uploadMsg',`✓ "${d.data.originalFilename}" uploaded! Generating lessons with Claude AI…`,'success');
       document.getElementById('fileChip').style.display='none';
       btn.style.display='none'; pdfInput.value='';
       setTimeout(()=>loadPDFList(), 600);
@@ -867,24 +867,42 @@ async function openDocument(pdfId) {
   document.getElementById('rmLoading').style.display='block';
 
   try{
-    // Fetch segmentation and saved progress in parallel
-    const [segRes, progRes] = await Promise.all([
-      fetch(`${PDF_API}/segment`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfId,userId:currentUser.id})}),
+    // ── Call Claude-powered lesson generation endpoint ──
+    const [lessonRes, progRes] = await Promise.all([
+      fetch(`${PDF_API}/lessons/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfId,userId:currentUser.id})}),
       fetch(`${PDF_API}/progress/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(currentUser.id)}`)
     ]);
-    const segData  = await segRes.json();
-    const progData = await progRes.json().catch(()=>({success:false,completedIds:[]}));
+    const lessonData = await lessonRes.json();
+    const progData   = await progRes.json().catch(()=>({success:false,completedIds:[]}));
 
     document.getElementById('rmLoading').style.display='none';
 
-    if(segData.success){
-      currentSeg = segData.data;
-      // Restore saved progress (fall back to empty if none saved yet)
-      const savedIds = progData.success ? (progData.completedIds || []) : [];
+    if(lessonData.success){
+      // Adapt lessons response → currentSeg shape the render functions expect
+      const d = lessonData.data;
+      currentSeg = {
+        id:            pdfId,
+        title:         d.title,
+        overview:      d.overview,
+        estimatedTime: `${d.totalLessons} lessons`,
+        // Map each lesson to the segment shape used by renderRoadmap / renderLesson
+        segments: d.lessons.map(l => ({
+          id:                 l.id,
+          title:              l.title,
+          description:        l.explanation,
+          content:            l.explanation,  // used by AI chat & microtask
+          keyPoints:          l.key_points || [],
+          learningObjectives: [],
+          difficulty:         'lesson',
+          estimatedTime:      'Self-paced',
+        })),
+      };
+      // Normalize saved IDs to numbers to match lesson id (number) type
+      const savedIds = (progData.success ? (progData.completedIds || []) : []).map(Number);
       completedSegments = new Set(savedIds);
       renderRoadmap();
     } else {
-      showMsg('uploadMsg',`Segmentation failed: ${segData.error}`,'error');
+      showMsg('uploadMsg',`Lesson generation failed: ${lessonData.error}`,'error');
       document.getElementById('rmEmpty').style.display='block';
     }
   }catch(err){
@@ -916,8 +934,7 @@ function renderRoadmap() {
             <div class="rm-card-info">
               <div class="rm-card-title">${esc(seg.title)}</div>
               <div class="rm-card-badges">
-                <span class="badge badge-${seg.difficulty}">${seg.difficulty}</span>
-                <span class="badge badge-time">⏱ ${esc(seg.estimatedTime)}</span>
+                <span class="badge badge-time">📖 Lesson ${seg.id}</span>
                 ${isDone?'<span class="badge badge-done">✓ Done</span>':''}
               </div>
             </div>
@@ -930,16 +947,15 @@ function renderRoadmap() {
   document.getElementById('rmContent').innerHTML=`
     <div class="rm-banner">
       <div class="rm-inner">
-        <div class="rm-label">Learning Roadmap</div>
+        <div class="rm-label">🎓 Learning Roadmap — Powered by Claude AI</div>
         <div class="rm-title">📚 ${esc(currentSeg.title)}</div>
         <p class="rm-overview">${esc(currentSeg.overview)}</p>
         <div class="rm-stats">
-          <span>📖 ${total} segments</span>
-          <span>⏱ ${esc(currentSeg.estimatedTime||'')}</span>
+          <span>📖 ${total} lessons</span>
           <span>✅ ${done} of ${total} completed</span>
         </div>
         <div class="rm-prog">
-          <div class="rm-prog-labels"><span>${done} of ${total} completed</span><span>${pct}%</span></div>
+          <div class="rm-prog-labels"><span>${done} of ${total} lessons done</span><span>${pct}%</span></div>
           <div class="rm-prog-track"><div class="rm-prog-fill" style="width:${pct}%"></div></div>
         </div>
       </div>
@@ -981,8 +997,6 @@ function renderLesson() {
 
   // Build HTML
   const kpHTML=(seg.keyPoints||[]).map(p=>`<div class="seg-kp"><div class="kp-dot"></div><span>${esc(p)}</span></div>`).join('');
-  const objHTML=(seg.learningObjectives||[]).map(o=>`<div class="seg-obj"><span>🎯</span><span>${esc(o)}</span></div>`).join('');
-  const pageRange=seg.startPage?`<span class="badge badge-time">Pages ${seg.startPage}–${seg.endPage}</span>`:'';
 
   document.getElementById('lessonScroll').innerHTML=`
     <div class="seg-hero">
@@ -990,18 +1004,17 @@ function renderLesson() {
       <div class="seg-title">${esc(seg.title)}</div>
       <p class="seg-desc">${esc(seg.description)}</p>
       <div class="seg-meta">
-        <span class="badge badge-${seg.difficulty}">${seg.difficulty}</span>
-        <span class="badge badge-time">⏱ ${esc(seg.estimatedTime)}</span>
-        ${pageRange}
+        <span class="badge badge-time">📖 Lesson ${seg.id} of ${total}</span>
+        ${isDone?'<span class="badge badge-done">✓ Completed</span>':''}
       </div>
     </div>
 
-    ${kpHTML?`<div class="seg-kps"><div class="seg-kps-title">Key Points</div>${kpHTML}</div>`:''}
+    ${kpHTML?`<div class="seg-kps"><div class="seg-kps-title">Key Takeaways</div>${kpHTML}</div>`:''}
 
     <div class="content-label">Lesson Content</div>
-    <div class="lesson-text" id="lessonText">${buildContent(seg.content)}</div>
+    <div class="lesson-text" id="lessonText">${buildContent(seg.content)}</div>`;
 
-    ${objHTML?`<div class="seg-objs"><div class="seg-objs-title">Learning Objectives</div>${objHTML}</div>`:''}`;
+
 
   document.getElementById('lessonScroll').scrollTop=0;
   attachSelectionListener();
@@ -1027,6 +1040,7 @@ function buildContent(raw) {
 }
 
 function goSegment(dir) {
+  closeMicrotask();
   const next=currentSegIdx+dir;
   if(next<0||next>=currentSeg.segments.length) return;
   currentSegIdx=next;
@@ -1360,12 +1374,7 @@ function closeMicrotask() {
   selectedOptionIdx   = null;
 }
 
-// Hide microtask panel when navigating segments
-const _origGoSegment = goSegment;
-function goSegment(dir) {
-  closeMicrotask();
-  _origGoSegment(dir);
-}
+// microtask panel is closed inside goSegment above
 
 
 /* ── PROGRESS VISUALIZATION ──────────────────── */
