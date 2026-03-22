@@ -511,8 +511,9 @@ async function generateMicrotaskEndpoint(req, res) {
     console.log(`[Microtask] Generating ${safeCount} task(s) for "${segmentTitle}" (type: ${taskType})`);
 
     const content  = segmentContent.substring(0, 4000);
-    const avoidStr = previousQuestions.length
-      ? `\nDo NOT repeat or closely resemble these already-asked questions:\n${previousQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
+    const allAsked = Array.isArray(previousQuestions) ? previousQuestions : [];
+    const avoidStr = allAsked.length
+      ? `\nSTRICTLY FORBIDDEN — do NOT ask any of these questions again (not even a rephrased version):\n${allAsked.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
       : '';
 
     const angles = [
@@ -532,31 +533,23 @@ RULES:
 - Base every question entirely on the provided content.
 - Test genuine understanding, not word-for-word recall.
 - Focus your questions around the angle: "${angle}".${avoidStr}
-- multiple_choice: exactly 4 options, only one correct, options must be meaningfully different.
-- short_answer: model answer is 1-2 concise sentences.
-- If taskType is "auto", mix multiple_choice and short_answer across questions.
+QUESTION TYPE RULES based on taskType:
+- "multiple_choice": 4 options (A-D), exactly one correct, options must be meaningfully different.
+- "true_false": statement that is clearly true or false; options always ["True", "False"]; correctIndex 0 or 1.
+- "identification": a "fill in the blank" or "name the term" question; short modelAnswer (1 key term or phrase).
+- "essay": an open-ended analytical question; modelAnswer is a 3-4 sentence ideal response covering main points.
+- If taskType is "auto", choose the best format for each question based on the content.
 - For each question include a HINT: a 1-sentence nudge that helps the student think in the right direction WITHOUT giving away the answer.
+- Every question in your response MUST be completely unique — different question text, different concept angle.
 - Return ONLY valid JSON — no markdown fences, no extra text.
 
-Return an array of exactly ${safeCount} question object(s):
-[
-  {
-    "type": "multiple_choice",
-    "question": "...",
-    "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-    "correctIndex": 0,
-    "explanation": "Why the correct answer is right.",
-    "hint": "One-sentence nudge without giving away the answer."
-  }
-]
-OR for short_answer objects inside the same array:
-  {
-    "type": "short_answer",
-    "question": "...",
-    "modelAnswer": "Ideal 1-2 sentence answer.",
-    "keyTerms": ["term1", "term2"],
-    "hint": "One-sentence nudge without giving away the answer."
-  }`,
+Return an array of exactly ${safeCount} question object(s).
+For multiple_choice or true_false:
+[{"type":"multiple_choice","question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"correctIndex":0,"explanation":"Why correct.","hint":"Nudge."}]
+For identification:
+[{"type":"identification","question":"...","modelAnswer":"Key term or phrase.","keyTerms":["term"],"hint":"Nudge."}]
+For essay:
+[{"type":"essay","question":"...","modelAnswer":"3-4 sentence ideal response.","keyTerms":["term1","term2"],"hint":"Nudge."}]`,
         },
         {
           role: 'user',
@@ -571,9 +564,18 @@ OR for short_answer objects inside the same array:
 
     const raw   = message.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
     const tasks = JSON.parse(raw);
-    const arr   = Array.isArray(tasks) ? tasks : [tasks];
+    let arr     = Array.isArray(tasks) ? tasks : [tasks];
 
-    console.log(`[Microtask] Generated ${arr.length} task(s)`);
+    // Deduplicate within the batch + against previousQuestions
+    const seenQuestions = new Set(allAsked.map(q => q.toLowerCase().trim()));
+    arr = arr.filter(t => {
+      const key = (t.question || '').toLowerCase().trim();
+      if (!key || seenQuestions.has(key)) return false;
+      seenQuestions.add(key);
+      return true;
+    });
+
+    console.log(`[Microtask] Generated ${arr.length} unique task(s)`);
     res.status(200).json({ success: true, tasks: arr });
 
   } catch (error) {
@@ -607,8 +609,8 @@ async function evaluateMicrotaskEndpoint(req, res) {
 
     console.log(`[Microtask] Evaluating ${task.type} answer for "${segmentTitle}"`);
 
-    // ── Multiple choice: evaluate locally, no Groq call needed ──
-    if (task.type === 'multiple_choice') {
+    // ── Multiple choice & True/False: evaluate locally ──
+    if (task.type === 'multiple_choice' || task.type === 'true_false') {
       const correct = Number(userAnswer) === Number(task.correctIndex);
       return res.status(200).json({
         success:     true,
