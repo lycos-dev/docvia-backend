@@ -1046,7 +1046,7 @@ async function doUpload() {
   showMsg('uploadMsg','Uploading your PDF…','info');
   const fd=new FormData(); fd.append('pdf',file);
   try{
-    const r=await fetch(`${PDF_API}/upload`,{method:'POST',body:fd});
+    const r=await fetch(`${PDF_API}/upload`,{method:'POST',headers:{'Authorization':`Bearer ${authToken}`},body:fd});
     const d=await r.json();
     if(d.success){
       showMsg('uploadMsg',`✓ "${d.data.originalFilename}" uploaded! Generating lessons with Claude AI…`,'success');
@@ -1074,7 +1074,7 @@ function docDisplayName(n) { return n.replace(/^\d+_[a-z0-9]+_/i,'').replace(/\.
 
 async function loadPDFList() {
   try{
-    const r=await fetch(`${PDF_API}/list`);
+    const r=await fetch(`${PDF_API}/list`,{headers:{'Authorization':`Bearer ${authToken}`}});
     const d=await r.json();
     const grid=document.getElementById('docGrid');
     const sb=document.getElementById('sbFileList');
@@ -1125,7 +1125,7 @@ document.addEventListener('click', closeAllDocMenus);
 async function deletePDF(name) {
   if(!confirm(`Delete "${name}"?`)) return;
   try{
-    const r=await fetch(`${PDF_API}/${encodeURIComponent(name)}`,{method:'DELETE'});
+    const r=await fetch(`${PDF_API}/${encodeURIComponent(name)}`,{method:'DELETE',headers:{'Authorization':`Bearer ${authToken}`}});
     const d=await r.json();
     if(d.success){showMsg('uploadMsg','✓ Deleted','success');loadPDFList();}
     else showMsg('uploadMsg',`Delete failed: ${d.error}`,'error');
@@ -1154,8 +1154,8 @@ async function openDocument(pdfId) {
   try{
     // ── Call Claude-powered lesson generation endpoint ──
     const [lessonRes, progRes] = await Promise.all([
-      fetch(`${PDF_API}/lessons/generate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfId,userId:currentUser.id})}),
-      fetch(`${PDF_API}/progress/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(currentUser.id)}`)
+      fetch(`${PDF_API}/lessons/generate`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},body:JSON.stringify({pdfId,userId:currentUser.id})}),
+      fetch(`${PDF_API}/progress/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(currentUser.id)}`,{headers:{'Authorization':`Bearer ${authToken}`}})
     ]);
     const lessonData = await lessonRes.json();
     const progData   = await progRes.json().catch(()=>({success:false,completedIds:[]}));
@@ -1359,7 +1359,7 @@ async function persistProgress() {
   try {
     await fetch(`${PDF_API}/progress`, {
       method:  'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},
       body: JSON.stringify({
         pdfId:        currentSeg.id || '',   // segmentation row id
         userId:       currentUser.id,
@@ -1446,7 +1446,7 @@ async function callChat(question, seg) {
   msgs.scrollTop=msgs.scrollHeight;
   try{
     const r=await fetch(`${PDF_API}/chat`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},
       body:JSON.stringify({question,segmentTitle:seg.title,segmentContent:seg.content||'',documentTitle:currentSeg.title})
     });
     const d=await r.json();
@@ -1582,7 +1582,7 @@ async function startQuiz() {
 
   try {
     const r = await fetch(`${PDF_API}/microtask/generate`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST', headers: {'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},
       body: JSON.stringify({
         segmentTitle:      seg.title,
         segmentContent:    seg.content || seg.explanation || '',
@@ -1737,7 +1737,7 @@ async function submitCurrentQuestion() {
 
   try {
     const r = await fetch(`${PDF_API}/microtask/evaluate`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST', headers: {'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},
       body: JSON.stringify({ task, userAnswer, segmentTitle: seg.title, segmentContent: seg.content||'' }),
     });
     const d = await r.json();
@@ -1821,7 +1821,7 @@ async function generateNextQuickQuestion() {
 
   try {
     const r = await fetch(`${PDF_API}/microtask/generate`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST', headers: {'Content-Type':'application/json','Authorization':`Bearer ${authToken}`},
       body: JSON.stringify({
         segmentTitle:      seg.title,
         segmentContent:    seg.content || seg.explanation || '',
@@ -1951,7 +1951,7 @@ async function toggleDeepDive() {
   try {
     const r = await fetch(`${PDF_API}/lessons/deep-explain`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
       body: JSON.stringify({
         title:         seg.title,
         explanation:   seg.explanation || seg.content || seg.description || '',
@@ -2154,7 +2154,7 @@ async function confirmRename(filename) {
   try {
     const r = await fetch(`${PDF_API}/${encodeURIComponent(filename)}/rename`, {
       method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
       body:    JSON.stringify({ newName }),
     });
     const d = await r.json();
