@@ -1,0 +1,100 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap")
+layer(base);
+
+@import "tailwindcss";
+
+/* ✅ Fix: Enable class-based dark mode for Tailwind v4.
+   Without this, dark: utilities only respond to prefers-color-scheme,
+   not the .dark class toggled by ThemeContext. */
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-primary: #89ade2;
+  --color-primary-dark: #6b93d1;
+  --color-primary-light: #a5c2eb;
+
+  --color-background: #f5f5f5;
+  --color-card: #ffffff;
+
+  --color-text-primary: #000000;
+  --color-text-secondary: #666666;
+  --color-text-muted: #999999;
+
+  --font-poppins: Poppins, sans-serif;
+
+  --shadow-card: 0 1px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ✅ Fix: Override CSS variables when .dark is active so components
+   using bg-background, bg-card, text-text-primary etc. update correctly. */
+.dark {
+  --color-background: #0a0a0a;
+  --color-card: #1a1a1a;
+
+  --color-text-primary: #f1f1f1;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #6b6b6b;
+
+  --shadow-card: 0 1px 12px rgba(0, 0, 0, 0.4);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+/* Phase 2 roadmap animations */
+@keyframes milestoneUnlock {
+  0%   { transform: scale(0.4); opacity: 0; }
+  60%  { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes modalPop {
+  0%   { transform: scale(0.88) translateY(12px); opacity: 0; }
+  70%  { transform: scale(1.02) translateY(-2px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); }
+}
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+
+  body {
+    @apply bg-background font-poppins antialiased;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px white inset !important;
+    box-shadow: 0 0 0 30px white inset !important;
+  }
+
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
+
+  input[type="password"]::-webkit-credentials-auto-fill-button {
+    visibility: hidden;
+    position: absolute;
+    right: 0;
+  }
+}
