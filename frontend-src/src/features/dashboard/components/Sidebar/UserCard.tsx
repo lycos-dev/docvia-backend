@@ -1,5 +1,6 @@
 import { ChevronDown, User2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../../shared/contexts/AuthContext';
 
 interface UserCardProps {
   isOpen: boolean;
@@ -8,8 +9,10 @@ interface UserCardProps {
 
 export default function UserCard({ isOpen, onToggle }: UserCardProps) {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logout();
     navigate('/signin');
   };
 
@@ -23,14 +26,13 @@ export default function UserCard({ isOpen, onToggle }: UserCardProps) {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                John Doe
+                {user?.email ?? ''}
               </p>
               <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                User ID: 12393292
+                {user?.id ? `ID: ${user.id.slice(0, 8)}…` : ''}
               </p>
             </div>
           </div>
-
           <button
             type="button"
             onClick={onToggle}
@@ -49,20 +51,7 @@ export default function UserCard({ isOpen, onToggle }: UserCardProps) {
           <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 rounded-xl border border-black/10 dark:border-white/10 shadow-lg py-2 z-50">
             <button
               type="button"
-              onClick={() => {
-                navigate('/profile');
-                onToggle();
-              }}
-              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-            >
-              View Profile
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/settings');
-                onToggle();
-              }}
+              onClick={() => { navigate('/settings'); onToggle(); }}
               className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
             >
               Account Settings
