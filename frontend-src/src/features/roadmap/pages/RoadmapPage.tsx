@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  X, Moon, Sun, Play, Check, Lock,
-  ChevronRight, Maximize2, Zap, Clock, BookOpen,
+  X, Moon, Sun, Play, Check,
+  ChevronRight, Maximize2,
 } from 'lucide-react';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 
@@ -203,22 +203,6 @@ function MapPin({
       </text>
     </g>
   );
-}
-
-// ─── Info Card (below pin on desktop) ────────────────────────────────────────
-function DesktopCard({
-  mod, pinX, pinY, isDark, isSelected, onClick,
-}: {
-  mod: Module; pinX: number; pinY: number;
-  isDark: boolean; isSelected: boolean; onClick: () => void;
-}) {
-  const cardW   = 180;
-  const cardH   = isSelected ? 180 : 90;
-  const cardX   = pinX - cardW / 2;
-
-  // Card sits BELOW the canvas — we render it as an absolutely-positioned div
-  // mapped from SVG coordinates. We'll handle this in the JSX layer instead.
-  return null; // handled outside SVG
 }
 
 // ─── Module Detail Sheet (slide-up panel on click) ───────────────────────────
@@ -500,10 +484,7 @@ function DesktopRoadmap({ isDark }: { isDark: boolean }) {
 
   const surfaceBg = isDark ? '#1e293b' : '#FFFFFF';
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-  const textPri   = isDark ? '#F1F5F9' : '#111827';
   const textMuted = isDark ? '#94A3B8' : '#6B7280';
-  const roadColor = isDark ? '#1e2d45' : '#1e2d45';   // always dark navy road
-  const roadSurf  = isDark ? '#253550' : '#253550';
 
   // Drag
   const onMD = useCallback((e: React.MouseEvent) => {
@@ -879,7 +860,6 @@ export default function RoadmapPage() {
   const isDark = theme === 'dark';
 
   const pageBg    = isDark ? '#0f172a' : '#F0F2F5';
-  const surfaceBg = isDark ? '#1e293b' : '#FFFFFF';
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
   const textPri   = isDark ? '#F1F5F9' : '#111827';
   const textMuted = isDark ? '#94A3B8' : '#6B7280';
