@@ -1,7 +1,8 @@
 export type UploadedFile = {
   id: string;
+  filename: string;
   name: string;
-  uploadedAt: string; // ISO string or readable
-  sizeLabel?: string; // e.g. "2.4 MB"
-  type?: "pdf" | "docx" | "txt" | "other";
+  uploadedAt: string;
+  sizeLabel?: string;
+  type?: 'pdf' | 'docx' | 'txt' | 'other';
 };
