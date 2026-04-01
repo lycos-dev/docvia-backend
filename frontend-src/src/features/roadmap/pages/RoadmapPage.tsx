@@ -1,5 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../../../shared/contexts/AuthContext';
+import * as pdfService from '../../../shared/services/pdfService';
+import type { BackendLesson } from '../../../shared/services/pdfService';
 import {
   X, Moon, Sun, Play, Check,
   ChevronRight, Maximize2,
@@ -28,6 +31,39 @@ interface Module {
   lessons: Lesson[];
   pinColor: string;
   pinEmoji: string;
+}
+
+// ─── Lesson → Module mapping ─────────────────────────────────────────────────
+const PIN_COLORS_LIST = ['#EF4444', '#F97316', '#22C55E', '#3B82F6', '#8B5CF6'];
+const PIN_EMOJIS_LIST = ['🎯', '📦', '⚡', '🔍', '🏆'];
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
+  return result;
+}
+
+function mapLessonsToModules(lessons: BackendLesson[], docTitle: string): Module[] {
+  return chunkArray(lessons, 5).map((group, idx) => ({
+    id: `m${idx + 1}`,
+    title: idx === 0 ? docTitle : `Part ${idx + 1}`,
+    chapter: idx + 1,
+    isCompleted: false,
+    isCurrent: idx === 0,
+    isLocked: idx > 1,
+    percentage: 0,
+    lessonsCompleted: 0,
+    totalLessons: group.length,
+    lessons: group.map((l) => ({
+      id: String(l.id),
+      title: l.title,
+      isCompleted: false,
+      isCurrent: false,
+      durationMin: 10,
+    })),
+    pinColor: PIN_COLORS_LIST[idx % PIN_COLORS_LIST.length],
+    pinEmoji: PIN_EMOJIS_LIST[idx % PIN_EMOJIS_LIST.length],
+  }));
 }
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -378,7 +414,7 @@ function ModuleSheet({
 }
 
 // ─── Vertical roadmap (mobile) ───────────────────────────────────────────────
-function MobileRoadmap({ isDark }: { isDark: boolean }) {
+function MobileRoadmap({ isDark, modules }: { isDark: boolean; modules: Module[] }) {
   const [selected, setSelected] = useState<Module | null>(null);
   const surfaceBg = isDark ? '#1e293b' : '#FFFFFF';
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
@@ -387,7 +423,7 @@ function MobileRoadmap({ isDark }: { isDark: boolean }) {
 
   return (
     <div className="px-4 py-6">
-      {MODULES.map((mod, i) => (
+      {modules.map((mod, i) => (
         <div key={mod.id} className="flex gap-4">
           {/* Left spine */}
           <div className="flex flex-col items-center">
@@ -404,7 +440,7 @@ function MobileRoadmap({ isDark }: { isDark: boolean }) {
               {mod.isLocked ? '🔒' : mod.pinEmoji}
             </button>
             {/* Connecting line */}
-            {i < MODULES.length - 1 && (
+            {i < modules.length - 1 && (
               <div className="w-0.5 flex-1 my-1 rounded-full"
                 style={{
                   background: mod.isCompleted
@@ -473,7 +509,7 @@ function MobileRoadmap({ isDark }: { isDark: boolean }) {
 }
 
 // ─── Horizontal road (desktop) ───────────────────────────────────────────────
-function DesktopRoadmap({ isDark }: { isDark: boolean }) {
+function DesktopRoadmap({ isDark, modules }: { isDark: boolean; modules: Module[] }) {
   const [selected, setSelected] = useState<Module | null>(null);
   const [pan, setPan]       = useState({ x: 0, y: 0 });
   const [zoom, setZoom]     = useState(1);
@@ -652,7 +688,7 @@ function DesktopRoadmap({ isDark }: { isDark: boolean }) {
             })}
 
             {/* ── Map pins ─────────────────────────────────────── */}
-            {MODULES.map((mod, i) => (
+            {modules.map((mod, i) => (
               <MapPin
                 key={mod.id}
                 x={PINS[i].x}
@@ -667,7 +703,7 @@ function DesktopRoadmap({ isDark }: { isDark: boolean }) {
             ))}
 
             {/* ── Info cards (rendered as SVG foreignObject) ────── */}
-            {MODULES.map((mod, i) => {
+            {modules.map((mod, i) => {
               const cx  = PINS[i].x;
               const cw  = 180;
               const ch  = 86;
@@ -813,7 +849,7 @@ function DesktopRoadmap({ isDark }: { isDark: boolean }) {
 
       {/* ── UP NEXT banner ─────────────────────────────────────────────── */}
       {(() => {
-        const curMod = MODULES.find(m => m.isCurrent);
+        const curMod = modules.find(m => m.isCurrent);
         const curLes = curMod?.lessons.find(l => l.isCurrent);
         if (!curMod || !curLes) return null;
         return (
@@ -858,6 +894,34 @@ export default function RoadmapPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
+  const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const pdfId = searchParams.get('pdfId');
+
+  const [modules, setModules] = useState<Module[]>(MODULES);
+  const [isLoadingLessons, setIsLoadingLessons] = useState(false);
+
+  useEffect(() => {
+    if (!pdfId) return;
+
+    const fetchLessons = async () => {
+      setIsLoadingLessons(true);
+      let result = await pdfService.getLessons(pdfId);
+
+      // If no cached lessons exist, generate them (requires userId)
+      if (!result.success && user?.id) {
+        result = await pdfService.generateLessons(pdfId, user.id);
+      }
+
+      setIsLoadingLessons(false);
+
+      if (result.success && result.data) {
+        setModules(mapLessonsToModules(result.data.lessons, result.data.title));
+      }
+    };
+
+    fetchLessons();
+  }, [pdfId, user?.id]);
 
   const pageBg    = isDark ? '#0f172a' : '#F0F2F5';
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
@@ -882,6 +946,12 @@ export default function RoadmapPage() {
         className="fixed inset-0 z-50 flex flex-col"
         style={{ background: pageBg, fontFamily: 'Poppins, sans-serif' }}
       >
+        {isLoadingLessons && (
+          <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/70">
+            <p className="text-white text-xl font-semibold mb-2">Generating your learning roadmap…</p>
+            <p className="text-white/60 text-sm">This may take a moment</p>
+          </div>
+        )}
         {/* ── Header ────────────────────────────────────────────────── */}
         <header
           className="shrink-0 flex items-center px-5 py-8 gap-4 relative"
@@ -950,13 +1020,13 @@ export default function RoadmapPage() {
 
         {/* ── Desktop: horizontal road (md and above) ───────────────── */}
         <div className="hidden md:flex flex-1 overflow-hidden">
-          <DesktopRoadmap isDark={isDark} />
+          <DesktopRoadmap isDark={isDark} modules={modules} />
         </div>
 
         {/* ── Mobile: vertical roadmap (below md) ───────────────────── */}
         <div className="flex md:hidden flex-1 overflow-y-auto">
           <div className="w-full">
-            <MobileRoadmap isDark={isDark} />
+            <MobileRoadmap isDark={isDark} modules={modules} />
           </div>
         </div>
       </div>
