@@ -10,63 +10,47 @@ import ProgressPage from "../../features/dashboard/pages/ProgressPage";
 import SettingsPage from "../../features/dashboard/pages/SettingsPage";
 import RoadmapPage from "../../features/roadmap/pages/RoadmapPage";
 import DashboardLayout from "../../features/dashboard/components/DashboardLayout";
+import { ProtectedRoute } from "./ProtectedRoute";
 
 const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <Navigate to="/signin" replace />,
-  },
-  {
-    path: "/signin",
-    element: <SignInPage />,
-  },
-  {
-    path: "/signup",
-    element: <SignUpPage />,
-  },
-  {
-    path: "/forgot-password",
-    element: <ForgotPasswordPage />,
-  },
-  {
-    path: "/create-new-password",
-    element: <CreateNewPasswordPage />,
-  },
+  { path: "/", element: <Navigate to="/signin" replace /> },
+  { path: "/signin", element: <SignInPage /> },
+  { path: "/signup", element: <SignUpPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/create-new-password", element: <CreateNewPasswordPage /> },
   {
     path: "/dashboard",
     element: (
-      <DashboardLayout>
-        <DashboardPage />
-      </DashboardLayout>
+      <ProtectedRoute>
+        <DashboardLayout><DashboardPage /></DashboardLayout>
+      </ProtectedRoute>
     ),
   },
-  // ── Roadmap renders fullscreen (no sidebar/topbar) ──
   {
     path: "/roadmap",
-    element: <RoadmapPage />,
+    element: (
+      <ProtectedRoute>
+        <RoadmapPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/progress",
     element: (
-      <DashboardLayout>
-        <ProgressPage />
-      </DashboardLayout>
+      <ProtectedRoute>
+        <DashboardLayout><ProgressPage /></DashboardLayout>
+      </ProtectedRoute>
     ),
   },
   {
     path: "/settings",
     element: (
-      <DashboardLayout>
-        <SettingsPage />
-      </DashboardLayout>
+      <ProtectedRoute>
+        <DashboardLayout><SettingsPage /></DashboardLayout>
+      </ProtectedRoute>
     ),
   },
-  {
-    path: "*",
-    element: <Navigate to="/signin" replace />,
-  },
+  { path: "*", element: <Navigate to="/signin" replace /> },
 ]);
 
-export const AppRouter: React.FC = () => {
-  return <RouterProvider router={router} />;
-};
+export const AppRouter: React.FC = () => <RouterProvider router={router} />;
