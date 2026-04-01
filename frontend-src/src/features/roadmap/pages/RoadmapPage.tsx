@@ -906,7 +906,7 @@ export default function RoadmapPage() {
 
     const fetchLessons = async () => {
       setIsLoadingLessons(true);
-      let result = await pdfService.getLessons(pdfId);
+      let result = await pdfService.getLessons(pdfId, user?.id ?? '');
 
       // If no cached lessons exist, generate them (requires userId)
       if (!result.success && user?.id) {

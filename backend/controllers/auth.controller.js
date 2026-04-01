@@ -209,7 +209,7 @@ const forgotPassword = async (req, res) => {
 
     // Send password reset email via Supabase
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password`,
+      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/create-new-password`,
     });
 
     if (error) {

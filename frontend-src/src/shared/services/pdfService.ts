@@ -102,7 +102,7 @@ export async function generateLessons(
   return res.json();
 }
 
-export async function getLessons(pdfId: string): Promise<LessonSetResult> {
-  const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}`);
+export async function getLessons(pdfId: string, userId: string): Promise<LessonSetResult> {
+  const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`);
   return res.json();
 }
