@@ -5,10 +5,10 @@ import type { DocumentItem, SortMode, TypeFilter } from '../types';
 
 // Mock data — preserved until DocumentsContext wires in (Batch B)
 const mockDocuments: DocumentItem[] = [
-  { id: 1, title: 'Testing Techniques', subtitle: 'Testing techniques in test case development', type: 'book', lastOpened: '2026-02-10', coverImage: '/assets/images/testing.png' },
-  { id: 2, title: 'Research Draft', subtitle: 'Reading preview text', type: 'report', lastOpened: '2026-02-18', coverImage: '/assets/images/research.jpg' },
-  { id: 3, title: 'Meeting Summary', subtitle: 'Sprint call highlights', type: 'report', lastOpened: '2026-01-27', coverImage: '/assets/images/meeting.jpg' },
-  { id: 4, title: 'Design System', subtitle: 'Component library documentation', type: 'book', lastOpened: '2026-02-15', coverImage: '/assets/images/design.png' },
+  { id: 1, filename: 'testing-techniques.pdf', title: 'Testing Techniques', subtitle: 'Testing techniques in test case development', type: 'book', lastOpened: '2026-02-10', coverImage: '/assets/images/testing.png', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
+  { id: 2, filename: 'research-draft.pdf', title: 'Research Draft', subtitle: 'Reading preview text', type: 'report', lastOpened: '2026-02-18', coverImage: '/assets/images/research.jpg', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
+  { id: 3, filename: 'meeting-summary.pdf', title: 'Meeting Summary', subtitle: 'Sprint call highlights', type: 'report', lastOpened: '2026-01-27', coverImage: '/assets/images/meeting.jpg', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
+  { id: 4, filename: 'design-system.pdf', title: 'Design System', subtitle: 'Component library documentation', type: 'book', lastOpened: '2026-02-15', coverImage: '/assets/images/design.png', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
 ];
 
 interface ReadingSectionProps {
@@ -54,7 +54,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
   }, [sortMode, typeFilter, debouncedSearch]);
 
   const getSortLabel = () => ({ recent: 'Most Recent', oldest: 'Oldest', 'a-z': 'A-Z', 'z-a': 'Z-A' }[sortMode] ?? 'Most Recent');
-  const getTypeLabel = () => ({ all: 'Type', book: 'Book', report: 'Report' }[typeFilter] ?? 'Type');
+  const getTypeLabel = () => ({ all: 'Type', book: 'Book', report: 'Report', pdf: 'PDF' }[typeFilter] ?? 'Type');
 
   const isFiltered = debouncedSearch.length >= 1;
   const total = mockDocuments.filter((d) => typeFilter === 'all' || d.type === typeFilter).length;
