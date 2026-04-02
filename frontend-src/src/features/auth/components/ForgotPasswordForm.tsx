@@ -1,7 +1,7 @@
-import React, { useState } from "react";
-import { Input } from "../../../shared/components/ui/Input";
-import { Button } from "../../../shared/components/ui/Button";
-import type { ForgotPasswordFormData } from "../types";
+import React, { useState } from 'react';
+import { Input } from '../../../shared/components/ui/Input';
+import { Button } from '../../../shared/components/ui/Button';
+import type { ForgotPasswordFormData } from '../types';
 
 interface ForgotPasswordFormProps {
   onSubmit: (data: ForgotPasswordFormData) => void;
@@ -9,91 +9,54 @@ interface ForgotPasswordFormProps {
   isLoading?: boolean;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({
   onSubmit,
   onSignInClick,
   isLoading = false,
 }) => {
-  const [formData, setFormData] = useState<ForgotPasswordFormData>({
-    email: "",
-  });
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Invalid email format";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | undefined>(undefined);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      onSubmit(formData);
+    if (!email.trim()) {
+      setError('Email is required.');
+      return;
     }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({
-      ...prev,
-      email: e.target.value,
-    }));
-    // Clear error when user starts typing
-    if (errors.email) {
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors.email;
-        return newErrors;
-      });
+    if (!EMAIL_RE.test(email)) {
+      setError('Enter a valid email address.');
+      return;
     }
+    setError(undefined);
+    onSubmit({ email });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full space-y-4">
-      {/* Email Input */}
-      <div className="space-y-1">
-        <Input
-          type="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={handleChange}
-          required
-          autoComplete="email"
-          disabled={isLoading}
-        />
-        {errors.email && (
-          <p className="text-sm text-red-500">{errors.email}</p>
-        )}
-      </div>
+    <form onSubmit={handleSubmit} className="w-full space-y-5">
+      <Input
+        type="email"
+        placeholder="Your email address"
+        value={email}
+        onChange={(e) => {
+          setEmail(e.target.value);
+          if (error) setError(undefined);
+        }}
+        error={error}
+        autoComplete="email"
+        disabled={isLoading}
+      />
 
-      {/* Recovery Instructions */}
-      <p className="text-sm text-text-secondary pt-2 select-none">
-        Enter the email address associated with your account and we'll send you a link to reset your password.
-      </p>
-
-      {/* Send Reset Link Button */}
-      <Button
-        type="submit"
-        variant="primary"
-        className="w-full mt-6 select-none"
-        isLoading={isLoading}
-      >
+      <Button type="submit" variant="primary" className="w-full" isLoading={isLoading}>
         Send Reset Link
       </Button>
 
-      {/* Back to Sign In Link */}
-      <div className="text-center text-sm text-text-secondary pt-2">
+      <div className="text-center">
         <button
           type="button"
           onClick={onSignInClick}
-          className="text-primary hover:text-primary-dark font-normal transition-colors cursor-pointer disabled:cursor-not-allowed select-none"
+          className="text-sm text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary transition-colors cursor-pointer"
           disabled={isLoading}
         >
           Back to Sign In
