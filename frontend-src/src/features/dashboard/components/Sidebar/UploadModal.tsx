@@ -13,6 +13,8 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
+  const MAX_SIZE = 52_428_800; // 50 MB
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -21,8 +23,16 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   };
 
   const uploadFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       setError('Only PDF files are supported.');
+      return;
+    }
+    if (file.size > MAX_SIZE) {
+      setError(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum is 50 MB.`);
+      return;
+    }
+    if (!file.name.trim()) {
+      setError('File name cannot be empty.');
       return;
     }
     if (!token) {
