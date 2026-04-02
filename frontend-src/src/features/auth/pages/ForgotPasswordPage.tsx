@@ -18,13 +18,13 @@ export const ForgotPasswordPage: React.FC = () => {
 
   if (submitted) {
     return (
-      <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen w-full bg-[#F5F5F5] dark:bg-[#0f172a] flex items-center justify-center p-4 transition-colors">
         <div className="w-full max-w-lg">
-          <div className="bg-card border rounded-2xl border-gray-100 shadow-md px-12 py-12 text-center">
-            <h1 className="text-3xl text-gray-800 font-medium mb-4 select-none">
+          <div className="bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-white/10 rounded-2xl shadow-md px-12 py-12 text-center transition-colors">
+            <h1 className="text-3xl text-gray-800 dark:text-gray-100 font-medium mb-4 select-none">
               Check your inbox
             </h1>
-            <p className="text-text-secondary mb-6 select-none">
+            <p className="text-gray-500 dark:text-gray-400 mb-6 select-none">
               If an account exists for that email, a password reset link has been sent.
             </p>
             <button
@@ -40,11 +40,11 @@ export const ForgotPasswordPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen w-full bg-[#F5F5F5] dark:bg-[#0f172a] flex items-center justify-center p-4 transition-colors">
       <div className="w-full max-w-lg">
-        <div className="bg-card border rounded-2xl border-gray-100 shadow-md px-12 py-12">
+        <div className="bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-white/10 rounded-2xl shadow-md px-12 py-12 transition-colors">
           <div className="mb-6">
-            <h1 className="text-4xl text-gray-800 font-medium mb-2 tracking-normal leading-tight select-none">
+            <h1 className="text-4xl text-gray-800 dark:text-gray-100 font-medium mb-2 tracking-normal leading-tight select-none">
               Reset your password
             </h1>
           </div>

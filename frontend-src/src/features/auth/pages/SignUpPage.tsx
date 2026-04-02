@@ -22,14 +22,14 @@ export const SignUpPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen w-full bg-[#F5F5F5] dark:bg-[#0f172a] flex items-center justify-center p-4 transition-colors">
       <div className="w-full max-w-lg">
-        <div className="bg-card border rounded-2xl border-gray-100 shadow-md px-12 py-12">
+        <div className="bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-white/10 rounded-2xl shadow-md px-12 py-12 transition-colors">
           <div className="mb-8">
-            <h1 className="text-[34px] text-gray-800 font-medium mb-2 tracking-normal leading-tight select-none">
+            <h1 className="text-[34px] text-gray-800 dark:text-gray-100 font-medium mb-2 tracking-normal leading-tight select-none">
               Create your account
             </h1>
-            <p className="text-[15px] text-text-secondary font-normal select-none">
+            <p className="text-[15px] text-gray-500 dark:text-gray-400 font-normal select-none">
               Already have an account?{' '}
               <button
                 onClick={() => navigate('/signin')}

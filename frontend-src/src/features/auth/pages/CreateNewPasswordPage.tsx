@@ -15,8 +15,6 @@ export const CreateNewPasswordPage: React.FC = () => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Supabase appends the reset token to the URL hash after the email link is clicked.
-  // Format: /create-new-password#access_token=xxx&type=recovery&...
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.replace('#', ''));
     setAccessToken(params.get('access_token'));
@@ -25,8 +23,8 @@ export const CreateNewPasswordPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     if (password !== confirmPassword) {
@@ -51,10 +49,10 @@ export const CreateNewPasswordPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-lg border border-gray-100 p-10">
-        <h1 className="text-4xl font-medium text-gray-800 select-none">Create new password</h1>
-        <p className="mt-2 text-base text-text-secondary select-none">Enter your new password below</p>
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5] dark:bg-[#0f172a] px-4 transition-colors">
+      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#1e293b] shadow-lg border border-gray-100 dark:border-white/10 p-10 transition-colors">
+        <h1 className="text-4xl font-medium text-gray-800 dark:text-gray-100 select-none">Create new password</h1>
+        <p className="mt-2 text-base text-gray-500 dark:text-gray-400 select-none">Enter your new password below</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4 select-none">
           <Input
@@ -67,7 +65,7 @@ export const CreateNewPasswordPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                className="hover:text-text-primary transition-colors focus:outline-hidden cursor-pointer"
+                className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors focus:outline-none cursor-pointer"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -85,7 +83,7 @@ export const CreateNewPasswordPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowConfirm((v) => !v)}
-                className="hover:text-text-primary transition-colors focus:outline-hidden cursor-pointer"
+                className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors focus:outline-none cursor-pointer"
                 aria-label={showConfirm ? 'Hide password' : 'Show password'}
               >
                 {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
