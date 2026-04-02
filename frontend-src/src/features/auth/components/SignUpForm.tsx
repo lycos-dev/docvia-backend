@@ -3,6 +3,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { Input } from '../../../shared/components/ui/Input';
 import { Button } from '../../../shared/components/ui/Button';
 import { Checkbox } from '../../../shared/components/ui/Checkbox';
+import { useTheme } from '../../../shared/contexts/ThemeContext';
 import type { SignUpFormData } from '../types';
 
 interface SignUpFormProps {
@@ -28,7 +29,8 @@ function getStrength(pw: string): { score: number; label: string; color: string 
   return { score: 3, label: 'Strong', color: '#22C55E' };
 }
 
-export const SignUpForm: React.FC<SignUpFormProps> = ({ onSubmit, isLoading = false }) => {
+export const SignUpForm: React.FC<SignUpFormProps> = ({ onSubmit, onSignInClick, isLoading = false }) => {
+  const { theme } = useTheme();
   const [formData, setFormData] = useState<SignUpFormData>({
     email: '',
     username: '',
@@ -147,7 +149,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSubmit, isLoading = fa
                   key={level}
                   className="h-1 flex-1 rounded-full transition-colors duration-300"
                   style={{
-                    backgroundColor: strength.score >= level ? strength.color : '#E5E7EB',
+                    backgroundColor: strength.score >= level ? strength.color : theme === 'dark' ? '#334155' : '#E5E7EB',
                   }}
                 />
               ))}
@@ -207,6 +209,18 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSubmit, isLoading = fa
       <Button type="submit" variant="primary" className="w-full mt-6" isLoading={isLoading}>
         Create Account
       </Button>
+
+      <div className="text-center text-sm text-gray-500 dark:text-gray-400 select-none">
+        Already have an account?{' '}
+        <button
+          type="button"
+          onClick={onSignInClick}
+          className="text-primary hover:text-primary-dark font-medium transition-colors cursor-pointer disabled:cursor-not-allowed"
+          disabled={isLoading}
+        >
+          Sign In
+        </button>
+      </div>
     </form>
   );
 };
