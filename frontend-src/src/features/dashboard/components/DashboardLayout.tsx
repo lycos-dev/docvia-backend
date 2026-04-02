@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
 import Sidebar from "./Sidebar";
-import TopBar from "./TopBar";
 
 interface Props {
   children: ReactNode;
@@ -14,8 +13,7 @@ export default function DashboardLayout({ children }: Props) {
 
         {/* Add left margin to account for fixed sidebar */}
         <div className="flex-1 ml-64 px-6 py-6 xl:px-10 overflow-y-auto">
-          <TopBar />
-          <div className="mt-6">{children}</div>
+          {children}
         </div>
       </div>
     </div>

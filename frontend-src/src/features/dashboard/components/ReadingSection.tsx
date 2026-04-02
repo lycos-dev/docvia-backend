@@ -39,7 +39,12 @@ const mockDocuments: DocumentItem[] = [
   },
 ];
 
-export default function ReadingSection() {
+interface ReadingSectionProps {
+  searchTerm?: string;
+  onSearchClear?: () => void;
+}
+
+export default function ReadingSection(_props: ReadingSectionProps) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
