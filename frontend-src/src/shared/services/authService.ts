@@ -80,3 +80,11 @@ export async function logout(token: string): Promise<SimpleResult> {
   const res = await apiPost('/logout', {}, token);
   return res.json();
 }
+
+export async function getGoogleAuthUrl(): Promise<{ success: boolean; url?: string; error?: string }> {
+  const res = await fetch(`${BASE}/google`);
+  if (res.redirected) {
+    return { success: true, url: res.url };
+  }
+  return res.json();
+}
