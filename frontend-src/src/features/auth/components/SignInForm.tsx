@@ -87,6 +87,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({
             className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors focus:outline-none cursor-pointer disabled:cursor-not-allowed"
             tabIndex={-1}
             aria-label={showPassword ? 'Hide password' : 'Show password'}
+            disabled={isLoading}
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
