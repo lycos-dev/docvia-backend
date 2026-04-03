@@ -15,7 +15,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
   const { documents, isLoading } = useDocuments();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [typeFilter] = useState<TypeFilter>('all');
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
@@ -50,7 +50,6 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
   }, [documents, sortMode, typeFilter, debouncedSearch]);
 
   const getSortLabel = () => ({ recent: 'Most Recent', oldest: 'Oldest', 'a-z': 'A-Z', 'z-a': 'Z-A' }[sortMode] ?? 'Most Recent');
-  const getTypeLabel = () => ({ all: 'Type', book: 'Book', report: 'Report', pdf: 'PDF' }[typeFilter] ?? 'Type');
 
   const isFiltered = debouncedSearch.length >= 1;
   const total = documents.filter((d) => typeFilter === 'all' || d.type === typeFilter).length;
@@ -104,27 +103,6 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
                   <button key={mode} onClick={() => { setSortMode(mode); setSortDropdownOpen(false); }}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
                     {{ recent: 'Most Recent', oldest: 'Oldest', 'a-z': 'A-Z', 'z-a': 'Z-A' }[mode]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Type Filter Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => { setTypeDropdownOpen(!typeDropdownOpen); setSortDropdownOpen(false); }}
-              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1 cursor-pointer"
-            >
-              {getTypeLabel()}
-              <ChevronDown size={14} className={`transition-transform ${typeDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {typeDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
-                {(['all', 'book', 'report'] as TypeFilter[]).map((f) => (
-                  <button key={f} onClick={() => { setTypeFilter(f); setTypeDropdownOpen(false); }}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors capitalize cursor-pointer">
-                    {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
                   </button>
                 ))}
               </div>
