@@ -77,9 +77,11 @@ export async function uploadPDF(file: File, token: string): Promise<UploadResult
   return safeJson<UploadResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
-export async function listPDFs(): Promise<PDFFile[]> {
+export async function listPDFs(token?: string): Promise<PDFFile[]> {
   try {
-    const res = await fetch(`${BASE}/list`);
+    const res = await fetch(`${BASE}/list`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     const json = await safeJson<{ success: boolean; data?: unknown[] }>(res, { success: false });
     if (!json.success || !Array.isArray(json.data)) return [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,11 +109,15 @@ export async function deletePDF(
 
 export async function generateLessons(
   pdfId: string,
-  userId: string
+  userId: string,
+  token?: string
 ): Promise<LessonSetResult> {
   const res = await fetch(`${BASE}/lessons/generate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ pdfId, userId }),
   });
   return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });

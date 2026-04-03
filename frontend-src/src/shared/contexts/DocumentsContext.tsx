@@ -1,8 +1,17 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
+import * as pdfService from '../services/pdfService';
 import type { DocumentItem } from '../../features/dashboard/types';
 
 const STORAGE_KEY = (userId: string) => `docvia-documents-${userId}`;
+
+const EMPTY_PROGRESS: DocumentItem['progress'] = {
+  completedLessons: 0,
+  totalLessons: 0,
+  percentage: 0,
+  lastAccessedAt: null,
+  streakDays: 0,
+};
 
 interface DocumentsContextValue {
   documents: DocumentItem[];
@@ -15,7 +24,7 @@ interface DocumentsContextValue {
 const DocumentsContext = createContext<DocumentsContextValue | null>(null);
 
 export function DocumentsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,20 +34,66 @@ export function DocumentsProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
       return;
     }
+
     setIsLoading(true);
+
+    // Load local metadata (thumbnails, progress saved by this user)
+    let local: DocumentItem[] = [];
     try {
       const stored = localStorage.getItem(STORAGE_KEY(user.id));
-      setDocuments(stored ? (JSON.parse(stored) as DocumentItem[]) : []);
+      local = stored ? (JSON.parse(stored) as DocumentItem[]) : [];
     } catch {
-      setDocuments([]);
+      local = [];
     }
-    setIsLoading(false);
-  }, [user?.id]);
+
+    // Fetch the global backend list so every account sees every PDF
+    pdfService.listPDFs(token ?? undefined).then((backendFiles) => {
+      if (backendFiles.length === 0) {
+        // Backend unreachable — fall back to local cache
+        setDocuments(local);
+        setIsLoading(false);
+        return;
+      }
+
+      const localByFilename = new Map(local.map((d) => [d.filename, d]));
+
+      // Merge: backend is source of truth for which files exist;
+      // local cache supplies thumbnail / progress metadata
+      const merged: DocumentItem[] = backendFiles.map((f, idx) => {
+        const cached = localByFilename.get(f.filename);
+        return cached ?? {
+          id: Date.now() + idx,
+          filename: f.filename,
+          title: f.name,
+          subtitle: '',
+          type: 'pdf' as const,
+          lastOpened: f.uploadedAt,
+          coverImage: null,
+          firstPageThumbnail: null,
+          progress: EMPTY_PROGRESS,
+        };
+      });
+
+      // Persist merged list so it's available offline
+      try {
+        localStorage.setItem(STORAGE_KEY(user.id), JSON.stringify(merged));
+      } catch { /* ignore storage quota errors */ }
+
+      setDocuments(merged);
+      setIsLoading(false);
+    }).catch(() => {
+      // Backend unreachable — use local cache
+      setDocuments(local);
+      setIsLoading(false);
+    });
+  }, [user?.id, token]);
 
   const persist = useCallback(
     (docs: DocumentItem[]) => {
       if (user?.id) {
-        localStorage.setItem(STORAGE_KEY(user.id), JSON.stringify(docs));
+        try {
+          localStorage.setItem(STORAGE_KEY(user.id), JSON.stringify(docs));
+        } catch { /* ignore */ }
       }
     },
     [user?.id]

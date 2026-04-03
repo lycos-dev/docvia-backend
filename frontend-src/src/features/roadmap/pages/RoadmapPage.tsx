@@ -900,7 +900,7 @@ export default function RoadmapPage() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
   const { documentId } = useParams<{ documentId: string }>();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const pdfId = documentId ?? null;
 
   const [modules, setModules] = useState<Module[]>(MODULES);
@@ -922,11 +922,8 @@ export default function RoadmapPage() {
         }
         return;
       }
-      // Lessons are shared across all accounts — userId left empty until backend scopes them per-user
-      let result = await pdfService.getLessons(pdfId, '');
-      if (!result.success) {
-        result = await pdfService.generateLessons(pdfId, '');
-      }
+      // Call generate directly (matches old behavior) — pass userId and auth token
+      const result = await pdfService.generateLessons(pdfId, user?.id ?? '', token ?? undefined);
       if (cancelled) return;
       if (result.success && result.data && result.data.lessons?.length > 0) {
         setModules(mapLessonsToModules(result.data.lessons, result.data.title));
@@ -948,7 +945,7 @@ export default function RoadmapPage() {
       }
     });
     return () => { cancelled = true; };
-  }, [pdfId, user?.id, retryKey]);
+  }, [pdfId, user?.id, token, retryKey]);
 
   if (loadingState === 'loading') {
     return (
