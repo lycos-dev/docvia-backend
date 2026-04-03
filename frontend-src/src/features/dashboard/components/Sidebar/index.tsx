@@ -1,54 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronRight, Home, FileText, Settings, Upload, Map } from 'lucide-react';
+import { ChevronRight, Home, FileText, Settings, Upload } from 'lucide-react';
 import NavItem from './NavItem';
 import FileRow from './FileRow';
 import UserCard from './UserCard';
 import UploadModal from './UploadModal';
-import * as pdfService from '../../../../shared/services/pdfService';
+import { useDocuments } from '../../../../shared/contexts/DocumentsContext';
 import type { UploadedFile } from '../../types/sidebar.types';
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { documents } = useDocuments();
   const [isFileBrowserOpen, setIsFileBrowserOpen] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [files, setFiles] = useState<UploadedFile[]>([]);
 
   const navItems = [
     { icon: <Home size={16} />, label: 'Dashboard', path: '/dashboard' },
-    { icon: <Map size={16} />, label: 'Roadmap', path: '/roadmap' },
     { icon: <FileText size={16} />, label: 'Progress', path: '/progress' },
     { icon: <Settings size={16} />, label: 'Settings', path: '/settings' },
   ];
 
-  const fetchFiles = () => {
-    pdfService.listPDFs().then((pdfs) => {
-      setFiles(
-        pdfs.map((p) => ({
-          id: p.filename,
-          filename: p.filename,
-          name: p.name,
-          uploadedAt: p.uploadedAt,
-          sizeLabel: p.sizeLabel,
-          type: 'pdf' as const,
-        }))
-      );
-    });
-  };
+  const files: UploadedFile[] = documents.map((doc) => ({
+    id: String(doc.id),
+    filename: doc.filename,
+    name: doc.title,
+    uploadedAt: doc.lastOpened,
+    sizeLabel: '',
+    type: 'pdf' as const,
+  }));
 
-  useEffect(() => {
-    fetchFiles();
-  }, []);
-
-  const handleUploadClose = (refreshNeeded?: boolean) => {
+  const handleUploadClose = () => {
     setIsUploadModalOpen(false);
-    if (refreshNeeded) fetchFiles();
   };
 
   const handleFileClick = (file: UploadedFile) => {
-    navigate(`/roadmap?pdfId=${encodeURIComponent(file.filename)}`);
+    // FIX: use filename (backend storage key) not numeric id
+    // TODO (backend): if lessons become per-user, switch back to file.id
+    // and update the backend to scope lesson records by userId
+    navigate(`/roadmap/${encodeURIComponent(file.filename)}`);
   };
 
   return (

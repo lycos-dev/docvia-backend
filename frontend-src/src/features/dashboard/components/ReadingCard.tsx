@@ -1,20 +1,38 @@
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { DocumentItem } from "../types";
+import { cn } from "../../../shared/utils/cn";
+import { useDocuments } from "../../../shared/contexts/DocumentsContext";
 
 interface ReadingCardProps {
   document: DocumentItem;
   viewMode: "grid" | "list";
 }
 
+function daysAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (diff === 0) return "Last opened today";
+  if (diff === 1) return "Last opened yesterday";
+  return `Last opened ${diff} days ago`;
+}
+
 export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
+  const navigate = useNavigate();
+  const { removeDocument, updateDocument } = useDocuments();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(document.title);
+  const [titleError, setTitleError] = useState<string | null>(null);
+
+  const { progress } = document;
 
   const handleCardClick = () => {
     if (!isEditingTitle) {
-      console.log("Opening document:", document.title);
+      // FIX: use filename (backend storage key) not numeric id
+      // TODO (backend): if lessons become per-user, switch back to document.id
+      // and update the backend to scope lesson records by userId
+      navigate(`/roadmap/${encodeURIComponent(document.filename)}`);
     }
   };
 
@@ -30,22 +48,90 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
   };
 
   const handleSaveTitle = () => {
-    console.log("Saving new title:", editedTitle);
+    const trimmed = editedTitle.trim();
+    if (trimmed.length < 1) {
+      setTitleError('Title cannot be empty.');
+      return;
+    }
+    if (trimmed.length > 100) {
+      setTitleError('Title must be 100 characters or fewer.');
+      return;
+    }
+    if (editedTitle !== trimmed) {
+      setTitleError('Title cannot have leading or trailing spaces.');
+      return;
+    }
+    setTitleError(null);
+    updateDocument(document.filename, { title: trimmed });
     setIsEditingTitle(false);
   };
 
   const handleCancelEdit = () => {
     setEditedTitle(document.title);
+    setTitleError(null);
     setIsEditingTitle(false);
   };
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm(`Are you sure you want to delete "${document.title}"?`)) {
-      console.log("Deleting document:", document.id);
+      removeDocument(document.filename);
     }
     setMenuOpen(false);
   };
+
+  /** Renders the progress status line below the title */
+  function ProgressStatus() {
+    if (!progress || progress.totalLessons === 0) {
+      return (
+        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">
+          {document.subtitle}
+        </p>
+      );
+    }
+    if (progress.percentage === 100) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium mt-1">
+          ✓ Completed
+        </span>
+      );
+    }
+    if (progress.percentage === 0) {
+      return (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Not started
+        </p>
+      );
+    }
+    return (
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        {progress.completedLessons} of {progress.totalLessons} lessons · {progress.percentage}%
+      </p>
+    );
+  }
+
+  /** Renders the "last opened" line */
+  function LastAccessed() {
+    if (!progress?.lastAccessedAt) return null;
+    return (
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+        {daysAgo(progress.lastAccessedAt)}
+      </p>
+    );
+  }
+
+  /** Progress bar overlay — sits at bottom of the image container */
+  function ProgressBar() {
+    if (!progress || progress.totalLessons === 0) return null;
+    return (
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200/60 dark:bg-gray-700/60">
+        <div
+          className="h-full bg-gradient-to-r from-[#3B82F6] to-[#6366F1] transition-all duration-300"
+          style={{ width: `${progress.percentage}%` }}
+        />
+      </div>
+    );
+  }
 
   // Grid View
   if (viewMode === "grid") {
@@ -83,6 +169,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                 </div>
               </div>
             )}
+            <ProgressBar />
           </div>
 
           {/* Content */}
@@ -93,14 +180,22 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                   <input
                     type="text"
                     value={editedTitle}
-                    onChange={(e) => setEditedTitle(e.target.value)}
-                    className="w-full px-2 py-1 text-sm font-semibold border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
+                    onChange={(e) => { setEditedTitle(e.target.value); setTitleError(null); }}
+                    className={cn(
+                      "w-full px-2 py-1 text-sm font-semibold border rounded focus:outline-none focus:ring-2 dark:bg-gray-700 dark:text-gray-200",
+                      titleError
+                        ? "border-red-500 focus:ring-red-500"
+                        : "border-blue-500 focus:ring-blue-500"
+                    )}
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleSaveTitle();
                       if (e.key === "Escape") handleCancelEdit();
                     }}
                   />
+                  {titleError && (
+                    <p className="text-xs text-red-500 mt-1">{titleError}</p>
+                  )}
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={handleSaveTitle}
@@ -121,9 +216,8 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                   <h4 className="font-semibold text-gray-700 dark:text-gray-200 truncate">
                     {document.title}
                   </h4>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">
-                    {document.subtitle}
-                  </p>
+                  <ProgressStatus />
+                  <LastAccessed />
                 </>
               )}
             </div>
@@ -173,7 +267,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                 Delete
               </button>
             </div>
-            
+
             {/* Backdrop */}
             <div
               className="fixed inset-0 z-40"
@@ -217,6 +311,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
               </svg>
             </div>
           )}
+          <ProgressBar />
         </div>
 
         {/* Content */}
@@ -227,14 +322,22 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                 <input
                   type="text"
                   value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  className="w-full px-2 py-1 text-sm font-semibold border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
+                  onChange={(e) => { setEditedTitle(e.target.value); setTitleError(null); }}
+                  className={cn(
+                    "w-full px-2 py-1 text-sm font-semibold border rounded focus:outline-none focus:ring-2 dark:bg-gray-700 dark:text-gray-200",
+                    titleError
+                      ? "border-red-500 focus:ring-red-500"
+                      : "border-blue-500 focus:ring-blue-500"
+                  )}
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleSaveTitle();
                     if (e.key === "Escape") handleCancelEdit();
                   }}
                 />
+                {titleError && (
+                  <p className="text-xs text-red-500 mt-1">{titleError}</p>
+                )}
                 <div className="flex gap-2 mt-2">
                   <button
                     onClick={handleSaveTitle}
@@ -255,9 +358,8 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                 <h4 className="font-semibold text-gray-700 dark:text-gray-200 truncate">
                   {document.title}
                 </h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1 mt-1">
-                  {document.subtitle}
-                </p>
+                <ProgressStatus />
+                <LastAccessed />
               </>
             )}
           </div>
@@ -307,7 +409,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
               Delete
             </button>
           </div>
-          
+
           {/* Backdrop */}
           <div
             className="fixed inset-0 z-40"

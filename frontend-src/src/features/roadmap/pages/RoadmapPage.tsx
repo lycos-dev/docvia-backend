@@ -920,9 +920,15 @@ export default function RoadmapPage() {
         }
         return;
       }
-      let result = await pdfService.getLessons(pdfId, user?.id ?? '');
-      if (!result.success && user?.id) {
-        result = await pdfService.generateLessons(pdfId, user.id);
+      // TODO (backend): lessons are currently global (shared across all accounts).
+      // Once the backend scopes lessons per-user, restore userId here:
+      //   let result = await pdfService.getLessons(pdfId, user?.id ?? '');
+      //   if (!result.success && user?.id) {
+      //     result = await pdfService.generateLessons(pdfId, user.id);
+      //   }
+      let result = await pdfService.getLessons(pdfId, '');
+      if (!result.success) {
+        result = await pdfService.generateLessons(pdfId, '');
       }
       if (cancelled) return;
       if (result.success && result.data) {
