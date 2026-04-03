@@ -4,8 +4,6 @@ package-lock.json
 yarn.lock
 docs/
 
-
-
 # Environment variables
 .env
 .claude
@@ -35,6 +33,7 @@ coverage/
 /frontend/
 
 #Other Files
+docs/superpowers/
 API_DOCS.md
 CLAUDE_CODE_PROMPT.md
 CLAUDE.md
