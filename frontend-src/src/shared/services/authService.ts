@@ -23,6 +23,17 @@ export interface SimpleResult {
   error?: string;
 }
 
+// Safely parse JSON — returns a fallback error object if the body is empty or non-JSON
+async function safeJson<T>(res: Response, fallback: T): Promise<T> {
+  try {
+    const text = await res.text();
+    if (!text) return fallback;
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 async function apiPost(
   path: string,
   body: Record<string, unknown>,
@@ -46,7 +57,7 @@ async function apiGet(path: string, token: string): Promise<Response> {
 
 export async function login(email: string, password: string): Promise<AuthResult> {
   const res = await apiPost('/login', { email, password });
-  return res.json();
+  return safeJson<AuthResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function register(
@@ -55,12 +66,12 @@ export async function register(
   username?: string
 ): Promise<AuthResult> {
   const res = await apiPost('/register', { email, password, username });
-  return res.json();
+  return safeJson<AuthResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function forgotPassword(email: string): Promise<SimpleResult> {
   const res = await apiPost('/forgot-password', { email });
-  return res.json();
+  return safeJson<SimpleResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function resetPassword(
@@ -68,17 +79,17 @@ export async function resetPassword(
   newPassword: string
 ): Promise<SimpleResult> {
   const res = await apiPost('/reset-password', { token, newPassword });
-  return res.json();
+  return safeJson<SimpleResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function getProfile(token: string): Promise<AuthResult> {
   const res = await apiGet('/profile', token);
-  return res.json();
+  return safeJson<AuthResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function logout(token: string): Promise<SimpleResult> {
   const res = await apiPost('/logout', {}, token);
-  return res.json();
+  return safeJson<SimpleResult>(res, { success: false });
 }
 
 export async function getGoogleAuthUrl(): Promise<{ success: boolean; url?: string; error?: string }> {
@@ -86,5 +97,5 @@ export async function getGoogleAuthUrl(): Promise<{ success: boolean; url?: stri
   if (res.redirected) {
     return { success: true, url: res.url };
   }
-  return res.json();
+  return safeJson(res, { success: false, error: 'Server did not return a response.' });
 }

@@ -40,6 +40,17 @@ export interface LessonSetResult {
   message?: string;
 }
 
+// Safely parse JSON — returns a fallback if the body is empty or non-JSON
+async function safeJson<T>(res: Response, fallback: T): Promise<T> {
+  try {
+    const text = await res.text();
+    if (!text) return fallback;
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -63,20 +74,24 @@ export async function uploadPDF(file: File, token: string): Promise<UploadResult
     headers: { Authorization: `Bearer ${token}` },
     body: form,
   });
-  return res.json();
+  return safeJson<UploadResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function listPDFs(): Promise<PDFFile[]> {
-  const res = await fetch(`${BASE}/list`);
-  const json = await res.json();
-  if (!json.success || !Array.isArray(json.data)) return [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return json.data.map((raw: any): PDFFile => ({
-    filename: raw.name,
-    name: toDisplayName(raw.name),
-    uploadedAt: raw.created_at ?? '',
-    sizeLabel: raw.metadata?.size ? formatSize(raw.metadata.size) : '',
-  }));
+  try {
+    const res = await fetch(`${BASE}/list`);
+    const json = await safeJson<{ success: boolean; data?: unknown[] }>(res, { success: false });
+    if (!json.success || !Array.isArray(json.data)) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return json.data.map((raw: any): PDFFile => ({
+      filename: raw.name,
+      name: toDisplayName(raw.name),
+      uploadedAt: raw.created_at ?? '',
+      sizeLabel: raw.metadata?.size ? formatSize(raw.metadata.size) : '',
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function deletePDF(
@@ -87,7 +102,7 @@ export async function deletePDF(
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });
-  return res.json();
+  return safeJson<{ success: boolean }>(res, { success: false });
 }
 
 export async function generateLessons(
@@ -99,10 +114,10 @@ export async function generateLessons(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pdfId, userId }),
   });
-  return res.json();
+  return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function getLessons(pdfId: string, userId: string): Promise<LessonSetResult> {
   const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`);
-  return res.json();
+  return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
 }

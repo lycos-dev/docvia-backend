@@ -1,5 +1,16 @@
 const BASE = '/api/pdf';
 
+// Safely parse JSON — returns a fallback if the body is empty or non-JSON
+async function safeJson<T>(res: Response, fallback: T): Promise<T> {
+  try {
+    const text = await res.text();
+    if (!text) return fallback;
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -61,7 +72,7 @@ export async function sendChat(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pdfId, segmentTitle: lessonTitle, segmentContent: lessonContent, question, history }),
   });
-  return res.json();
+  return safeJson<ChatResponse>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function generateQuiz(
@@ -77,7 +88,7 @@ export async function generateQuiz(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ segmentTitle, segmentContent, documentTitle, taskType, count, previousQuestions }),
   });
-  return res.json();
+  return safeJson<MicrotaskGenerateResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function evaluateAnswer(
@@ -91,7 +102,7 @@ export async function evaluateAnswer(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, userAnswer, correctAnswer, questionType }),
   });
-  return res.json();
+  return safeJson<MicrotaskEvaluateResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function deepExplain(
@@ -105,14 +116,14 @@ export async function deepExplain(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pdfId, lessonId, lessonTitle, lessonContent }),
   });
-  return res.json();
+  return safeJson<DeepExplainResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function loadProgress(pdfId: string, userId: string): Promise<ProgressResult> {
   const res = await fetch(
     `${BASE}/progress/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`
   );
-  return res.json();
+  return safeJson<ProgressResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function saveProgress(
@@ -126,7 +137,7 @@ export async function saveProgress(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ pdfId, userId, lessonId }),
   });
-  return res.json();
+  return safeJson<{ success: boolean }>(res, { success: false });
 }
 
 export async function fetchDictionary(word: string): Promise<{ word: string; pos: string; def: string } | null> {

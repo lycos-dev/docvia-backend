@@ -7,4 +7,14 @@ export default defineConfig({
     outDir: '../frontend',
     emptyOutDir: true,
   },
+  server: {
+    // Forward /api requests to the Express backend so the Vite dev server
+    // and the backend can run on different ports without CORS issues.
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
 })
