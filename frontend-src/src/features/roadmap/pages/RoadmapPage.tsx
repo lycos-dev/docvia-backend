@@ -934,7 +934,9 @@ export default function RoadmapPage() {
         setLoadingState('error');
       }
     };
-    fetchLessons();
+    fetchLessons().catch(() => {
+      if (!cancelled) setLoadingState('error');
+    });
     return () => { cancelled = true; };
   }, [pdfId, user?.id, retryKey]);
 
