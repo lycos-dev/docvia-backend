@@ -1,0 +1,149 @@
+const BASE = '/api/pdf';
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatResponse {
+  success: boolean;
+  reply?: string;
+  error?: string;
+}
+
+export interface MicrotaskQuestion {
+  type: 'multiple_choice' | 'true_false' | 'identification' | 'essay' | 'short_answer';
+  question: string;
+  options: string[];             // for MC / T-F
+  correctAnswer?: string;
+  hint?: string;
+  explanation?: string;
+}
+
+export interface MicrotaskGenerateResult {
+  success: boolean;
+  tasks?: MicrotaskQuestion[];
+  error?: string;
+}
+
+export interface MicrotaskEvaluateResult {
+  success: boolean;
+  isCorrect?: boolean;
+  feedback?: string;
+  correctAnswer?: string;
+  error?: string;
+}
+
+export interface DeepExplainResult {
+  success: boolean;
+  keyConcepts?: string;
+  examples?: string;
+  commonMistakes?: string;
+  furtherReading?: string;
+  error?: string;
+}
+
+export interface ProgressResult {
+  success: boolean;
+  completedIds?: number[];
+  error?: string;
+}
+
+export async function sendChat(
+  pdfId: string,
+  lessonTitle: string,
+  lessonContent: string,
+  question: string,
+  history: ChatMessage[]
+): Promise<ChatResponse> {
+  const res = await fetch(`${BASE}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfId, segmentTitle: lessonTitle, segmentContent: lessonContent, question, history }),
+  });
+  return res.json();
+}
+
+export async function generateQuiz(
+  segmentTitle: string,
+  segmentContent: string,
+  documentTitle: string,
+  taskType: string,
+  count: number,
+  previousQuestions: string[]
+): Promise<MicrotaskGenerateResult> {
+  const res = await fetch(`${BASE}/microtask/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ segmentTitle, segmentContent, documentTitle, taskType, count, previousQuestions }),
+  });
+  return res.json();
+}
+
+export async function evaluateAnswer(
+  question: string,
+  userAnswer: string,
+  correctAnswer: string,
+  questionType: string
+): Promise<MicrotaskEvaluateResult> {
+  const res = await fetch(`${BASE}/microtask/evaluate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, userAnswer, correctAnswer, questionType }),
+  });
+  return res.json();
+}
+
+export async function deepExplain(
+  pdfId: string,
+  lessonId: string,
+  lessonTitle: string,
+  lessonContent: string
+): Promise<DeepExplainResult> {
+  const res = await fetch(`${BASE}/lessons/deep-explain`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfId, lessonId, lessonTitle, lessonContent }),
+  });
+  return res.json();
+}
+
+export async function loadProgress(pdfId: string, userId: string): Promise<ProgressResult> {
+  const res = await fetch(
+    `${BASE}/progress/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`
+  );
+  return res.json();
+}
+
+export async function saveProgress(
+  pdfId: string,
+  userId: string,
+  lessonId: string,
+  token: string
+): Promise<{ success: boolean }> {
+  const res = await fetch(`${BASE}/progress`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ pdfId, userId, lessonId }),
+  });
+  return res.json();
+}
+
+export async function fetchDictionary(word: string): Promise<{ word: string; pos: string; def: string } | null> {
+  try {
+    const res = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data[0]) return null;
+    const entry = data[0];
+    const m = (entry.meanings || [])[0];
+    if (!m) return null;
+    const def = m.definitions?.[0]?.definition ?? '';
+    if (!def) return null;
+    return { word: entry.word, pos: m.partOfSpeech ?? '', def };
+  } catch {
+    return null;
+  }
+}
