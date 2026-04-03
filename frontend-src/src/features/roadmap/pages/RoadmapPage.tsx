@@ -904,9 +904,11 @@ export default function RoadmapPage() {
   const pdfId = documentId ?? null;
 
   const [modules, setModules] = useState<Module[]>(MODULES);
-  const [loadingState, setLoadingState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadingState, setLoadingState] = useState<'loading' | 'ready'>('loading');
   const [apiResolved, setApiResolved] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [fallbackDismissed, setFallbackDismissed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -926,16 +928,24 @@ export default function RoadmapPage() {
         result = await pdfService.generateLessons(pdfId, '');
       }
       if (cancelled) return;
-      if (result.success && result.data) {
+      if (result.success && result.data && result.data.lessons?.length > 0) {
         setModules(mapLessonsToModules(result.data.lessons, result.data.title));
-        setApiResolved(true);
-        setLoadingState('ready');
+        setUsingFallback(false);
       } else {
-        setLoadingState('error');
+        // Backend unavailable or returned no lessons — show mock roadmap so the user isn't blocked
+        setModules(MODULES);
+        setUsingFallback(true);
       }
+      setApiResolved(true);
+      setLoadingState('ready');
     };
     fetchLessons().catch(() => {
-      if (!cancelled) setLoadingState('error');
+      if (!cancelled) {
+        setModules(MODULES);
+        setUsingFallback(true);
+        setApiResolved(true);
+        setLoadingState('ready');
+      }
     });
     return () => { cancelled = true; };
   }, [pdfId, user?.id, retryKey]);
@@ -947,35 +957,6 @@ export default function RoadmapPage() {
         apiResolved={apiResolved}
         onReady={() => setLoadingState('ready')}
       />
-    );
-  }
-
-  if (loadingState === 'error') {
-    return (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center"
-        style={{ background: isDark ? '#0f172a' : '#F0F2F5', fontFamily: 'Poppins, sans-serif' }}
-      >
-        <div className="text-center space-y-4">
-          <p className="text-2xl font-semibold" style={{ color: isDark ? '#F1F5F9' : '#111827' }}>
-            Oops! Couldn&apos;t load the roadmap.
-          </p>
-          <p style={{ color: isDark ? '#94A3B8' : '#6B7280' }}>The server might be unavailable.</p>
-          <button
-            onClick={() => { setLoadingState('loading'); setApiResolved(false); setRetryKey((k) => k + 1); }}
-            className="px-6 py-3 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl font-medium transition-colors"
-          >
-            Retry
-          </button>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="block mx-auto text-sm underline"
-            style={{ color: isDark ? '#94A3B8' : '#6B7280' }}
-          >
-            Back to Dashboard
-          </button>
-        </div>
-      </div>
     );
   }
 
@@ -1067,6 +1048,33 @@ export default function RoadmapPage() {
             </span>
           </button>
         </header>
+
+        {/* ── Fallback banner (shown when backend lessons are unavailable) ── */}
+        {usingFallback && !fallbackDismissed && (
+          <div
+            className="shrink-0 flex items-center gap-3 px-5 py-2.5 text-sm"
+            style={{
+              background: isDark ? '#1e3a5f' : '#EFF6FF',
+              borderBottom: `1px solid ${isDark ? '#2563EB55' : '#BFDBFE'}`,
+              color: isDark ? '#93C5FD' : '#1D4ED8',
+            }}
+          >
+            <span>⚠️ Lesson data unavailable — showing demo roadmap.</span>
+            <button
+              onClick={() => { setLoadingState('loading'); setApiResolved(false); setUsingFallback(false); setRetryKey((k) => k + 1); }}
+              className="underline font-medium hover:opacity-80 transition-opacity"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => setFallbackDismissed(true)}
+              className="ml-auto hover:opacity-80 transition-opacity"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* ── Desktop: horizontal road (md and above) ───────────────── */}
         <div className="hidden md:flex flex-1 overflow-hidden">
