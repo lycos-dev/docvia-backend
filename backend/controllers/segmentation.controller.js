@@ -1,19 +1,18 @@
 /**
  * GROQ SEGMENTATION CONTROLLER
  * AI-Powered Document Segmentation + Per-Segment Content Storage + Chat
+ * Uses makeGroqCall() so every request automatically cycles through all
+ * available API keys when one hits a 429 rate-limit.
  */
 
 const Groq = require('groq-sdk');
 const pdfjs = require('pdfjs-dist');
 const { supabase } = require('../config/supabase');
-const { getKeyForUser } = require('../services/groqkeymanager.service');
+const { makeGroqCall } = require('../services/groqkeymanager.service');
 
-/** Returns a Groq client for the given key, falling back to the env key. */
 function getGroq(apiKey) {
-  return new Groq({ apiKey: apiKey || process.env.GROQ_API_KEY });
+  return new Groq({ apiKey });
 }
-
-const getUserGroqKey = getKeyForUser;
 
 // ─── PDF TEXT EXTRACTION ───────────────────────────────────────────────────────
 
@@ -55,7 +54,7 @@ function sliceContentByPages(pages, startPage, endPage) {
 
 // ─── GROQ SEGMENTATION ────────────────────────────────────────────────────────
 
-async function segmentWithGroq(extractedText, pages, fileName, apiKey) {
+async function segmentWithGroq(extractedText, pages, fileName, userId) {
   const preview = extractedText.length > 12000
     ? extractedText.substring(0, 12000) + '\n... (truncated)'
     : extractedText;
@@ -63,11 +62,12 @@ async function segmentWithGroq(extractedText, pages, fileName, apiKey) {
   const pageCount = pages.length;
   console.log(`[Groq] Segmenting: ${fileName} (${pageCount} pages, ${preview.length} chars preview)`);
 
-  const message = await getGroq(apiKey).chat.completions.create({
-    messages: [
-      {
-        role: 'user',
-        content: `You are an expert educational content analyst. Analyse this academic document and divide it into 4–8 logical learning segments. Each segment should cover a coherent topic from the document.
+  const message = await makeGroqCall(userId, key =>
+    getGroq(key).chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: `You are an expert educational content analyst. Analyse this academic document and divide it into 4–8 logical learning segments. Each segment should cover a coherent topic from the document.
 
 DOCUMENT NAME: "${fileName}"
 TOTAL PAGES: ${pageCount}
@@ -103,13 +103,14 @@ JSON FORMAT:
   "totalSegments": 4,
   "estimatedTotalTime": "45–60 minutes"
 }`,
-      },
-    ],
-    model: 'llama-3.3-70b-versatile',
-    max_tokens: 2048,
-    temperature: 0.5,
-    stream: false,
-  });
+        },
+      ],
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 2048,
+      temperature: 0.5,
+      stream: false,
+    })
+  );
 
   const raw = message.choices[0].message.content
     .replace(/```json\n?/g, '')
@@ -237,7 +238,6 @@ async function segmentPDFEndpoint(req, res) {
 
     console.log(`\n[Segmentation] Starting for ${pdfId}`);
 
-    // Return cached result if it exists
     const existing = await getExistingSegments(pdfId, userId);
     if (existing) {
       console.log('[Cache] Returning cached segmentation');
@@ -258,10 +258,7 @@ async function segmentPDFEndpoint(req, res) {
       });
     }
 
-    // Get user's Groq key
-    const groqKey = await getUserGroqKey(userId);
-
-    // Download PDF from Supabase Storage (user-scoped path)
+    // Download PDF from Supabase Storage
     console.log('[Storage] Downloading PDF...');
     const { data: pdfData, error: downloadError } = await supabase
       .storage
@@ -272,7 +269,7 @@ async function segmentPDFEndpoint(req, res) {
       return res.status(500).json({ success: false, error: 'Failed to download PDF', details: downloadError.message });
     }
 
-    // Extract text page-by-page
+    // Extract text
     console.log('[PDF] Extracting text...');
     let extraction;
     try {
@@ -285,11 +282,11 @@ async function segmentPDFEndpoint(req, res) {
       return res.status(200).json({ success: true, message: 'Segmented with fallback (text extraction failed)', data: { ...fallback, id: saved.id } });
     }
 
-    // Ask Groq for segment boundaries
+    // Ask Groq for segment boundaries — makeGroqCall handles key cycling on 429
     console.log('[AI] Requesting segment boundaries from Groq...');
     let segmentData;
     try {
-      segmentData = await segmentWithGroq(extraction.fullText, extraction.pages, pdfId, groqKey);
+      segmentData = await segmentWithGroq(extraction.fullText, extraction.pages, pdfId, userId);
     } catch (groqError) {
       console.warn('[AI] Groq failed, using fallback:', groqError.message);
       segmentData = fallbackSegmentation(pdfId, extraction.pages);
@@ -391,14 +388,14 @@ async function chatWithSegmentEndpoint(req, res) {
       return res.status(400).json({ success: false, error: 'Missing required fields', required: ['question', 'segmentTitle'] });
     }
 
-    const groqKey = userId ? await getUserGroqKey(userId) : undefined;
     console.log(`[Chat] "${segmentTitle}": ${question.substring(0, 80)}`);
 
-    const message = await getGroq(groqKey).chat.completions.create({
-      messages: [
-        {
-          role:    'system',
-          content: `You are a friendly AI tutor helping a student study "${documentTitle || 'this document'}".
+    const message = await makeGroqCall(userId, key =>
+      getGroq(key).chat.completions.create({
+        messages: [
+          {
+            role:    'system',
+            content: `You are a friendly AI tutor helping a student study "${documentTitle || 'this document'}".
 
 The student is currently on the segment: "${segmentTitle}"
 
@@ -411,14 +408,15 @@ Your role:
 - If asked to quiz the student, generate 2–3 questions based on the content
 - Keep answers under 300 words unless more detail is genuinely needed
 - Be encouraging and supportive`,
-        },
-        { role: 'user', content: question },
-      ],
-      model:       'llama-3.3-70b-versatile',
-      max_tokens:  600,
-      temperature: 0.7,
-      stream:      false,
-    });
+          },
+          { role: 'user', content: question },
+        ],
+        model:       'llama-3.3-70b-versatile',
+        max_tokens:  600,
+        temperature: 0.7,
+        stream:      false,
+      })
+    );
 
     res.status(200).json({ success: true, answer: message.choices[0].message.content });
   } catch (error) {
@@ -440,7 +438,6 @@ async function generateMicrotaskEndpoint(req, res) {
       return res.status(400).json({ success: false, error: 'Missing required fields', required: ['segmentTitle', 'segmentContent'] });
     }
 
-    const groqKey  = userId ? await getUserGroqKey(userId) : undefined;
     const safeCount = Math.min(Math.max(parseInt(count) || 1, 1), 10);
     console.log(`[Microtask] Generating ${safeCount} task(s) for "${segmentTitle}" (type: ${taskType})`);
 
@@ -457,11 +454,12 @@ async function generateMicrotaskEndpoint(req, res) {
     ];
     const angle = angles[Math.floor(Math.random() * angles.length)];
 
-    const message = await getGroq(groqKey).chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert educational assessment designer creating quiz questions for a student studying "${documentTitle || 'a document'}".
+    const message = await makeGroqCall(userId, key =>
+      getGroq(key).chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert educational assessment designer creating quiz questions for a student studying "${documentTitle || 'a document'}".
 
 RULES:
 - Base every question entirely on the provided content.
@@ -484,17 +482,18 @@ For identification:
 [{"type":"identification","question":"...","modelAnswer":"Key term or phrase.","keyTerms":["term"],"hint":"Nudge."}]
 For essay:
 [{"type":"essay","question":"...","modelAnswer":"3-4 sentence ideal response.","keyTerms":["term1","term2"],"hint":"Nudge."}]`,
-        },
-        {
-          role: 'user',
-          content: `Segment: "${segmentTitle}"\nTask type: ${taskType}\nCount: ${safeCount}\n\nContent:\n${content}`,
-        },
-      ],
-      model:       'llama-3.3-70b-versatile',
-      max_tokens:  safeCount * 450,
-      temperature: 0.92,
-      stream:      false,
-    });
+          },
+          {
+            role: 'user',
+            content: `Segment: "${segmentTitle}"\nTask type: ${taskType}\nCount: ${safeCount}\n\nContent:\n${content}`,
+          },
+        ],
+        model:       'llama-3.3-70b-versatile',
+        max_tokens:  safeCount * 450,
+        temperature: 0.92,
+        stream:      false,
+      })
+    );
 
     const raw   = message.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
     const tasks = JSON.parse(raw);
@@ -541,14 +540,14 @@ async function evaluateMicrotaskEndpoint(req, res) {
       });
     }
 
-    const groqKey = userId ? await getUserGroqKey(userId) : undefined;
     const content = (segmentContent || '').substring(0, 2000);
 
-    const message = await getGroq(groqKey).chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `You are a fair and encouraging teacher evaluating a student's short-answer response.
+    const message = await makeGroqCall(userId, key =>
+      getGroq(key).chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: `You are a fair and encouraging teacher evaluating a student's short-answer response.
 
 Evaluate based on:
 1. Whether the core concept is correct (most important)
@@ -565,10 +564,10 @@ Return ONLY valid JSON:
   "highlight": "The strongest part of their answer (1 phrase)",
   "improve": "One specific thing they could add or correct (1 sentence, or null if score >= 85)"
 }`,
-        },
-        {
-          role: 'user',
-          content: `Segment: "${segmentTitle}"
+          },
+          {
+            role: 'user',
+            content: `Segment: "${segmentTitle}"
 Question: ${task.question}
 Model answer: ${task.modelAnswer}
 Key terms expected: ${(task.keyTerms || []).join(', ')}
@@ -576,13 +575,14 @@ Student's answer: "${userAnswer}"
 
 Reference content:
 ${content}`,
-        },
-      ],
-      model:       'llama-3.3-70b-versatile',
-      max_tokens:  300,
-      temperature: 0.4,
-      stream:      false,
-    });
+          },
+        ],
+        model:       'llama-3.3-70b-versatile',
+        max_tokens:  300,
+        temperature: 0.4,
+        stream:      false,
+      })
+    );
 
     const raw    = message.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
     const result = JSON.parse(raw);

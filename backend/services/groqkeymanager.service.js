@@ -3,7 +3,9 @@
  *
  * Reads all keys from GROQ_API_KEY (comma-separated) in .env.
  * Assigns one key per user on registration (round-robin).
- * Looks up a user's assigned key for every AI call.
+ * On every AI call, starts from the user's assigned key and automatically
+ * cycles to the next key if a 429 rate-limit error is encountered,
+ * trying all available keys before giving up.
  *
  * .env format:
  *   GROQ_API_KEY=key1,key2,key3,...
@@ -26,16 +28,10 @@ if (GROQ_KEYS.length === 0) {
 
 // ─── Assign a key to a new user ───────────────────────────────────────────────
 
-/**
- * Called on user registration.
- * Counts existing user_profiles rows to pick the next key in rotation,
- * then upserts a profile row with that key index.
- */
 async function assignKeyToUser(userId) {
   try {
     if (GROQ_KEYS.length === 0) return;
 
-    // Count how many profiles already exist to determine next index
     const { count, error: countError } = await supabase
       .from('user_profiles')
       .select('*', { count: 'exact', head: true });
@@ -64,16 +60,10 @@ async function assignKeyToUser(userId) {
   }
 }
 
-// ─── Get a user's assigned key ────────────────────────────────────────────────
+// ─── Get a user's assigned starting key index ─────────────────────────────────
 
-/**
- * Returns the Groq API key assigned to this user.
- * Falls back to key[0] if no profile row exists.
- */
-async function getKeyForUser(userId) {
-  if (GROQ_KEYS.length === 0) return undefined;
-  if (!userId) return GROQ_KEYS[0];
-
+async function getUserKeyIndex(userId) {
+  if (!userId) return 0;
   try {
     const { data, error } = await supabase
       .from('user_profiles')
@@ -82,16 +72,80 @@ async function getKeyForUser(userId) {
       .maybeSingle();
 
     if (error || !data || data.groq_key_index == null) {
-      console.warn(`[GroqKeyManager] No key index for user ${userId}, using key[0]`);
-      return GROQ_KEYS[0];
+      console.warn(`[GroqKeyManager] No key index for user ${userId}, using index 0`);
+      return 0;
     }
 
-    const index = data.groq_key_index % GROQ_KEYS.length;
-    return GROQ_KEYS[index];
+    return data.groq_key_index % GROQ_KEYS.length;
   } catch (err) {
-    console.error('[GroqKeyManager] getKeyForUser error:', err.message);
-    return GROQ_KEYS[0];
+    console.error('[GroqKeyManager] getUserKeyIndex error:', err.message);
+    return 0;
   }
 }
 
-module.exports = { assignKeyToUser, getKeyForUser, GROQ_KEYS };
+// ─── Simple lookup (kept for backwards compat) ────────────────────────────────
+
+async function getKeyForUser(userId) {
+  if (GROQ_KEYS.length === 0) return undefined;
+  const index = await getUserKeyIndex(userId);
+  return GROQ_KEYS[index];
+}
+
+// ─── Rate-limit detection ─────────────────────────────────────────────────────
+
+function isRateLimitError(err) {
+  const msg = (err?.message || '').toLowerCase();
+  return (
+    msg.includes('429') ||
+    msg.includes('rate_limit_exceeded') ||
+    msg.includes('rate limit') ||
+    msg.includes('tokens per day') ||
+    msg.includes('tokens per minute')
+  );
+}
+
+// ─── Main: call Groq with automatic key cycling on 429 ───────────────────────
+
+/**
+ * Executes callFn(apiKey) using the user's assigned key.
+ * If that key returns a 429 rate-limit error, automatically tries the next
+ * key in the pool, cycling through all available keys before throwing.
+ *
+ * Usage:
+ *   const result = await makeGroqCall(userId, key =>
+ *     new Groq({ apiKey: key }).chat.completions.create({ ... })
+ *   );
+ */
+async function makeGroqCall(userId, callFn) {
+  if (GROQ_KEYS.length === 0) {
+    throw new Error('No Groq API keys configured.');
+  }
+
+  const startIndex = await getUserKeyIndex(userId);
+
+  for (let i = 0; i < GROQ_KEYS.length; i++) {
+    const index = (startIndex + i) % GROQ_KEYS.length;
+    const key   = GROQ_KEYS[index];
+
+    try {
+      const result = await callFn(key);
+      if (i > 0) {
+        console.log(`[GroqKeyManager] ✅ Succeeded with key index ${index} (after ${i} skip(s))`);
+      }
+      return result;
+    } catch (err) {
+      if (isRateLimitError(err)) {
+        if (i < GROQ_KEYS.length - 1) {
+          console.warn(`[GroqKeyManager] ⚠️  Key index ${index} rate-limited — cycling to next key...`);
+          continue;
+        } else {
+          console.error('[GroqKeyManager] ❌ All keys are rate-limited.');
+          throw new Error('All Groq API keys are currently rate-limited. Please try again later.');
+        }
+      }
+      throw err;
+    }
+  }
+}
+
+module.exports = { assignKeyToUser, getKeyForUser, makeGroqCall, GROQ_KEYS };

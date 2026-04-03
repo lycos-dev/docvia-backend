@@ -10,9 +10,6 @@
 const pdfParse = require('pdf-parse');
 const { supabase } = require('../config/supabase');
 const { generateLessonsFromText, deepExplainLesson } = require('../services/lessonAI.service');
-const { getKeyForUser } = require('../services/groqkeymanager.service');
-
-const getUserGroqKey = getKeyForUser;
 
 // ─── PDF TEXT EXTRACTION ──────────────────────────────────────────────────────
 
@@ -102,9 +99,6 @@ async function generateLessonsEndpoint(req, res) {
       return res.status(200).json({ success: true, cached: true, message: 'Lessons loaded from cache', data: formatResponse(cached) });
     }
 
-    // Get user's Groq key
-    const groqKey = await getUserGroqKey(userId);
-
     // Download PDF from Supabase Storage
     console.log('[Lessons] Downloading PDF from storage...');
     const { data: pdfBlob, error: dlErr } = await supabase
@@ -139,9 +133,9 @@ async function generateLessonsEndpoint(req, res) {
       });
     }
 
-    // Run AI pipeline with user's key
+    // Run AI pipeline — passes userId so makeGroqCall can cycle keys automatically
     console.log('[Lessons] Running AI lesson pipeline...');
-    const lessonData = await generateLessonsFromText(extraction.fullText, pdfId, groqKey);
+    const lessonData = await generateLessonsFromText(extraction.fullText, pdfId, userId);
 
     // Persist to DB
     console.log('[Lessons] Saving to database...');
@@ -223,8 +217,8 @@ async function deepExplainEndpoint(req, res) {
   console.log(`[Lessons] Deep explain: "${title}"`);
 
   try {
-    const groqKey = userId ? await getUserGroqKey(userId) : undefined;
-    const result  = await deepExplainLesson({ title, explanation, key_points, documentTitle }, groqKey);
+    // Pass userId so makeGroqCall can cycle keys if needed
+    const result = await deepExplainLesson({ title, explanation, key_points, documentTitle }, userId);
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
     console.error('[Lessons] Deep explain error:', err.message);
