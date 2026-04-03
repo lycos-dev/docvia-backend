@@ -23,7 +23,7 @@ interface Lesson {
 interface Module {
   id: string;
   title: string;
-  chapter: number;
+  segment: number;
   isCompleted: boolean;
   isCurrent: boolean;
   isLocked: boolean;
@@ -35,34 +35,28 @@ interface Module {
   pinEmoji: string;
 }
 
-// ─── Lesson → Module mapping ─────────────────────────────────────────────────
+// ─── Lesson → Segment mapping (1 lesson per segment) ────────────────────────
 const PIN_COLORS_LIST = ['#EF4444', '#F97316', '#22C55E', '#3B82F6', '#8B5CF6'];
 const PIN_EMOJIS_LIST = ['🎯', '📦', '⚡', '🔍', '🏆'];
 
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const result: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) result.push(arr.slice(i, i + size));
-  return result;
-}
-
-function mapLessonsToModules(lessons: BackendLesson[], docTitle: string): Module[] {
-  return chunkArray(lessons, 5).map((group, idx) => ({
+function mapLessonsToModules(lessons: BackendLesson[], _docTitle: string): Module[] {
+  return lessons.map((lesson, idx) => ({
     id: `m${idx + 1}`,
-    title: idx === 0 ? docTitle : `Part ${idx + 1}`,
-    chapter: idx + 1,
+    title: lesson.title,
+    segment: idx + 1,
     isCompleted: false,
     isCurrent: idx === 0,
     isLocked: idx > 1,
     percentage: 0,
     lessonsCompleted: 0,
-    totalLessons: group.length,
-    lessons: group.map((l) => ({
-      id: String(l.id),
-      title: l.title,
+    totalLessons: 1,
+    lessons: [{
+      id: String(lesson.id),
+      title: lesson.title,
       isCompleted: false,
-      isCurrent: false,
+      isCurrent: idx === 0,
       durationMin: 10,
-    })),
+    }],
     pinColor: PIN_COLORS_LIST[idx % PIN_COLORS_LIST.length],
     pinEmoji: PIN_EMOJIS_LIST[idx % PIN_EMOJIS_LIST.length],
   }));
@@ -71,56 +65,47 @@ function mapLessonsToModules(lessons: BackendLesson[], docTitle: string): Module
 // ─── Data ────────────────────────────────────────────────────────────────────
 const MODULES: Module[] = [
   {
-    id: 'm1', title: 'Testing Fundamentals', chapter: 1,
+    id: 'm1', title: 'What is Software Testing?', segment: 1,
     isCompleted: true, isCurrent: false, isLocked: false,
-    percentage: 100, lessonsCompleted: 3, totalLessons: 3,
+    percentage: 100, lessonsCompleted: 1, totalLessons: 1,
     pinColor: '#EF4444', pinEmoji: '🎯',
     lessons: [
       { id: 'l1', title: 'What is Software Testing?', isCompleted: true,  isCurrent: false, durationMin: 12 },
-      { id: 'l2', title: 'Why Test?',                  isCompleted: true,  isCurrent: false, durationMin: 8  },
-      { id: 'l3', title: 'Testing Lifecycle',          isCompleted: true,  isCurrent: false, durationMin: 15 },
     ],
   },
   {
-    id: 'm2', title: 'Black-Box Techniques', chapter: 2,
+    id: 'm2', title: 'Boundary Value Analysis', segment: 2,
     isCompleted: true, isCurrent: false, isLocked: false,
-    percentage: 100, lessonsCompleted: 2, totalLessons: 2,
+    percentage: 100, lessonsCompleted: 1, totalLessons: 1,
     pinColor: '#F97316', pinEmoji: '📦',
     lessons: [
       { id: 'l4', title: 'Boundary Value Analysis',  isCompleted: true, isCurrent: false, durationMin: 18 },
-      { id: 'l5', title: 'Equivalence Partitioning', isCompleted: true, isCurrent: false, durationMin: 14 },
     ],
   },
   {
-    id: 'm3', title: 'Advanced Techniques', chapter: 3,
+    id: 'm3', title: 'Use Case Testing', segment: 3,
     isCompleted: false, isCurrent: true, isLocked: false,
-    percentage: 67, lessonsCompleted: 2, totalLessons: 3,
+    percentage: 0, lessonsCompleted: 0, totalLessons: 1,
     pinColor: '#22C55E', pinEmoji: '⚡',
     lessons: [
-      { id: 'l6', title: 'Decision Table Testing',   isCompleted: true,  isCurrent: false, durationMin: 20 },
-      { id: 'l7', title: 'State Transition Testing', isCompleted: true,  isCurrent: false, durationMin: 18 },
       { id: 'l8', title: 'Use Case Testing',         isCompleted: false, isCurrent: true,  durationMin: 22 },
     ],
   },
   {
-    id: 'm4', title: 'White-Box Testing', chapter: 4,
+    id: 'm4', title: 'Branch Coverage', segment: 4,
     isCompleted: false, isCurrent: false, isLocked: false,
-    percentage: 0, lessonsCompleted: 0, totalLessons: 4,
+    percentage: 0, lessonsCompleted: 0, totalLessons: 1,
     pinColor: '#3B82F6', pinEmoji: '🔍',
     lessons: [
-      { id: 'l9',  title: 'Statement Coverage', isCompleted: false, isCurrent: false, durationMin: 16 },
       { id: 'l10', title: 'Branch Coverage',    isCompleted: false, isCurrent: false, durationMin: 20 },
-      { id: 'l11', title: 'Path Coverage',      isCompleted: false, isCurrent: false, durationMin: 22 },
-      { id: 'l12', title: 'Condition Coverage', isCompleted: false, isCurrent: false, durationMin: 18, isOptional: true },
     ],
   },
   {
-    id: 'm5', title: 'Mastery & Certification', chapter: 5,
+    id: 'm5', title: 'Certification Test', segment: 5,
     isCompleted: false, isCurrent: false, isLocked: true,
-    percentage: 0, lessonsCompleted: 0, totalLessons: 2,
+    percentage: 0, lessonsCompleted: 0, totalLessons: 1,
     pinColor: '#8B5CF6', pinEmoji: '🏆',
     lessons: [
-      { id: 'l13', title: 'Final Challenge',    isCompleted: false, isCurrent: false, durationMin: 45 },
       { id: 'l14', title: 'Certification Test', isCompleted: false, isCurrent: false, durationMin: 60 },
     ],
   },
@@ -169,11 +154,11 @@ function buildRoadPath(pins: Array<{ x: number; y: number }>): string {
 
 // ─── Map-pin SVG component ───────────────────────────────────────────────────
 function MapPin({
-  x, y, color, emoji, isLocked, isCurrent, chapter,
+  x, y, color, emoji, isLocked, isCurrent, segment,
   onClick,
 }: {
   x: number; y: number; color: string; emoji: string;
-  isLocked: boolean; isCurrent: boolean; chapter: number;
+  isLocked: boolean; isCurrent: boolean; segment: number;
   onClick: () => void;
 }) {
   const pinH = 48;
@@ -228,7 +213,7 @@ function MapPin({
         {isLocked ? '🔒' : emoji}
       </text>
 
-      {/* Chapter number badge (bottom-right of pin) */}
+      {/* Segment number badge (bottom-right of pin) */}
       <circle cx={x + pinR - 4} cy={circY + pinR - 6} r={9}
         fill={isLocked ? '#6B7280' : color} />
       <text
@@ -238,7 +223,7 @@ function MapPin({
         fontFamily="Poppins,sans-serif"
         style={{ userSelect: 'none' }}
       >
-        {chapter}
+        {segment}
       </text>
     </g>
   );
@@ -290,7 +275,7 @@ function ModuleSheet({
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] uppercase tracking-wider" style={{ color: textMuted }}>
-              Chapter {mod.chapter}
+              Segment {mod.segment}
             </p>
             <h3 className="text-[16px] font-bold truncate" style={{ color: textPri }}>
               {mod.title}
@@ -386,7 +371,7 @@ function ModuleSheet({
           <div className="mb-4 rounded-xl px-4 py-3 text-center"
             style={{ background: subBg }}>
             <p className="text-[12px]" style={{ color: textMuted }}>
-              Complete previous modules to unlock this chapter
+              Complete previous segments to unlock this lesson
             </p>
           </div>
         )}
@@ -406,7 +391,7 @@ function ModuleSheet({
             }}
           >
             <Play size={14} fill="white" />
-            {mod.isCompleted ? 'Review Chapter' : 'Continue Learning'}
+            {mod.isCompleted ? 'Review Lesson' : 'Continue Learning'}
           </button>
         ) : (
           <button disabled
@@ -709,7 +694,7 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
                 emoji={mod.pinEmoji}
                 isLocked={mod.isLocked}
                 isCurrent={mod.isCurrent}
-                chapter={mod.chapter}
+                segment={mod.segment}
                 onClick={() => setSelected(mod)}
               />
             ))}
@@ -743,13 +728,13 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
                     opacity={mod.isLocked ? 0.5 : 1}
                   />
 
-                  {/* Chapter number circle */}
+                  {/* Segment number circle */}
                   <circle cx={cx0 + 18} cy={cy0 + 18} r={11}
                     fill={mod.isLocked ? (isDark ? '#374151' : '#9CA3AF') : mod.pinColor} />
                   <text x={cx0 + 18} y={cy0 + 22}
                     textAnchor="middle" fontSize="9" fontWeight="700" fill="white"
                     fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
-                    {mod.chapter}
+                    {mod.segment}
                   </text>
 
                   {/* Title */}
@@ -787,8 +772,8 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
                     </>
                   )}
 
-                  {/* Lesson titles (up to 3) */}
-                  {mod.lessons.slice(0, 3).map((l, li) => (
+                  {/* Single lesson title */}
+                  {mod.lessons.slice(0, 1).map((l, li) => (
                     <text key={l.id}
                       x={cx0 + 12} y={cy0 + 52 + li * 13}
                       fontSize="8.5"
@@ -799,13 +784,6 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
                       {l.title.length > 22 ? l.title.slice(0, 21) + '…' : l.title}
                     </text>
                   ))}
-                  {mod.lessons.length > 3 && (
-                    <text x={cx0 + 12} y={cy0 + 52 + 3 * 13}
-                      fontSize="8" fill={isDark ? '#475569' : '#9CA3AF'}
-                      fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
-                      +{mod.lessons.length - 3} more
-                    </text>
-                  )}
 
                   {/* Car marker */}
                   {mod.isCurrent && (
