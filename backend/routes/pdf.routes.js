@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const multer  = require('multer');
 
-const { uploadPDF, listPDFs, deletePDF, renamePDF } = require('../controllers/pdf.controller');
+const { uploadPDF, listPDFs, deletePDF, renamePDF, getFile } = require('../controllers/pdf.controller');
 const {
   segmentPDFEndpoint,
   getSegmentsEndpoint,
@@ -37,6 +37,7 @@ const upload = multer({ storage, fileFilter, limits: { fileSize: 50 * 1024 * 102
 // ── PDF CRUD ──────────────────────────────────────────────────────────────────
 router.post('/upload', upload.single('pdf'), uploadPDF);
 router.get('/list', listPDFs);
+router.get('/file/:filename', getFile); // stream PDF from Supabase storage to client
 
 // ── SEGMENTATION ──────────────────────────────────────────────────────────────
 router.post('/segment', segmentPDFEndpoint);

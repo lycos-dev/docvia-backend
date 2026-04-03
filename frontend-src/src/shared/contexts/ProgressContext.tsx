@@ -50,7 +50,14 @@ interface ProgressContextValue {
 const ProgressContext = createContext<ProgressContextValue | null>(null);
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  // Use local date components to avoid UTC offset shifting the date (e.g. Philippines UTC+8)
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function localDateISO(d: Date): string {
+  // Returns YYYY-MM-DD in the local timezone (fixes UTC offset shifting the date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[] {
@@ -58,8 +65,7 @@ function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const key = d.toISOString().split('T')[0];
-    result.push((dailyCompletions[key] ?? 0) > 0);
+    result.push((dailyCompletions[localDateISO(d)] ?? 0) > 0);
   }
   return result;
 }
@@ -75,7 +81,7 @@ function computeStreak(
   let currentStreak = 0;
   const d = new Date();
   while (true) {
-    const key = d.toISOString().split('T')[0];
+    const key = localDateISO(d); // local date, not UTC
     if ((dailyCompletions[key] ?? 0) > 0) {
       currentStreak++;
       d.setDate(d.getDate() - 1);

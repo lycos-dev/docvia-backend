@@ -1,9 +1,15 @@
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { DocumentItem } from "../types";
 import { cn } from "../../../shared/utils/cn";
 import { useDocuments } from "../../../shared/contexts/DocumentsContext";
+import { useAuth } from "../../../shared/contexts/AuthContext";
+
+// Set worker once per module load (same as UploadModal)
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface ReadingCardProps {
   document: DocumentItem;
@@ -20,10 +26,43 @@ function daysAgo(iso: string): string {
 export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
   const navigate = useNavigate();
   const { removeDocument, updateDocument } = useDocuments();
+  const { token } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(document.title);
   const [titleError, setTitleError] = useState<string | null>(null);
+
+  // Thumbnail: use cached coverImage if available, otherwise fetch first PDF page via pdfjs
+  const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(document.coverImage ?? null);
+
+  useEffect(() => {
+    if (document.coverImage) {
+      setThumbnailSrc(document.coverImage);
+      return;
+    }
+    if (!token || !document.filename) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pdf = await pdfjsLib.getDocument({
+          url: `/api/pdf/file/${encodeURIComponent(document.filename)}`,
+          httpHeaders: { Authorization: `Bearer ${token}` },
+        }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 0.5 });
+        const canvas = window.document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx || cancelled) return;
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+        if (!cancelled) setThumbnailSrc(canvas.toDataURL('image/jpeg', 0.7));
+      } catch {
+        // no-op — "No preview" placeholder remains if fetch fails
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [document.filename, document.coverImage, token]);
 
   const { progress } = document;
 
@@ -141,9 +180,9 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
         >
           {/* Image Container */}
           <div className="relative w-full h-40 bg-linear-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 overflow-hidden">
-            {document.coverImage ? (
+            {thumbnailSrc ? (
               <img
-                src={document.coverImage}
+                src={thumbnailSrc}
                 alt={document.title}
                 className="w-full h-full object-cover"
               />
@@ -224,7 +263,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
             {!isEditingTitle && (
               <button
                 onClick={handleMenuClick}
-                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative z-10"
+                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative z-10 cursor-pointer"
               >
                 <MoreVertical
                   size={18}
@@ -241,7 +280,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
             <div className="absolute right-4 top-50 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
               <button
                 onClick={handleCardClick}
-                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -251,7 +290,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
               </button>
               <button
                 onClick={handleEditTitle}
-                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <Pencil size={16} />
                 Edit Title
@@ -259,7 +298,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
               <div className="my-1 h-px bg-gray-200 dark:bg-gray-700" />
               <button
                 onClick={handleDelete}
-                className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
+                className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 cursor-pointer"
               >
                 <Trash2 size={16} />
                 Delete
@@ -366,7 +405,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
           {!isEditingTitle && (
             <button
               onClick={handleMenuClick}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative z-10"
+              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative z-10 cursor-pointer"
             >
               <MoreVertical
                 size={18}
@@ -383,7 +422,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
           <div className="absolute right-4 top-1/2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
             <button
               onClick={handleCardClick}
-              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -393,7 +432,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
             </button>
             <button
               onClick={handleEditTitle}
-              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Pencil size={16} />
               Edit Title
@@ -401,7 +440,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
             <div className="my-1 h-px bg-gray-200 dark:bg-gray-700" />
             <button
               onClick={handleDelete}
-              className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
+              className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 cursor-pointer"
             >
               <Trash2 size={16} />
               Delete

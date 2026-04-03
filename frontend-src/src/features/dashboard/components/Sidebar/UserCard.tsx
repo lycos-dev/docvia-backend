@@ -36,7 +36,7 @@ export default function UserCard({ isOpen, onToggle }: UserCardProps) {
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition shrink-0"
+            className="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition shrink-0 cursor-pointer"
           >
             <ChevronDown
               size={16}
@@ -51,16 +51,8 @@ export default function UserCard({ isOpen, onToggle }: UserCardProps) {
           <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 rounded-xl border border-black/10 dark:border-white/10 shadow-lg py-2 z-50">
             <button
               type="button"
-              onClick={() => { navigate('/settings'); onToggle(); }}
-              className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-            >
-              Account Settings
-            </button>
-            <div className="my-1 h-px bg-black/10 dark:bg-white/10" />
-            <button
-              type="button"
               onClick={handleLogout}
-              className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+              className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition cursor-pointer"
             >
               Logout
             </button>

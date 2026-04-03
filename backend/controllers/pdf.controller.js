@@ -311,10 +311,40 @@ const renamePDF = async (req, res) => {
   }
 };
 
+/**
+ * Serve a PDF file stored in Supabase by streaming it back to the client.
+ * @route GET /api/pdf/file/:filename
+ */
+const getFile = async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename) {
+      return res.status(400).json({ success: false, error: 'Filename is required' });
+    }
+
+    const storagePath = filename.startsWith('pdfs/') ? filename : `pdfs/${filename}`;
+
+    const { data, error } = await supabase.storage.from('academic-pdfs').download(storagePath);
+    if (error) {
+      return res.status(404).json({ success: false, error: 'File not found', message: error.message });
+    }
+
+    const buffer = Buffer.from(await data.arrayBuffer());
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (error) {
+    console.error('PDF getFile error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
+  }
+};
+
 module.exports = {
   uploadPDF,
   listPDFs,
   deletePDF,
   renamePDF,
-  validatePDF
+  validatePDF,
+  getFile,
 };

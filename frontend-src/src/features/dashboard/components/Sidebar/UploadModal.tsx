@@ -1,7 +1,31 @@
 import React, { useState } from 'react';
 import { Upload, Loader2 } from 'lucide-react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { useAuth } from '../../../../shared/contexts/AuthContext';
+import { useDocuments } from '../../../../shared/contexts/DocumentsContext';
 import * as pdfService from '../../../../shared/services/pdfService';
+import type { DocumentItem } from '../../types';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
+async function extractPDFThumbnail(file: File): Promise<string | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 0.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    return canvas.toDataURL('image/jpeg', 0.7);
+  } catch {
+    return null;
+  }
+}
 
 interface UploadModalProps {
   onClose: (refreshNeeded?: boolean) => void;
@@ -9,9 +33,11 @@ interface UploadModalProps {
 
 export default function UploadModal({ onClose }: UploadModalProps) {
   const { token } = useAuth();
+  const { addDocument } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
 
   const MAX_SIZE = 52_428_800; // 50 MB
 
@@ -40,10 +66,33 @@ export default function UploadModal({ onClose }: UploadModalProps) {
       return;
     }
     setError(undefined);
+
+    // Extract thumbnail before uploading (fast, runs on the local file)
+    const extracted = await extractPDFThumbnail(file);
+    setThumbnail(extracted);
+
     setIsUploading(true);
     const result = await pdfService.uploadPDF(file, token);
     setIsUploading(false);
     if (result.success) {
+      const newDoc: DocumentItem = {
+        id: Date.now(),
+        filename: result.data!.filename,
+        title: result.data!.originalFilename.replace(/\.pdf$/i, '').replace(/_/g, ' '),
+        subtitle: 'Newly uploaded document',
+        type: 'pdf',
+        lastOpened: new Date().toISOString().split('T')[0],
+        coverImage: extracted,
+        firstPageThumbnail: extracted,
+        progress: {
+          completedLessons: 0,
+          totalLessons: 0,
+          percentage: 0,
+          lastAccessedAt: null,
+          streakDays: 0,
+        },
+      };
+      addDocument(newDoc);
       onClose(true);
     } else {
       setError(result.error ?? 'Upload failed. Please try again.');
@@ -93,17 +142,32 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50'
             }`}
           >
-            {isUploading ? (
+            {thumbnail && !isUploading ? (
+              <div className="relative">
+                <img
+                  src={thumbnail}
+                  alt="PDF preview"
+                  className="mx-auto max-h-48 rounded-lg shadow-md object-contain"
+                />
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium mt-3">
+                  ✓ Preview loaded — uploading…
+                </p>
+              </div>
+            ) : isUploading ? (
               <Loader2 size={48} className="mx-auto mb-4 text-blue-500 animate-spin" />
             ) : (
               <Upload size={48} className={`mx-auto mb-4 ${dragActive ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'}`} />
             )}
-            <p className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {isUploading ? 'Uploading…' : 'Drop your PDF here'}
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-              PDF files only · up to 50 MB
-            </p>
+            {!thumbnail && (
+              <>
+                <p className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {isUploading ? 'Uploading…' : 'Drop your PDF here'}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                  PDF files only · up to 50 MB
+                </p>
+              </>
+            )}
             {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
             <input
               type="file"

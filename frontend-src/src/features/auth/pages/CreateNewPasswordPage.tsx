@@ -3,17 +3,35 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { Input } from '../../../shared/components/ui/Input';
 import { Button } from '../../../shared/components/ui/Button';
+import { useTheme } from '../../../shared/contexts/ThemeContext';
 import * as authService from '../../../shared/services/authService';
 
+function getStrength(pw: string): { score: number; label: string; color: string } {
+  if (!pw) return { score: 0, label: '', color: '' };
+  const checks = [
+    pw.length >= 8,
+    /[A-Z]/.test(pw),
+    /[0-9]/.test(pw),
+    /[^a-zA-Z0-9]/.test(pw),
+  ];
+  const score = checks.filter(Boolean).length;
+  if (score <= 2) return { score: 1, label: 'Weak', color: '#EF4444' };
+  if (score === 3) return { score: 2, label: 'Medium', color: '#F97316' };
+  return { score: 3, label: 'Strong', color: '#22C55E' };
+}
+
 export const CreateNewPasswordPage: React.FC = () => {
+  const { theme } = useTheme();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [error, setError] = useState<string | undefined>(undefined);
+  const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  const strength = getStrength(password);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.replace('#', ''));
@@ -23,28 +41,38 @@ export const CreateNewPasswordPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const newErrors: { password?: string; confirmPassword?: string } = {};
+
     if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
+      newErrors.password = 'Password must be at least 8 characters.';
+    } else if (!/[A-Z]/.test(password)) {
+      newErrors.password = 'Password must contain at least one uppercase letter.';
+    } else if (!/[0-9]/.test(password)) {
+      newErrors.password = 'Password must contain at least one number.';
     }
+
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
+      newErrors.confirmPassword = 'Passwords do not match.';
     }
+
     if (!accessToken) {
-      setError('Reset link is invalid or expired. Please request a new one.');
+      newErrors.confirmPassword = 'Reset link is invalid or expired. Please request a new one.';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
 
-    setError(undefined);
+    setErrors({});
     setIsLoading(true);
-    const result = await authService.resetPassword(accessToken, password);
+    const result = await authService.resetPassword(accessToken as string, password);
     setIsLoading(false);
 
     if (result.success) {
       navigate('/signin');
     } else {
-      setError(result.error ?? 'Failed to reset password. Please request a new reset link.');
+      setErrors({ confirmPassword: result.error ?? 'Failed to reset password. Please request a new reset link.' });
     }
   };
 
@@ -55,29 +83,61 @@ export const CreateNewPasswordPage: React.FC = () => {
         <p className="mt-2 text-base text-gray-500 dark:text-gray-400 select-none">Enter your new password below</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4 select-none">
-          <Input
-            type={showPassword ? 'text' : 'password'}
-            placeholder="New Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={isLoading}
-            rightIcon={
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors focus:outline-none cursor-pointer"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            }
-          />
+          <div>
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="New Password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (errors.password) {
+                  setErrors((prev) => { const n = { ...prev }; delete n.password; return n; });
+                }
+              }}
+              error={errors.password}
+              disabled={isLoading}
+              rightIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="hover:text-gray-700 dark:hover:text-gray-300 transition-colors focus:outline-none cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              }
+            />
+            {password && (
+              <div className="mt-2">
+                <div className="flex gap-1">
+                  {[1, 2, 3].map((level) => (
+                    <div
+                      key={level}
+                      className="h-1 flex-1 rounded-full transition-colors duration-300"
+                      style={{
+                        backgroundColor: strength.score >= level ? strength.color : theme === 'dark' ? '#334155' : '#E5E7EB',
+                      }}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs mt-0.5 font-medium" style={{ color: strength.color }}>
+                  {strength.label}
+                </p>
+              </div>
+            )}
+          </div>
+
           <Input
             type={showConfirm ? 'text' : 'password'}
             placeholder="Confirm Password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            error={error}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              if (errors.confirmPassword) {
+                setErrors((prev) => { const n = { ...prev }; delete n.confirmPassword; return n; });
+              }
+            }}
+            error={errors.confirmPassword}
             disabled={isLoading}
             rightIcon={
               <button
@@ -90,6 +150,7 @@ export const CreateNewPasswordPage: React.FC = () => {
               </button>
             }
           />
+
           <Button type="submit" variant="primary" className="w-full mt-4" isLoading={isLoading}>
             Reset Password
           </Button>

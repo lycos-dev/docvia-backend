@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ChevronRight, Home, FileText, Settings, Upload } from 'lucide-react';
+import { ChevronRight, Home, FileText, Upload } from 'lucide-react';
 import NavItem from './NavItem';
 import FileRow from './FileRow';
 import UserCard from './UserCard';
@@ -19,7 +19,6 @@ export default function Sidebar() {
   const navItems = [
     { icon: <Home size={16} />, label: 'Dashboard', path: '/dashboard' },
     { icon: <FileText size={16} />, label: 'Progress', path: '/progress' },
-    { icon: <Settings size={16} />, label: 'Settings', path: '/settings' },
   ];
 
   const files: UploadedFile[] = documents.map((doc) => ({
@@ -45,8 +44,8 @@ export default function Sidebar() {
       <aside className="w-64 shrink-0 bg-white dark:bg-gray-900 border-r border-black/10 dark:border-white/10 h-screen flex flex-col fixed left-0 top-0 transition-colors">
         <div className="shrink-0 px-5 pt-6 pb-4">
           <div className="flex items-center gap-3 mb-6">
-            <div className="h-12 w-12 rounded-xl overflow-hidden">
-              <img src="/logo.png" alt="Docvia" className="w-full h-full object-contain" />
+            <div className="h-14 w-14 rounded-xl overflow-hidden">
+              <img src="https://raw.githubusercontent.com/Waldric/docvia-frontend/refs/heads/waru-branch/public/assets/favicon/docvia_favicon.png" />
             </div>
             <span className="text-xl font-bold text-gray-600 dark:text-gray-300">Docvia</span>
           </div>
@@ -79,7 +78,7 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => setIsFileBrowserOpen((v) => !v)}
-            className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
+            className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer"
           >
             <ChevronRight
               size={16}

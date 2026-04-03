@@ -7,8 +7,8 @@ import { ForgotPasswordPage } from "../../features/auth/pages/ForgotPasswordPage
 import { CreateNewPasswordPage } from "../../features/auth/pages/CreateNewPasswordPage";
 import DashboardPage from "../../features/dashboard/pages/DashboardPage";
 import ProgressPage from "../../features/dashboard/pages/ProgressPage";
-import SettingsPage from "../../features/dashboard/pages/SettingsPage";
 import RoadmapPage from "../../features/roadmap/pages/RoadmapPage";
+import ReaderPage from "../../features/reader/pages/ReaderPage";
 import DashboardLayout from "../../features/dashboard/components/DashboardLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -27,10 +27,18 @@ const router = createBrowserRouter([
     ),
   },
   {
-    path: "/roadmap",
+    path: "/roadmap/:documentId",
     element: (
       <ProtectedRoute>
         <RoadmapPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/reader/:documentId/:lessonId",
+    element: (
+      <ProtectedRoute>
+        <ReaderPage />
       </ProtectedRoute>
     ),
   },
@@ -39,14 +47,6 @@ const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <DashboardLayout><ProgressPage /></DashboardLayout>
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/settings",
-    element: (
-      <ProtectedRoute>
-        <DashboardLayout><SettingsPage /></DashboardLayout>
       </ProtectedRoute>
     ),
   },

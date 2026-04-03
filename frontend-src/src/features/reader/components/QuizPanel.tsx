@@ -14,11 +14,12 @@ interface QuizPanelProps {
   documentTitle: string;
   lessonTitle: string;
   lessonContent: string;
+  onClose?: () => void;
 }
 
 type PanelState = 'picker' | 'loading' | 'question' | 'result' | 'summary';
 
-export default function QuizPanel({ documentTitle, lessonTitle, lessonContent }: QuizPanelProps) {
+export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, onClose }: QuizPanelProps) {
   const [panelState, setPanelState] = useState<PanelState>('picker');
   const [quizType, setQuizType] = useState('multiple_choice');
   const [quizMode, setQuizMode] = useState<'quick' | 'custom'>('quick');
@@ -113,8 +114,13 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent }:
 
   if (panelState === 'picker') {
     return (
-      <div className="p-4 space-y-4">
-        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">📝 Set Up Your Quiz</h4>
+      <div className="rounded-xl overflow-hidden border-2 border-amber-300 dark:border-amber-700" style={{ animation: 'fadeUp 0.25s ease' }}>
+        <div className="flex items-center justify-between px-5 py-3" style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
+          <h4 className="text-sm font-bold text-white">📝 Take a Quiz</h4>
+          {onClose && <button onClick={onClose} className="text-white/70 hover:text-white text-lg leading-none" aria-label="Close quiz">✕</button>}
+        </div>
+        <div className="p-4 space-y-4 bg-amber-50 dark:bg-[#1c1a10]">
+        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Set Up Your Quiz</h4>
 
         <div>
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2 uppercase tracking-wide">Question Type</p>
@@ -149,9 +155,11 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent }:
         </div>
 
         <button onClick={startQuiz}
-          className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors">
+          className="w-full py-2.5 text-white rounded-xl text-sm font-semibold transition-all hover:-translate-y-0.5"
+          style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
           {quizMode === 'quick' ? '⚡ Start Quick Quiz →' : `🎯 Start ${quizCount}-Question Quiz →`}
         </button>
+        </div>
       </div>
     );
   }

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { Input } from '../../../shared/components/ui/Input';
 import { Button } from '../../../shared/components/ui/Button';
-import { Checkbox } from '../../../shared/components/ui/Checkbox';
 import type { SignInFormData } from '../types';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 
@@ -24,7 +23,6 @@ export const SignInForm: React.FC<SignInFormProps> = ({
   const [formData, setFormData] = useState<SignInFormData>({
     email: '',
     password: '',
-    rememberMe: false,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -143,13 +141,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({
         }
       />
 
-      <div className="flex items-center justify-between pt-1">
-        <Checkbox
-          label="Remember me"
-          checked={formData.rememberMe}
-          onChange={handleChange('rememberMe')}
-          disabled={isLoading}
-        />
+      <div className="flex items-center justify-end pt-1">
         <button
           type="button"
           onClick={onForgotPasswordClick}

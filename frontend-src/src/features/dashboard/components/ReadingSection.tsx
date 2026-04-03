@@ -1,15 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
-import { ChevronDown, Grid2X2, List } from 'lucide-react';
+import { ChevronDown, Grid2X2, List, Upload } from 'lucide-react';
 import ReadingCard from './ReadingCard';
-import type { DocumentItem, SortMode, TypeFilter } from '../types';
+import type { SortMode, TypeFilter } from '../types';
+import { useDocuments } from '../../../shared/contexts/DocumentsContext';
 
-// Mock data — preserved until DocumentsContext wires in (Batch B)
-const mockDocuments: DocumentItem[] = [
-  { id: 1, filename: 'testing-techniques.pdf', title: 'Testing Techniques', subtitle: 'Testing techniques in test case development', type: 'book', lastOpened: '2026-02-10', coverImage: '/assets/images/testing.png', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
-  { id: 2, filename: 'research-draft.pdf', title: 'Research Draft', subtitle: 'Reading preview text', type: 'report', lastOpened: '2026-02-18', coverImage: '/assets/images/research.jpg', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
-  { id: 3, filename: 'meeting-summary.pdf', title: 'Meeting Summary', subtitle: 'Sprint call highlights', type: 'report', lastOpened: '2026-01-27', coverImage: '/assets/images/meeting.jpg', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
-  { id: 4, filename: 'design-system.pdf', title: 'Design System', subtitle: 'Component library documentation', type: 'book', lastOpened: '2026-02-15', coverImage: '/assets/images/design.png', firstPageThumbnail: null, progress: { completedLessons: 0, totalLessons: 0, percentage: 0, lastAccessedAt: null, streakDays: 0 } },
-];
+// Mock data was here for mocking — replaced by DocumentsContext (Task 13 wiring)
 
 interface ReadingSectionProps {
   searchTerm: string;
@@ -17,6 +12,7 @@ interface ReadingSectionProps {
 }
 
 export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSectionProps) {
+  const { documents, isLoading } = useDocuments();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -32,7 +28,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
 
   const filteredAndSortedDocuments = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
-    return mockDocuments
+    return documents
       .filter((doc) => {
         if (typeFilter !== 'all' && doc.type !== typeFilter) return false;
         if (q.length < 1) return true;
@@ -51,13 +47,32 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
           default: return 0;
         }
       });
-  }, [sortMode, typeFilter, debouncedSearch]);
+  }, [documents, sortMode, typeFilter, debouncedSearch]);
 
   const getSortLabel = () => ({ recent: 'Most Recent', oldest: 'Oldest', 'a-z': 'A-Z', 'z-a': 'Z-A' }[sortMode] ?? 'Most Recent');
   const getTypeLabel = () => ({ all: 'Type', book: 'Book', report: 'Report', pdf: 'PDF' }[typeFilter] ?? 'Type');
 
   const isFiltered = debouncedSearch.length >= 1;
-  const total = mockDocuments.filter((d) => typeFilter === 'all' || d.type === typeFilter).length;
+  const total = documents.filter((d) => typeFilter === 'all' || d.type === typeFilter).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <p className="text-sm text-gray-500 dark:text-gray-400">Loading your documents…</p>
+      </div>
+    );
+  }
+
+  if (!isLoading && documents.length === 0 && !isFiltered) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-4">
+        <Upload size={40} className="text-gray-300 dark:text-gray-600" />
+        <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+          No documents yet. Upload a PDF to get started!
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -78,7 +93,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
           <div className="relative">
             <button
               onClick={() => { setSortDropdownOpen(!sortDropdownOpen); setTypeDropdownOpen(false); }}
-              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1"
+              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1 cursor-pointer"
             >
               {getSortLabel()}
               <ChevronDown size={14} className={`transition-transform ${sortDropdownOpen ? 'rotate-180' : ''}`} />
@@ -87,7 +102,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
               <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
                 {(['recent', 'oldest', 'a-z', 'z-a'] as SortMode[]).map((mode) => (
                   <button key={mode} onClick={() => { setSortMode(mode); setSortDropdownOpen(false); }}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
                     {{ recent: 'Most Recent', oldest: 'Oldest', 'a-z': 'A-Z', 'z-a': 'Z-A' }[mode]}
                   </button>
                 ))}
@@ -99,7 +114,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
           <div className="relative">
             <button
               onClick={() => { setTypeDropdownOpen(!typeDropdownOpen); setSortDropdownOpen(false); }}
-              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1"
+              className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1 cursor-pointer"
             >
               {getTypeLabel()}
               <ChevronDown size={14} className={`transition-transform ${typeDropdownOpen ? 'rotate-180' : ''}`} />
@@ -108,7 +123,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
               <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
                 {(['all', 'book', 'report'] as TypeFilter[]).map((f) => (
                   <button key={f} onClick={() => { setTypeFilter(f); setTypeDropdownOpen(false); }}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors capitalize">
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors capitalize cursor-pointer">
                     {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
                   </button>
                 ))}
@@ -119,12 +134,12 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
           {/* View Mode */}
           <div className="flex items-center gap-1 ml-2">
             <button onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-full transition-colors ${viewMode === 'grid' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${viewMode === 'grid' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
               aria-label="Grid view">
               <Grid2X2 size={18} />
             </button>
             <button onClick={() => setViewMode('list')}
-              className={`p-2 rounded-full transition-colors ${viewMode === 'list' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${viewMode === 'list' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
               aria-label="List view">
               <List size={18} />
             </button>
@@ -147,7 +162,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
               </p>
               <button
                 onClick={onSearchClear}
-                className="text-sm text-primary hover:text-primary-dark transition-colors font-medium"
+                className="text-sm text-primary hover:text-primary-dark transition-colors font-medium cursor-pointer"
               >
                 Clear search
               </button>

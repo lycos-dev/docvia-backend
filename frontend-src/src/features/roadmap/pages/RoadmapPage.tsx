@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import RoadmapLoadingPage from './RoadmapLoadingPage';
 import { useAuth } from '../../../shared/contexts/AuthContext';
+import { useProgressContext } from '../../../shared/contexts/ProgressContext';
 import * as pdfService from '../../../shared/services/pdfService';
 import type { BackendLesson } from '../../../shared/services/pdfService';
 import {
@@ -125,32 +126,35 @@ const MODULES: Module[] = [
   },
 ];
 
-const DOCUMENT_TITLE  = 'Testing Techniques';
-const TOTAL_LESSONS   = 12;
-const COMPLETED_COUNT = 5;
-const PROGRESS_PCT    = 42;
+// Mock constants removed — replaced with real data from ProgressContext + modules state
 
-// ─── SVG Road geometry ───────────────────────────────────────────────────────
-// Canvas dimensions
-const C_W = 1100;   // viewBox width
-const C_H = 340;    // viewBox height
+// ─── SVG Road geometry (dynamic — scales with module count) ──────────────────
+const C_H           = 340;   // SVG canvas height (fixed)
+const ROAD_Y_CENTER = 160;   // vertical midpoint
+const WAVE_AMP      = 90;    // peak/valley amplitude
+const PIN_SPACING   = 235;   // horizontal gap between pins
+const MARGIN_X      = 80;    // left/right padding
 
-// The road is a smooth sine-wave cubic bezier path spanning full width
-// It flows: starts mid-left, rises, falls, rises, falls — 5 inflection points
-// One per module
-const ROAD_Y_CENTER = 160; // vertical midpoint of the road zone
-const WAVE_AMP      = 90;  // how far the wave goes above/below center
-
-// Pre-computed pin positions along the wave — X spaced evenly, Y alternates peak/valley
-const PINS: Array<{ x: number; y: number }> = [
-  { x: 80,   y: ROAD_Y_CENTER + WAVE_AMP  },   // ch1 — low (left start)
-  { x: 300,  y: ROAD_Y_CENTER - WAVE_AMP  },   // ch2 — high
-  { x: 550,  y: ROAD_Y_CENTER             },   // ch3 — mid (crossing)
-  { x: 790,  y: ROAD_Y_CENTER - WAVE_AMP  },   // ch4 — high
-  { x: 1020, y: ROAD_Y_CENTER + WAVE_AMP  },   // ch5 — low (right end)
+// Y alternates: low → high → mid → high → low → high → mid → …
+const Y_WAVE = [
+  ROAD_Y_CENTER + WAVE_AMP,  // low
+  ROAD_Y_CENTER - WAVE_AMP,  // high
+  ROAD_Y_CENTER,              // mid crossing
+  ROAD_Y_CENTER - WAVE_AMP,  // high
 ];
 
-// Build a smooth cubic bezier through the pin points
+function buildPins(count: number): Array<{ x: number; y: number }> {
+  return Array.from({ length: count }, (_, i) => ({
+    x: MARGIN_X + i * PIN_SPACING,
+    y: Y_WAVE[i % Y_WAVE.length],
+  }));
+}
+
+function svgCanvasWidth(count: number): number {
+  return MARGIN_X + Math.max(0, count - 1) * PIN_SPACING + MARGIN_X;
+}
+
+// Build a smooth cubic bezier road through an arbitrary set of pins
 function buildRoadPath(pins: Array<{ x: number; y: number }>): string {
   if (pins.length < 2) return '';
   let d = `M ${pins[0].x} ${pins[0].y}`;
@@ -162,8 +166,6 @@ function buildRoadPath(pins: Array<{ x: number; y: number }>): string {
   }
   return d;
 }
-
-const ROAD_PATH = buildRoadPath(PINS);
 
 // ─── Map-pin SVG component ───────────────────────────────────────────────────
 function MapPin({
@@ -564,6 +566,11 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
   // Card info - appears below each pin
   const CARD_INFO_Y = 290; // SVG y where card tops start (below road)
 
+  // Dynamic geometry — recomputed whenever modules list changes
+  const pins      = buildPins(modules.length);
+  const cW        = svgCanvasWidth(modules.length);
+  const roadPath  = buildRoadPath(pins);
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden relative">
       {/* Canvas */}
@@ -584,9 +591,9 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
         >
           {/* ── SVG Road ─────────────────────────────────────────────── */}
           <svg
-            width={C_W}
+            width={cW}
             height={C_H + 280}
-            viewBox={`0 0 ${C_W} ${C_H + 280}`}
+            viewBox={`0 0 ${cW} ${C_H + 280}`}
             style={{ display: 'block', overflow: 'visible' }}
           >
             <defs>
@@ -623,17 +630,17 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
             </defs>
 
             {/* ── Outer glow (completed sections) ─────────────── */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="#22C55E" strokeWidth="64"
               strokeLinecap="round"
               opacity="0.08"
               filter="url(#greenGlow)"
-              strokeDasharray={`${C_W * 0.42} ${C_W}`}
+              strokeDasharray={`${cW * 0.42} ${cW}`}
               strokeDashoffset="0"
             />
 
             {/* ── Road shadow ──────────────────────────────────── */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="rgba(0,0,0,0.35)" strokeWidth="56"
               strokeLinecap="round"
               transform="translate(0,8)"
@@ -642,43 +649,43 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
 
             {/* ── Road body ────────────────────────────────────── */}
             {/* Base (darkest edge — gives 3D depth) */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="#141f30" strokeWidth="58"
               strokeLinecap="round" />
 
             {/* Main surface */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="url(#roadGrad)" strokeWidth="50"
               strokeLinecap="round" />
 
             {/* Completed overlay */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="url(#doneGrad)" strokeWidth="50"
               strokeLinecap="round"
               opacity="0.65"
-              strokeDasharray={`${C_W * 0.42} ${C_W}`}
+              strokeDasharray={`${cW * 0.42} ${cW}`}
             />
 
             {/* Side edge lines (white — lane borders) */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="rgba(255,255,255,0.18)" strokeWidth="52"
               strokeLinecap="round" />
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="url(#roadGrad)" strokeWidth="48"
               strokeLinecap="round" />
 
             {/* Top surface sheen */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="rgba(255,255,255,0.07)" strokeWidth="24"
               strokeLinecap="round" />
 
             {/* Centre dashes */}
-            <path d={ROAD_PATH} fill="none"
+            <path d={roadPath} fill="none"
               stroke="rgba(255,255,255,0.7)" strokeWidth="2.5"
               strokeLinecap="round" strokeDasharray="22 16" />
 
             {/* ── Vertical connector lines (pin → card) ────────── */}
-            {PINS.map((pin, i) => {
+            {pins.map((pin, i) => {
               const lineEndY = CARD_INFO_Y - 8;
               if (pin.y >= lineEndY) return null;
               return (
@@ -696,8 +703,8 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
             {modules.map((mod, i) => (
               <MapPin
                 key={mod.id}
-                x={PINS[i].x}
-                y={PINS[i].y}
+                x={pins[i].x}
+                y={pins[i].y}
                 color={mod.pinColor}
                 emoji={mod.pinEmoji}
                 isLocked={mod.isLocked}
@@ -709,7 +716,7 @@ function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules
 
             {/* ── Info cards (rendered as SVG foreignObject) ────── */}
             {modules.map((mod, i) => {
-              const cx  = PINS[i].x;
+              const cx  = pins[i].x;
               const cw  = 180;
               const ch  = 86;
               const cx0 = cx - cw / 2;
@@ -901,9 +908,11 @@ export default function RoadmapPage() {
   const isDark = theme === 'dark';
   const { documentId } = useParams<{ documentId: string }>();
   const { user, token } = useAuth();
+  const { getDocumentProgress } = useProgressContext();
   const pdfId = documentId ?? null;
 
   const [modules, setModules] = useState<Module[]>(MODULES);
+  const [docTitle, setDocTitle] = useState('');
   const [loadingState, setLoadingState] = useState<'loading' | 'ready'>('loading');
   const [apiResolved, setApiResolved] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -926,6 +935,7 @@ export default function RoadmapPage() {
       const result = await pdfService.generateLessons(pdfId, user?.id ?? '', token ?? undefined);
       if (cancelled) return;
       if (result.success && result.data && result.data.lessons?.length > 0) {
+        setDocTitle(result.data.title);
         setModules(mapLessonsToModules(result.data.lessons, result.data.title));
         setUsingFallback(false);
       } else {
@@ -994,6 +1004,13 @@ export default function RoadmapPage() {
           </button>
 
           {/* Progress pill — absolutely centred */}
+          {(() => {
+            const totalLessons = modules.reduce((s, m) => s + m.totalLessons, 0);
+            const docProgress = pdfId ? getDocumentProgress(pdfId) : null;
+            const completedCount = docProgress?.completedLessons.length ?? 0;
+            const progressPct = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+            const displayTitle = docTitle || (usingFallback ? 'Sample Roadmap' : 'Loading…');
+            return (
           <div className="absolute left-1/2 -translate-x-1/2" style={{ width: 420 }}>
             <div
               className="rounded-2xl px-5 py-2.5"
@@ -1004,15 +1021,15 @@ export default function RoadmapPage() {
               }}
             >
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[13px] font-semibold" style={{ color: textPri }}>
-                  {DOCUMENT_TITLE}
+                <span className="text-[13px] font-semibold truncate max-w-[180px]" style={{ color: textPri }}>
+                  {displayTitle}
                 </span>
                 <span className="flex-1" />
                 <span className="text-[11px]" style={{ color: textMuted }}>
-                  {COMPLETED_COUNT}/{TOTAL_LESSONS} lessons
+                  {completedCount}/{totalLessons} lessons
                 </span>
                 <span className="text-[14px] font-bold" style={{ color: '#22C55E' }}>
-                  {PROGRESS_PCT}%
+                  {progressPct}%
                 </span>
               </div>
               <div className="w-full rounded-full overflow-hidden"
@@ -1020,14 +1037,16 @@ export default function RoadmapPage() {
                 <div
                   className="h-full rounded-full"
                   style={{
-                    width: `${PROGRESS_PCT}%`,
+                    width: `${progressPct}%`,
                     background: 'linear-gradient(90deg,#3B82F6,#6366F1)',
                     transition: 'width 0.8s ease',
                   }}
                 />
               </div>
             </div>
-          </div>
+            </div>
+            );
+          })()}
 
           <div className="flex-1" />
 
