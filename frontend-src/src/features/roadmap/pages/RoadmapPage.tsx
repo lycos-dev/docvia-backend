@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import RoadmapLoadingPage from './RoadmapLoadingPage';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import * as pdfService from '../../../shared/services/pdfService';
 import type { BackendLesson } from '../../../shared/services/pdfService';
@@ -243,9 +244,9 @@ function MapPin({
 
 // ─── Module Detail Sheet (slide-up panel on click) ───────────────────────────
 function ModuleSheet({
-  mod, isDark, onClose,
+  mod, isDark, onClose, onStart,
 }: {
-  mod: Module; isDark: boolean; onClose: () => void;
+  mod: Module; isDark: boolean; onClose: () => void; onStart: (lessonId: string) => void;
 }) {
   const surfaceBg = isDark ? '#1e293b' : '#FFFFFF';
   const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
@@ -391,6 +392,10 @@ function ModuleSheet({
         {/* CTA */}
         {!mod.isLocked ? (
           <button
+            onClick={() => {
+              const target = mod.lessons.find(l => l.isCurrent) ?? mod.lessons.find(l => !l.isCompleted) ?? mod.lessons[0];
+              if (target) onStart(target.id);
+            }}
             className="w-full py-3 rounded-2xl font-semibold text-[13px] text-white hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
             style={{
               background: mod.isCompleted
@@ -414,7 +419,7 @@ function ModuleSheet({
 }
 
 // ─── Vertical roadmap (mobile) ───────────────────────────────────────────────
-function MobileRoadmap({ isDark, modules }: { isDark: boolean; modules: Module[] }) {
+function MobileRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules: Module[]; onStart: (lessonId: string) => void }) {
   const [selected, setSelected] = useState<Module | null>(null);
   const surfaceBg = isDark ? '#1e293b' : '#FFFFFF';
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
@@ -502,14 +507,14 @@ function MobileRoadmap({ isDark, modules }: { isDark: boolean; modules: Module[]
       ))}
 
       {selected && (
-        <ModuleSheet mod={selected} isDark={isDark} onClose={() => setSelected(null)} />
+        <ModuleSheet mod={selected} isDark={isDark} onClose={() => setSelected(null)} onStart={onStart} />
       )}
     </div>
   );
 }
 
 // ─── Horizontal road (desktop) ───────────────────────────────────────────────
-function DesktopRoadmap({ isDark, modules }: { isDark: boolean; modules: Module[] }) {
+function DesktopRoadmap({ isDark, modules, onStart }: { isDark: boolean; modules: Module[]; onStart: (lessonId: string) => void }) {
   const [selected, setSelected] = useState<Module | null>(null);
   const [pan, setPan]       = useState({ x: 0, y: 0 });
   const [zoom, setZoom]     = useState(1);
@@ -883,7 +888,7 @@ function DesktopRoadmap({ isDark, modules }: { isDark: boolean; modules: Module[
       {selected && (
         <ModuleSheet
           mod={selected} isDark={isDark}
-          onClose={() => setSelected(null)} />
+          onClose={() => setSelected(null)} onStart={onStart} />
       )}
     </div>
   );
@@ -894,34 +899,82 @@ export default function RoadmapPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
-  const [searchParams] = useSearchParams();
+  const { documentId } = useParams<{ documentId: string }>();
   const { user } = useAuth();
-  const pdfId = searchParams.get('pdfId');
+  const pdfId = documentId ?? null;
 
   const [modules, setModules] = useState<Module[]>(MODULES);
-  const [isLoadingLessons, setIsLoadingLessons] = useState(false);
+  const [loadingState, setLoadingState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [apiResolved, setApiResolved] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    if (!pdfId) return;
-
+    let cancelled = false;
     const fetchLessons = async () => {
-      setIsLoadingLessons(true);
+      if (!pdfId) {
+        // No pdfId — use mock data after a brief simulated delay
+        await new Promise<void>((r) => setTimeout(r, 3500));
+        if (!cancelled) {
+          setApiResolved(true);
+          setLoadingState('ready');
+        }
+        return;
+      }
       let result = await pdfService.getLessons(pdfId, user?.id ?? '');
-
-      // If no cached lessons exist, generate them (requires userId)
       if (!result.success && user?.id) {
         result = await pdfService.generateLessons(pdfId, user.id);
       }
-
-      setIsLoadingLessons(false);
-
+      if (cancelled) return;
       if (result.success && result.data) {
         setModules(mapLessonsToModules(result.data.lessons, result.data.title));
+        setApiResolved(true);
+        setLoadingState('ready');
+      } else {
+        setLoadingState('error');
       }
     };
-
     fetchLessons();
-  }, [pdfId, user?.id]);
+    return () => { cancelled = true; };
+  }, [pdfId, user?.id, retryKey]);
+
+  if (loadingState === 'loading') {
+    return (
+      <RoadmapLoadingPage
+        onClose={() => navigate('/dashboard')}
+        apiResolved={apiResolved}
+        onReady={() => setLoadingState('ready')}
+      />
+    );
+  }
+
+  if (loadingState === 'error') {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center"
+        style={{ background: isDark ? '#0f172a' : '#F0F2F5', fontFamily: 'Poppins, sans-serif' }}
+      >
+        <div className="text-center space-y-4">
+          <p className="text-2xl font-semibold" style={{ color: isDark ? '#F1F5F9' : '#111827' }}>
+            Oops! Couldn&apos;t load the roadmap.
+          </p>
+          <p style={{ color: isDark ? '#94A3B8' : '#6B7280' }}>The server might be unavailable.</p>
+          <button
+            onClick={() => { setLoadingState('loading'); setApiResolved(false); setRetryKey((k) => k + 1); }}
+            className="px-6 py-3 bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl font-medium transition-colors"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="block mx-auto text-sm underline"
+            style={{ color: isDark ? '#94A3B8' : '#6B7280' }}
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const pageBg    = isDark ? '#0f172a' : '#F0F2F5';
   const borderCol = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
@@ -946,12 +999,6 @@ export default function RoadmapPage() {
         className="fixed inset-0 z-50 flex flex-col"
         style={{ background: pageBg, fontFamily: 'Poppins, sans-serif' }}
       >
-        {isLoadingLessons && (
-          <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/70">
-            <p className="text-white text-xl font-semibold mb-2">Generating your learning roadmap…</p>
-            <p className="text-white/60 text-sm">This may take a moment</p>
-          </div>
-        )}
         {/* ── Header ────────────────────────────────────────────────── */}
         <header
           className="shrink-0 flex items-center px-5 py-8 gap-4 relative"
@@ -1020,13 +1067,13 @@ export default function RoadmapPage() {
 
         {/* ── Desktop: horizontal road (md and above) ───────────────── */}
         <div className="hidden md:flex flex-1 overflow-hidden">
-          <DesktopRoadmap isDark={isDark} modules={modules} />
+          <DesktopRoadmap isDark={isDark} modules={modules} onStart={(lessonId) => navigate(`/reader/${pdfId ?? 'unknown'}/${lessonId}`)} />
         </div>
 
         {/* ── Mobile: vertical roadmap (below md) ───────────────────── */}
         <div className="flex md:hidden flex-1 overflow-y-auto">
           <div className="w-full">
-            <MobileRoadmap isDark={isDark} modules={modules} />
+            <MobileRoadmap isDark={isDark} modules={modules} onStart={(lessonId) => navigate(`/reader/${pdfId ?? 'unknown'}/${lessonId}`)} />
           </div>
         </div>
       </div>
