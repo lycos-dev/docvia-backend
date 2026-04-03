@@ -1,50 +1,40 @@
 const { supabase } = require('../config/supabase');
-const fs = require('fs');
 const path = require('path');
 
 /**
  * Validate PDF file
- * @param {Buffer} buffer - PDF file buffer
- * @param {string} filename - Original filename
- * @returns {Object} - Validation result
  */
 const validatePDF = (buffer, filename) => {
   const errors = [];
   const warnings = [];
 
-  // Check file size (max 50MB)
-  const maxSize = 50 * 1024 * 1024; // 50MB
+  const maxSize = 50 * 1024 * 1024;
   if (buffer.length > maxSize) {
     errors.push(`File size exceeds maximum limit of 50MB. Current size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
   }
-
-  // Check if file is at least 1KB
   if (buffer.length < 1024) {
     errors.push('File size is too small. Minimum size: 1KB');
   }
 
-  // Check PDF magic number (PDF files start with %PDF)
   const pdfSignature = buffer.toString('utf8', 0, 4);
   if (pdfSignature !== '%PDF') {
     errors.push('Invalid PDF file format. File does not start with PDF signature.');
   }
 
-  // Check filename extension
   const ext = path.extname(filename).toLowerCase();
   if (ext !== '.pdf') {
     errors.push(`Invalid file extension. Expected .pdf, got ${ext}`);
   }
 
-  // Check MIME type from magic bytes
-  // PDF files have specific byte patterns
-  if (!buffer.includes(0x25) || !buffer.includes(0x50)) { // % and P
+  if (!buffer.includes(0x25) || !buffer.includes(0x50)) {
     warnings.push('File may not be a valid PDF document.');
   }
 
-  // Check for common corruption patterns
-  if (buffer.toString('utf8', buffer.length - 5) !== '%%EOF' && 
-      buffer.toString('utf8', buffer.length - 6) !== '%%EOF\n' &&
-      buffer.toString('utf8', buffer.length - 6) !== '%%EOF\r') {
+  if (
+    buffer.toString('utf8', buffer.length - 5) !== '%%EOF' &&
+    buffer.toString('utf8', buffer.length - 6) !== '%%EOF\n' &&
+    buffer.toString('utf8', buffer.length - 6) !== '%%EOF\r'
+  ) {
     warnings.push('PDF may not have proper end-of-file marker.');
   }
 
@@ -53,281 +43,230 @@ const validatePDF = (buffer, filename) => {
     errors,
     warnings,
     fileSize: buffer.length,
-    fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2)
+    fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2),
   };
 };
 
+/** Returns the per-user storage prefix: pdfs/{userId} */
+const userPrefix = (userId) => `pdfs/${userId}`;
+
 /**
- * Upload academic PDF document with integrated validation
+ * Always returns the canonical pdfs/{userId}/{filename} path.
+ * Handles bare filenames, full paths with userId, and legacy paths without userId.
+ */
+function resolveUserPath(userId, filename) {
+  const bare = filename
+    .replace(new RegExp(`^pdfs/${userId}/`), '')
+    .replace(/^pdfs\//, '');
+  return `${userPrefix(userId)}/${bare}`;
+}
+
+function stripUserPrefix(userId, fullPath) {
+  return fullPath.replace(`${userPrefix(userId)}/`, '');
+}
+
+// ─── UPLOAD ───────────────────────────────────────────────────────────────────
+
+/**
+ * Upload PDF — stored at pdfs/{userId}/{timestamp}_{random}_{originalname}
  * @route POST /api/pdf/upload
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * 
- * FEATURE: Academic PDF Upload
- * Users can upload academic PDF documents to the system.
- * 
- * INTEGRATED FEATURE: PDF File Validation
- * The system checks PDF validity and notifies users if a file is unsupported.
- * Validation happens automatically during the upload process.
  */
 const uploadPDF = async (req, res) => {
   try {
-    // Check if file is provided
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: 'No file provided',
-        message: 'Please upload a PDF file.'
-      });
+      return res.status(400).json({ success: false, error: 'No file provided', message: 'Please upload a PDF file.' });
     }
 
-    // ===== INTEGRATED PDF VALIDATION =====
-    // The system checks PDF validity and notifies users if a file is unsupported
     const validation = validatePDF(req.file.buffer, req.file.originalname);
-
-    // If PDF is invalid/unsupported, notify user with details
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
         error: 'Unsupported or invalid PDF file',
-        message: 'The file you uploaded is not a valid PDF document. Please check the errors below.',
+        message: 'The file you uploaded is not a valid PDF document.',
         errors: validation.errors,
         warnings: validation.warnings,
         fileInfo: {
           filename: req.file.originalname,
           size: validation.fileSize,
           sizeMB: validation.fileSizeMB,
-          mimeType: req.file.mimetype
-        }
+          mimeType: req.file.mimetype,
+        },
       });
     }
 
-    // Validation passed - file is a valid/supported PDF
-    const uploadWarnings = validation.warnings;
-
-    // Generate unique filename
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
     const filename = `${timestamp}_${randomString}_${req.file.originalname.replace(/\s+/g, '_')}`;
+    const storagePath = `${userPrefix(userId)}/${filename}`;
 
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase
+    const { error: uploadError } = await supabase
       .storage
       .from('academic-pdfs')
-      .upload(`pdfs/${filename}`, req.file.buffer, {
-        contentType: 'application/pdf',
-        upsert: false
-      });
+      .upload(storagePath, req.file.buffer, { contentType: 'application/pdf', upsert: false });
 
     if (uploadError) {
       console.error('Supabase upload error:', uploadError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to upload PDF',
-        message: uploadError.message || 'Error occurred while uploading file to storage.'
-      });
+      return res.status(500).json({ success: false, error: 'Failed to upload PDF', message: uploadError.message });
     }
 
-    // Get public URL (for display purposes)
-    const { data: publicUrlData } = supabase
-      .storage
-      .from('academic-pdfs')
-      .getPublicUrl(`pdfs/${filename}`);
+    const { data: publicUrlData } = supabase.storage.from('academic-pdfs').getPublicUrl(storagePath);
 
-    const publicUrl = publicUrlData?.publicUrl;
-
-    // Return success response
     res.status(200).json({
       success: true,
       message: 'PDF uploaded successfully',
-      warnings: uploadWarnings.length > 0 ? uploadWarnings : undefined,
+      warnings: validation.warnings.length > 0 ? validation.warnings : undefined,
       data: {
-        filename: filename,
+        filename,
         originalFilename: req.file.originalname,
         fileSize: validation.fileSize,
         fileSizeMB: validation.fileSizeMB,
         uploadedAt: new Date().toISOString(),
-        publicUrl: publicUrl,
-        storagePath: `pdfs/${filename}`
-      }
+        publicUrl: publicUrlData?.publicUrl,
+        storagePath,
+      },
     });
-
   } catch (error) {
     console.error('PDF upload error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: error.message
-    });
+    res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
   }
 };
 
+// ─── LIST ─────────────────────────────────────────────────────────────────────
+
 /**
- * Get uploaded PDFs list
+ * List PDFs belonging to the authenticated user only.
  * @route GET /api/pdf/list
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * 
- * Note: Supabase storage returns file.name with path prefix (e.g., "pdfs/filename.pdf")
  */
 const listPDFs = async (req, res) => {
   try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const { data, error } = await supabase
       .storage
       .from('academic-pdfs')
-      .list('pdfs', {
-        limit: 100,
-        offset: 0,
-        sortBy: { column: 'name', order: 'desc' }
-      });
+      .list(userPrefix(userId), { limit: 100, offset: 0, sortBy: { column: 'name', order: 'desc' } });
 
     if (error) {
       console.error('Supabase list error:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to retrieve PDF list',
-        message: error.message
-      });
+      return res.status(500).json({ success: false, error: 'Failed to retrieve PDF list', message: error.message });
     }
 
-    res.status(200).json({
-      success: true,
-      data: data || [],
-      count: data?.length || 0
-    });
-
+    res.status(200).json({ success: true, data: data || [], count: data?.length || 0 });
   } catch (error) {
     console.error('PDF list error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: error.message
-    });
+    res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
   }
 };
 
+// ─── DELETE ───────────────────────────────────────────────────────────────────
+
 /**
- * Delete a PDF from storage
+ * Delete a PDF — only allows deleting files owned by the authenticated user.
  * @route DELETE /api/pdf/:filename
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
  */
 const deletePDF = async (req, res) => {
   try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const { filename } = req.params;
+    if (!filename) return res.status(400).json({ success: false, error: 'Filename is required' });
 
-    if (!filename) {
-      return res.status(400).json({
-        success: false,
-        error: 'Filename is required'
-      });
-    }
+    const storagePath = resolveUserPath(userId, filename);
 
-    // Handle both cases: filename with or without 'pdfs/' prefix
-    // If the filename already includes 'pdfs/', use it as-is
-    // Otherwise, prepend 'pdfs/' to the filename
-    const storagePath = filename.startsWith('pdfs/') ? filename : `pdfs/${filename}`;
-
-    const { error } = await supabase
-      .storage
-      .from('academic-pdfs')
-      .remove([storagePath]);
-
+    const { error } = await supabase.storage.from('academic-pdfs').remove([storagePath]);
     if (error) {
       console.error('Supabase delete error:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to delete PDF',
-        message: error.message
-      });
+      return res.status(500).json({ success: false, error: 'Failed to delete PDF', message: error.message });
     }
 
-    res.status(200).json({
-      success: true,
-      message: 'PDF deleted successfully',
-      filename: filename
-    });
-
+    res.status(200).json({ success: true, message: 'PDF deleted successfully', filename });
   } catch (error) {
     console.error('PDF delete error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error',
-      message: error.message
-    });
+    res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
   }
 };
 
+// ─── RENAME ───────────────────────────────────────────────────────────────────
 
 /**
- * Rename a PDF in Supabase Storage.
- * Supabase has no native rename, so: download → re-upload new name → delete old → update DB refs.
- *
+ * Rename a PDF — scoped to the authenticated user.
+ * Supabase has no native rename: download → re-upload → delete old → update DB refs.
  * @route PATCH /api/pdf/:filename/rename
- * @body  { newName: string }
  */
 const renamePDF = async (req, res) => {
   try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const { filename } = req.params;
-    let   { newName  } = req.body;
+    let { newName } = req.body;
 
     if (!filename || !newName) {
-      return res.status(400).json({ success:false, error:'Missing fields', required:['filename (param)','newName (body)'] });
+      return res.status(400).json({ success: false, error: 'Missing fields', required: ['filename (param)', 'newName (body)'] });
     }
 
     if (!newName.toLowerCase().endsWith('.pdf')) newName += '.pdf';
     newName = newName.replace(/[\/]/g, '_').trim();
 
-    const oldPath     = filename.startsWith('pdfs/') ? filename : `pdfs/${filename}`;
-    const oldFilename = filename.startsWith('pdfs/') ? filename.replace('pdfs/','') : filename;
-    const newFilename = `${Date.now()}_${Math.random().toString(36).substring(2,9)}_${newName}`;
-    const newPath     = `pdfs/${newFilename}`;
+    const oldPath = resolveUserPath(userId, filename);
+    const oldFilename = stripUserPrefix(userId, oldPath);
+    const newFilename = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${newName}`;
+    const newPath = `${userPrefix(userId)}/${newFilename}`;
 
     console.log(`[Rename] ${oldPath} → ${newPath}`);
 
-    // 1. Download original
     const { data: fileData, error: dlErr } = await supabase.storage.from('academic-pdfs').download(oldPath);
-    if (dlErr) return res.status(404).json({ success:false, error:'Original file not found', message:dlErr.message });
+    if (dlErr) return res.status(404).json({ success: false, error: 'Original file not found', message: dlErr.message });
 
-    // 2. Upload under new name
     const buffer = Buffer.from(await fileData.arrayBuffer());
-    const { error: upErr } = await supabase.storage.from('academic-pdfs').upload(newPath, buffer, { contentType:'application/pdf', upsert:false });
-    if (upErr) return res.status(500).json({ success:false, error:'Upload failed', message:upErr.message });
+    const { error: upErr } = await supabase.storage
+      .from('academic-pdfs')
+      .upload(newPath, buffer, { contentType: 'application/pdf', upsert: false });
+    if (upErr) return res.status(500).json({ success: false, error: 'Upload failed', message: upErr.message });
 
-    // 3. Delete original
     await supabase.storage.from('academic-pdfs').remove([oldPath]);
 
-    // 4. Update document_segments + user_progress DB refs (non-fatal if they fail)
-    await supabase.from('document_segments').update({ pdf_id:newFilename, updated_at:new Date().toISOString() }).eq('pdf_id', oldFilename).catch(()=>{});
-    await supabase.from('user_progress').update({ pdf_id:newFilename }).eq('pdf_id', oldFilename).catch(()=>{});
+    // Update DB refs (non-fatal)
+    await supabase.from('document_segments')
+      .update({ pdf_id: newFilename, updated_at: new Date().toISOString() })
+      .eq('pdf_id', oldFilename).eq('user_id', userId).catch(() => {});
+
+    await supabase.from('user_progress')
+      .update({ pdf_id: newFilename })
+      .eq('pdf_id', oldFilename).eq('user_id', userId).catch(() => {});
 
     const { data: urlData } = supabase.storage.from('academic-pdfs').getPublicUrl(newPath);
 
-    res.status(200).json({ success:true, message:'PDF renamed successfully', oldFilename, newFilename, publicUrl:urlData?.publicUrl });
-
+    res.status(200).json({ success: true, message: 'PDF renamed successfully', oldFilename, newFilename, publicUrl: urlData?.publicUrl });
   } catch (error) {
     console.error('[Rename] Error:', error);
-    res.status(500).json({ success:false, error:'Internal server error', message:error.message });
+    res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
   }
 };
 
+// ─── GET FILE (stream) ────────────────────────────────────────────────────────
+
 /**
- * Serve a PDF file stored in Supabase by streaming it back to the client.
+ * Serve a PDF file — only accessible by the owning user.
  * @route GET /api/pdf/file/:filename
  */
 const getFile = async (req, res) => {
   try {
-    const { filename } = req.params;
-    if (!filename) {
-      return res.status(400).json({ success: false, error: 'Filename is required' });
-    }
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
-    const storagePath = filename.startsWith('pdfs/') ? filename : `pdfs/${filename}`;
+    const { filename } = req.params;
+    if (!filename) return res.status(400).json({ success: false, error: 'Filename is required' });
+
+    const storagePath = resolveUserPath(userId, filename);
 
     const { data, error } = await supabase.storage.from('academic-pdfs').download(storagePath);
-    if (error) {
-      return res.status(404).json({ success: false, error: 'File not found', message: error.message });
-    }
+    if (error) return res.status(404).json({ success: false, error: 'File not found', message: error.message });
 
     const buffer = Buffer.from(await data.arrayBuffer());
     res.setHeader('Content-Type', 'application/pdf');
@@ -340,11 +279,4 @@ const getFile = async (req, res) => {
   }
 };
 
-module.exports = {
-  uploadPDF,
-  listPDFs,
-  deletePDF,
-  renamePDF,
-  validatePDF,
-  getFile,
-};
+module.exports = { uploadPDF, listPDFs, deletePDF, renamePDF, validatePDF, getFile };

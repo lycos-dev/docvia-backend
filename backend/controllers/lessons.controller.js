@@ -26,10 +26,7 @@ async function extractFullText(pdfBuffer) {
 
   console.log(`[Lessons] Raw text length: ${rawText.length}, cleaned: ${cleaned.length}, pages: ${result.numpages}`);
 
-  return {
-    fullText:  cleaned,
-    pageCount: result.numpages,
-  };
+  return { fullText: cleaned, pageCount: result.numpages };
 }
 
 // ─── DB HELPERS ───────────────────────────────────────────────────────────────
@@ -48,16 +45,15 @@ async function getCachedLessonSet(pdfId, userId) {
 
 async function saveLessonSet(pdfId, userId, lessonData) {
   const row = {
-    pdf_id:       pdfId,
-    user_id:      userId,
-    title:        lessonData.title,
-    overview:     lessonData.overview,
-    lessons_json: JSON.stringify(lessonData.lessons),
+    pdf_id:        pdfId,
+    user_id:       userId,
+    title:         lessonData.title,
+    overview:      lessonData.overview,
+    lessons_json:  JSON.stringify(lessonData.lessons),
     total_lessons: lessonData.totalLessons,
-    created_at:   new Date().toISOString(),
+    created_at:    new Date().toISOString(),
   };
 
-  // Upsert — if a previous generation exists, replace it
   const { data, error } = await supabase
     .from('lesson_sets')
     .upsert(row, { onConflict: 'pdf_id,user_id' })
@@ -87,8 +83,8 @@ async function generateLessonsEndpoint(req, res) {
 
   if (!pdfId || !userId) {
     return res.status(400).json({
-      success:  false,
-      error:    'Missing required fields',
+      success: false,
+      error: 'Missing required fields',
       required: ['pdfId', 'userId'],
     });
   }
@@ -100,12 +96,7 @@ async function generateLessonsEndpoint(req, res) {
     const cached = await getCachedLessonSet(pdfId, userId);
     if (cached) {
       console.log('[Lessons] Returning cached lesson set');
-      return res.status(200).json({
-        success: true,
-        cached:  true,
-        message: 'Lessons loaded from cache',
-        data:    formatResponse(cached),
-      });
+      return res.status(200).json({ success: true, cached: true, message: 'Lessons loaded from cache', data: formatResponse(cached) });
     }
 
     // Download PDF from Supabase Storage
@@ -113,14 +104,10 @@ async function generateLessonsEndpoint(req, res) {
     const { data: pdfBlob, error: dlErr } = await supabase
       .storage
       .from('academic-pdfs')
-      .download(`pdfs/${pdfId}`);
+      .download(`pdfs/${userId}/${pdfId}`);
 
     if (dlErr) {
-      return res.status(404).json({
-        success: false,
-        error:   'PDF not found in storage',
-        details: dlErr.message,
-      });
+      return res.status(404).json({ success: false, error: 'PDF not found in storage', details: dlErr.message });
     }
 
     // Extract text
@@ -133,24 +120,22 @@ async function generateLessonsEndpoint(req, res) {
       console.error('[Lessons] Extraction threw:', extractErr.message);
       return res.status(422).json({
         success: false,
-        error:   'Could not read this PDF',
+        error: 'Could not read this PDF',
         message: `Text extraction failed: ${extractErr.message}. Make sure the PDF contains selectable text (not a scanned image).`,
       });
     }
 
-    // Guard: need at least some text to work with
     if (!extraction.fullText || extraction.fullText.length < 30) {
-      console.warn(`[Lessons] Too little text extracted: "${extraction.fullText}"`);
       return res.status(422).json({
         success: false,
-        error:   'PDF has no extractable text',
-        message: `Only ${extraction.fullText.length} characters were extracted. This usually means the PDF is a scanned image or contains only pictures. Please upload a text-based PDF.`,
+        error: 'PDF has no extractable text',
+        message: `Only ${extraction.fullText.length} characters were extracted. This usually means the PDF is a scanned image. Please upload a text-based PDF.`,
       });
     }
 
-    // Run AI pipeline
-    console.log('[Lessons] Running Claude AI lesson pipeline...');
-    const lessonData = await generateLessonsFromText(extraction.fullText, pdfId);
+    // Run AI pipeline — passes userId so makeGroqCall can cycle keys automatically
+    console.log('[Lessons] Running AI lesson pipeline...');
+    const lessonData = await generateLessonsFromText(extraction.fullText, pdfId, userId);
 
     // Persist to DB
     console.log('[Lessons] Saving to database...');
@@ -160,26 +145,22 @@ async function generateLessonsEndpoint(req, res) {
 
     return res.status(200).json({
       success: true,
-      cached:  false,
+      cached: false,
       message: `Generated ${lessonData.totalLessons} lessons successfully`,
-      data:    formatResponse(saved),
+      data: formatResponse(saved),
     });
 
   } catch (err) {
     console.error('[Lessons] Error:', err.message);
-    return res.status(500).json({
-      success: false,
-      error:   'Lesson generation failed',
-      message: err.message,
-    });
+    return res.status(500).json({ success: false, error: 'Lesson generation failed', message: err.message });
   }
 }
 
 // ─── ENDPOINT: GET LESSONS ────────────────────────────────────────────────────
 
 async function getLessonsEndpoint(req, res) {
-  const { pdfId }  = req.params;
-  const userId     = req.query.userId;
+  const { pdfId } = req.params;
+  const userId    = req.query.userId;
 
   if (!userId) {
     return res.status(400).json({ success: false, error: 'userId query param required' });
@@ -190,7 +171,7 @@ async function getLessonsEndpoint(req, res) {
     if (!row) {
       return res.status(404).json({
         success: false,
-        error:   'Lessons not found',
+        error: 'Lessons not found',
         message: 'No lessons generated yet for this PDF. Call POST /lessons/generate first.',
       });
     }
@@ -203,8 +184,8 @@ async function getLessonsEndpoint(req, res) {
 // ─── ENDPOINT: DELETE LESSONS ─────────────────────────────────────────────────
 
 async function deleteLessonsEndpoint(req, res) {
-  const { pdfId }  = req.params;
-  const userId     = req.query.userId;
+  const { pdfId } = req.params;
+  const userId    = req.query.userId;
 
   if (!userId) {
     return res.status(400).json({ success: false, error: 'userId query param required' });
@@ -227,20 +208,17 @@ async function deleteLessonsEndpoint(req, res) {
 // ─── ENDPOINT: DEEP EXPLAIN ───────────────────────────────────────────────────
 
 async function deepExplainEndpoint(req, res) {
-  const { title, explanation, key_points, documentTitle } = req.body;
+  const { title, explanation, key_points, documentTitle, userId } = req.body;
 
   if (!title || !explanation) {
-    return res.status(400).json({
-      success:  false,
-      error:    'Missing required fields',
-      required: ['title', 'explanation'],
-    });
+    return res.status(400).json({ success: false, error: 'Missing required fields', required: ['title', 'explanation'] });
   }
 
   console.log(`[Lessons] Deep explain: "${title}"`);
 
   try {
-    const result = await deepExplainLesson({ title, explanation, key_points, documentTitle });
+    // Pass userId so makeGroqCall can cycle keys if needed
+    const result = await deepExplainLesson({ title, explanation, key_points, documentTitle }, userId);
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
     console.error('[Lessons] Deep explain error:', err.message);
@@ -248,9 +226,4 @@ async function deepExplainEndpoint(req, res) {
   }
 }
 
-module.exports = {
-  generateLessonsEndpoint,
-  getLessonsEndpoint,
-  deleteLessonsEndpoint,
-  deepExplainEndpoint,
-};
+module.exports = { generateLessonsEndpoint, getLessonsEndpoint, deleteLessonsEndpoint, deepExplainEndpoint };
