@@ -42,20 +42,31 @@ export default function ReaderPage() {
     if (!documentId || !user?.id) return;
     setLessonLoadState('loading');
 
-    pdfService.getLessons(documentId, user.id).then((result) => {
-      if (result.success && result.data) {
-        const set = result.data;
+    const resolveLessonSet = async () => {
+      const cached = await pdfService.getLessons(documentId, user.id, token ?? undefined);
+      if (cached.success && cached.data) return cached.data;
+
+      const generated = await pdfService.generateLessons(documentId, user.id, token ?? undefined);
+      if (generated.success && generated.data) return generated.data;
+
+      return null;
+    };
+
+    resolveLessonSet()
+      .then((set) => {
+        if (!set) {
+          setLessonLoadState('error');
+          return;
+        }
         setLessonSet(set);
         const idx = set.lessons.findIndex((l) => String(l.id) === lessonId);
         const resolvedIdx = idx >= 0 ? idx : 0;
         setLessonIndex(resolvedIdx);
         setLesson(set.lessons[resolvedIdx] ?? null);
         setLessonLoadState('ready');
-      } else {
-        setLessonLoadState('error');
-      }
-    }).catch(() => setLessonLoadState('error'));
-  }, [documentId, lessonId, user?.id]);
+      })
+      .catch(() => setLessonLoadState('error'));
+  }, [documentId, lessonId, user?.id, token]);
 
   // ── Notes (auto-save via debounce) ────────────────────────────────────────
   const [notes, setNotes] = useState('');
@@ -266,6 +277,7 @@ export default function ReaderPage() {
                       documentTitle={docTitle}
                       lessonTitle={lesson.title}
                       lessonContent={lesson.explanation}
+                      token={token ?? undefined}
                       onClose={() => setShowQuiz(false)}
                     />
                   </div>
@@ -364,7 +376,10 @@ export default function ReaderPage() {
                 <AIChatPanel
                   documentId={documentId}
                   lessonId={lessonId}
+                  lessonTitle={lesson?.title ?? ''}
+                  lessonContent={lesson?.explanation ?? ''}
                   isDark={isDark}
+                  token={token ?? undefined}
                   injectMessage={injectMessage}
                   onInjectHandled={() => setInjectMessage(null)}
                 />

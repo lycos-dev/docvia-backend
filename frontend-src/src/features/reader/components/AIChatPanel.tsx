@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send } from 'lucide-react';
 import { cn } from '../../../shared/utils/cn';
+import { sendChat } from '../services/readerService';
 
 interface ChatMessage {
   id: string;
@@ -13,7 +14,10 @@ interface ChatMessage {
 interface AIChatPanelProps {
   documentId: string;
   lessonId: string;
+  lessonTitle: string;
+  lessonContent: string;
   isDark: boolean;
+  token?: string;
   /** When set, auto-sends this message into the chat */
   injectMessage?: string | null;
   onInjectHandled?: () => void;
@@ -25,10 +29,12 @@ const STARTER_CHIPS = [
   'What are the key takeaways?',
 ];
 
-const MOCK_RESPONSE =
-  'This is a mock response while the backend is being set up. Once the AI backend is connected, you\'ll get real intelligent answers about this lesson.';
+const DEFAULT_ERROR_RESPONSE =
+  'I could not reach the AI tutor right now. Please try again in a moment.';
 
-export default function AIChatPanel({ documentId, lessonId, isDark, injectMessage, onInjectHandled }: AIChatPanelProps) {
+export default function AIChatPanel({
+  documentId, lessonId, lessonTitle, lessonContent, isDark, token, injectMessage, onInjectHandled,
+}: AIChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
   const [isTyping, setIsTyping] = useState<boolean>(false);
@@ -69,16 +75,12 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId, lessonId, message: trimmed }),
-      });
-
-      if (!response.ok) throw new Error('API error');
-
-      const data = (await response.json()) as { reply?: string; message?: string };
-      const replyText = data.reply ?? data.message ?? MOCK_RESPONSE;
+      const history = messages.map((m) => ({ role: m.role, content: m.content }));
+      const data = await sendChat(documentId, lessonTitle, lessonContent, trimmed, history, token);
+      if (!data.success || !data.reply) {
+        throw new Error(data.error ?? data.message ?? 'Chat request failed.');
+      }
+      const replyText = data.reply;
 
       setMessages((prev) => [
         ...prev,
@@ -90,20 +92,19 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
         },
       ]);
     } catch {
-      // Simulate typing delay then mock response
-      await new Promise<void>((resolve) => setTimeout(resolve, 1500));
       setMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           role: 'assistant',
-          content: MOCK_RESPONSE,
+          content: DEFAULT_ERROR_RESPONSE,
           timestamp: new Date(),
         },
       ]);
     } finally {
       setIsTyping(false);
     }
+  // message history and lesson context are required for contextual tutoring replies
   };
 
   // Auto-send injected messages (from TextSelectionTooltip)

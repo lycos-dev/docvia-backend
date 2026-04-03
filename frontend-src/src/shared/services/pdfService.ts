@@ -123,7 +123,11 @@ export async function generateLessons(
   return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
-export async function getLessons(pdfId: string, userId: string): Promise<LessonSetResult> {
-  const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`);
+export async function getLessons(pdfId: string, userId: string, token?: string): Promise<LessonSetResult> {
+  const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
   return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
 }

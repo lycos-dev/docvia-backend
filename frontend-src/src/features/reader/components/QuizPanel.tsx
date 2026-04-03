@@ -14,12 +14,13 @@ interface QuizPanelProps {
   documentTitle: string;
   lessonTitle: string;
   lessonContent: string;
+  token?: string;
   onClose?: () => void;
 }
 
 type PanelState = 'picker' | 'loading' | 'question' | 'result' | 'summary';
 
-export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, onClose }: QuizPanelProps) {
+export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, token, onClose }: QuizPanelProps) {
   const [panelState, setPanelState] = useState<PanelState>('picker');
   const [quizType, setQuizType] = useState('multiple_choice');
   const [quizMode, setQuizMode] = useState<'quick' | 'custom'>('quick');
@@ -41,7 +42,7 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, o
     setSelectedOption(null);
     setUserAnswer('');
     const count = quizMode === 'quick' ? 1 : quizCount;
-    const result = await generateQuiz(lessonTitle, lessonContent, documentTitle, quizType, count, askedQuestions);
+    const result = await generateQuiz(lessonTitle, lessonContent, documentTitle, quizType, count, askedQuestions, token);
     if (result.success && result.tasks && result.tasks.length > 0) {
       // Dedup
       const seen = new Set(askedQuestions.map((q) => q.toLowerCase().trim()));
@@ -80,7 +81,8 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, o
       currentQuestion.question,
       answer,
       currentQuestion.correctAnswer ?? currentQuestion.options?.[0] ?? '',
-      currentQuestion.type
+      currentQuestion.type,
+      token
     );
     setEvaluating(false);
     setFeedback({
