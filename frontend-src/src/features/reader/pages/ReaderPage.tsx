@@ -100,7 +100,11 @@ export default function ReaderPage() {
 
   // ── Inline lesson section panels ─────────────────────────────────────────
   const [showQuiz, setShowQuiz] = useState(false);
+  const [quizInProgress, setQuizInProgress] = useState(false);
+  const [quizRestartSignal, setQuizRestartSignal] = useState(0);
   const [showDeepDive, setShowDeepDive] = useState(false);
+  const goDeeperButtonRef = useRef<HTMLButtonElement | null>(null);
+  const takeQuizButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // ── Confetti ──────────────────────────────────────────────────────────────
   const [showConfetti, setShowConfetti] = useState(false);
@@ -145,6 +149,26 @@ export default function ReaderPage() {
   };
 
   const handleGoDeeper = () => setShowDeepDive((v) => !v);
+
+  useEffect(() => {
+    if (!showDeepDive) return;
+    requestAnimationFrame(() => {
+      goDeeperButtonRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  }, [showDeepDive]);
+
+  useEffect(() => {
+    if (!showQuiz) return;
+    requestAnimationFrame(() => {
+      takeQuizButtonRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+  }, [showQuiz]);
 
   const TABS: { key: ActiveTab; label: string }[] = [
     { key: 'chat', label: 'AI Chat' },
@@ -192,14 +216,17 @@ export default function ReaderPage() {
       />
 
       {/* Content row */}
-      <div className="pt-14 flex-1 flex overflow-hidden">
+      <div className="pt-14 flex-1 flex min-h-0 overflow-hidden">
 
-        {/* ── Main pane ── */}
+        {/* ── Main pane ──
+            When the side panel is open on small screens, we hide this column only for the
+            Lesson view so chat/notes can use the full width. PDF must stay visible — otherwise
+            "PDF" tab looks blank (segment reader + PDF). */}
         <div
           id="lessonContentArea"
           className={cn(
-            'flex-1 flex flex-col overflow-hidden',
-            isPanelOpen ? 'hidden md:flex' : 'flex',
+            'flex-1 flex flex-col min-h-0 overflow-hidden',
+            isPanelOpen && mainView === 'lesson' ? 'hidden md:flex' : 'flex',
           )}
         >
           {/* Lesson / PDF tab switcher */}
@@ -213,7 +240,13 @@ export default function ReaderPage() {
             {(['lesson', 'pdf'] as MainView[]).map((v) => (
               <button
                 key={v}
-                onClick={() => setMainView(v)}
+                onClick={() => {
+                  setMainView(v);
+                  // Give PDF the full width on phones (panel would otherwise squeeze or cover).
+                  if (v === 'pdf' && typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+                    setIsPanelOpen(false);
+                  }
+                }}
                 className={cn(
                   'px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors',
                   mainView === v
@@ -226,9 +259,9 @@ export default function ReaderPage() {
             ))}
           </div>
 
-          {/* PDF view — fills full pane */}
+          {/* PDF view — fills full pane (min-h-0 so nested scroll works) */}
           {mainView === 'pdf' && (
-            <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               <PDFViewer
                 documentId={documentId}
                 initialPage={1}
@@ -253,6 +286,8 @@ export default function ReaderPage() {
                   isDark={isDark}
                   deepDiveOpen={showDeepDive}
                   onGoDeeper={handleGoDeeper}
+                  goDeeperButtonRef={goDeeperButtonRef}
+                  keyPoints={lesson.key_points ?? []}
                 />
 
                 {/* Deep Dive — inline below lesson, above quiz */}
@@ -270,18 +305,6 @@ export default function ReaderPage() {
                   </div>
                 )}
 
-                {/* Quiz — inline below deep dive */}
-                {showQuiz && (
-                  <div className="px-6 md:px-12 pb-8">
-                    <QuizPanel
-                      documentTitle={docTitle}
-                      lessonTitle={lesson.title}
-                      lessonContent={lesson.explanation}
-                      token={token ?? undefined}
-                      onClose={() => setShowQuiz(false)}
-                    />
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -311,12 +334,25 @@ export default function ReaderPage() {
                   {isCompleted ? '↩ Completed' : '✓ Mark as Complete'}
                 </button>
                 <button
-                  onClick={() => setShowQuiz((v) => !v)}
+                  onClick={() => setShowQuiz(true)}
+                  ref={takeQuizButtonRef}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 text-white"
                   style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow: '0 3px 10px rgba(245,158,11,0.3)' }}
                 >
-                  📝 {showQuiz ? 'Close Quiz' : 'Take Quiz'}
+                  📝 {quizInProgress ? 'Continue Quiz' : 'Take Quiz'}
                 </button>
+                {quizInProgress && (
+                  <button
+                    onClick={() => {
+                      setQuizRestartSignal((v) => v + 1);
+                      setShowQuiz(true);
+                    }}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-[#f59e0b]/40 text-[#b45309] dark:text-[#fbbf24] hover:bg-[#f59e0b]/10 transition-colors"
+                    title="Start a fresh quiz session"
+                  >
+                    Start New
+                  </button>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
@@ -396,12 +432,118 @@ export default function ReaderPage() {
         )}
       </div>
 
+      {/* Quiz modal (state persists when closed) */}
+      {mainView === 'lesson' && lessonLoadState === 'ready' && lesson && (
+        <div
+          className={cn(
+            'fixed inset-0 z-[70] flex items-center justify-center p-4',
+            showQuiz ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+          )}
+          style={{
+            background: showQuiz ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)',
+            transition: 'opacity 180ms ease',
+          }}
+          onClick={() => setShowQuiz(false)}
+        >
+          <div
+            className={cn(
+              'w-full max-w-3xl max-h-[82vh] overflow-hidden rounded-2xl border shadow-2xl',
+              'bg-white dark:bg-[#1e293b] border-black/10 dark:border-white/10',
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <QuizPanel
+              documentTitle={docTitle}
+              lessonTitle={lesson.title}
+              lessonContent={lesson.explanation}
+              isDark={isDark}
+              token={token ?? undefined}
+              restartSignal={quizRestartSignal}
+              onSessionChange={setQuizInProgress}
+              onClose={() => setShowQuiz(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Confetti */}
       <div className="fixed inset-0 pointer-events-none z-50">
         <ConfettiOverlay active={showConfetti} origin={confettiOrigin} />
       </div>
     </div>
   );
+}
+
+// ─── Three-row lesson body (segment-grounded) ────────────────────────────────
+interface LessonRow {
+  label: string;
+  subtitle: string;
+  body: string;
+}
+
+function buildLessonRows(explanation: string, keyPoints: string[]): LessonRow[] {
+  const rows: LessonRow[] = [
+    {
+      label: 'Core idea & textual detail',
+      subtitle: 'Precise claim plus concrete facts from the passage',
+      body: '',
+    },
+    {
+      label: 'Evidence & reasoning',
+      subtitle: 'How the document argues or illustrates this idea',
+      body: '',
+    },
+    {
+      label: 'Implications & contrasts',
+      subtitle: 'What follows, what it pushes against, or what stays open',
+      body: '',
+    },
+  ];
+
+  const raw = explanation?.trim() ?? '';
+  if (!raw) {
+    return rows.map((r) => ({
+      ...r,
+      body: 'Content for this segment will appear once the lesson is fully generated.',
+    }));
+  }
+
+  const paragraphs = raw
+    .replace(/\s{3,}/g, '  ')
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter((p) => p.length > 0);
+
+  if (paragraphs.length >= 3) {
+    rows[0].body = paragraphs[0];
+    rows[1].body = paragraphs[1];
+    rows[2].body = paragraphs.slice(2).join('\n\n');
+  } else if (paragraphs.length === 2) {
+    rows[0].body = paragraphs[0];
+    rows[1].body = paragraphs[1];
+    rows[2].body =
+      keyPoints.length > 0
+        ? keyPoints.map((k) => `• ${k}`).join('\n')
+        : 'Connect these ideas to your reading goals and the rest of the document.';
+  } else {
+    const single = paragraphs[0];
+    const sentences = single.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0);
+    if (sentences.length >= 3) {
+      const n = Math.max(1, Math.ceil(sentences.length / 3));
+      rows[0].body = sentences.slice(0, n).join(' ');
+      rows[1].body = sentences.slice(n, n * 2).join(' ');
+      rows[2].body = sentences.slice(n * 2).join(' ');
+    } else {
+      rows[0].body = single;
+      rows[1].body =
+        keyPoints[0] ?? 'Use the key takeaways above to expand on this idea.';
+      rows[2].body =
+        keyPoints.slice(1).join(' ') ||
+        'Ask yourself how this segment supports the document’s overall argument.';
+    }
+  }
+
+  return rows;
 }
 
 // ─── Lesson content ───────────────────────────────────────────────────────────
@@ -413,19 +555,22 @@ interface LessonContentProps {
   isDark: boolean;
   deepDiveOpen: boolean;
   onGoDeeper: () => void;
+  goDeeperButtonRef: React.RefObject<HTMLButtonElement | null>;
+  keyPoints: string[];
 }
 
 function LessonContent({
-  lesson, lessonIndex, totalLessons, isCompleted, isDark, deepDiveOpen, onGoDeeper,
+  lesson,
+  lessonIndex,
+  totalLessons,
+  isCompleted,
+  isDark,
+  deepDiveOpen,
+  onGoDeeper,
+  goDeeperButtonRef,
+  keyPoints,
 }: LessonContentProps) {
-  // Split explanation into paragraphs for readable rendering
-  const paragraphs = lesson.explanation
-    ? lesson.explanation
-        .replace(/\s{3,}/g, '  ')
-        .split(/\n{2,}/)
-        .map((p) => p.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim())
-        .filter((p) => p.length > 0)
-    : [];
+  const lessonRows = buildLessonRows(lesson.explanation ?? '', keyPoints);
 
   return (
     <div className="px-6 md:px-12 py-9 w-full">
@@ -488,29 +633,66 @@ function LessonContent({
         </div>
       )}
 
-      {/* Lesson content label */}
+      {/* Lesson content — three rows (segment-grounded) */}
       <div className="flex items-center gap-3 mb-5">
         <span className="text-xs font-bold uppercase tracking-widest" style={{ color: isDark ? '#94A3B8' : '#9CA3AF' }}>
-          Lesson Content
+          Lesson content
         </span>
         <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(255,255,255,0.1)' : '#E5E7EB' }} />
       </div>
 
-      {/* Explanation paragraphs */}
-      <div className="space-y-4 mb-8" style={{ color: isDark ? '#CBD5E1' : '#1F2937', fontSize: '16px', lineHeight: '1.85' }}>
-        {paragraphs.length > 0
-          ? paragraphs.map((p, i) => <p key={i}>{p}</p>)
-          : (
-            <p className="italic" style={{ color: isDark ? '#475569' : '#9CA3AF' }}>
-              No content available for this lesson.
-            </p>
-          )}
+      <div className="grid grid-cols-1 gap-4 mb-8">
+        {lessonRows.map((row, i) => (
+          <div
+            key={row.label}
+            className={cn(
+              'rounded-2xl border p-5 md:p-6 transition-shadow',
+              isDark
+                ? 'border-white/10 bg-[#1e293b]/80 shadow-[0_4px_24px_rgba(0,0,0,0.35)]'
+                : 'border-black/[0.06] bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)]',
+            )}
+          >
+            <div className="flex items-start gap-3 mb-3">
+              <div
+                className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white',
+                  i === 0 && 'bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8]',
+                  i === 1 && 'bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9]',
+                  i === 2 && 'bg-gradient-to-br from-[#059669] to-[#0D9488]',
+                )}
+              >
+                {i + 1}
+              </div>
+              <div className="min-w-0">
+                <p
+                  className="text-[11px] font-bold uppercase tracking-wider mb-0.5"
+                  style={{ color: isDark ? '#94A3B8' : '#6B7280' }}
+                >
+                  {row.subtitle}
+                </p>
+                <h2
+                  className="text-base md:text-lg font-bold leading-snug"
+                  style={{ color: isDark ? '#F1F5F9' : '#111827' }}
+                >
+                  {row.label}
+                </h2>
+              </div>
+            </div>
+            <div
+              className="text-[15px] md:text-[16px] leading-[1.85] whitespace-pre-wrap pl-0 md:pl-12"
+              style={{ color: isDark ? '#CBD5E1' : '#1F2937' }}
+            >
+              {row.body}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Go Deeper teaser */}
       <div className="flex items-center gap-4 mt-2">
         <div className="flex-1 h-px" style={{ background: isDark ? 'rgba(255,255,255,0.1)' : '#E5E7EB' }} />
         <button
+          ref={goDeeperButtonRef}
           onClick={onGoDeeper}
           className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all hover:-translate-y-0.5"
           style={{

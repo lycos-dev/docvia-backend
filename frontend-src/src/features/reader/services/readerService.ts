@@ -41,8 +41,11 @@ export interface MicrotaskGenerateResult {
 
 export interface MicrotaskEvaluateResult {
   success: boolean;
+  correct?: boolean;
   isCorrect?: boolean;
+  score?: number;
   feedback?: string;
+  explanation?: string;
   correctAnswer?: string;
   error?: string;
 }
@@ -108,10 +111,10 @@ export async function generateQuiz(
 }
 
 export async function evaluateAnswer(
-  question: string,
-  userAnswer: string,
-  correctAnswer: string,
-  questionType: string,
+  task: MicrotaskQuestion,
+  userAnswer: string | number,
+  segmentTitle: string,
+  segmentContent: string,
   token?: string
 ): Promise<MicrotaskEvaluateResult> {
   const res = await fetch(`${BASE}/microtask/evaluate`, {
@@ -120,9 +123,13 @@ export async function evaluateAnswer(
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ question, userAnswer, correctAnswer, questionType }),
+    body: JSON.stringify({ task, userAnswer, segmentTitle, segmentContent }),
   });
-  return safeJson<MicrotaskEvaluateResult>(res, { success: false, error: 'Server did not return a response.' });
+  const raw = await safeJson<MicrotaskEvaluateResult>(res, { success: false, error: 'Server did not return a response.' });
+  return {
+    ...raw,
+    isCorrect: raw.isCorrect ?? raw.correct,
+  };
 }
 
 export async function deepExplain(

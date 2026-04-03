@@ -83,32 +83,39 @@ async function generateLessonsForChunk(chunk, chunkIdx, totalChunks, docTitle = 
   const response = await getGroq().chat.completions.create({
     model: GROQ_MODEL,
     max_tokens: GROQ_TOKENS,
-    temperature: 0.5,
+    temperature: 0.42,
     messages: [{
       role: 'user',
-      content: `You are an expert educator who creates extremely granular learning segments.
+      content: `You are an expert educator who creates granular, highly specific learning segments. Every explanation must read like a mini-lecture: concrete, exam-ready, and faithful to the source.
 
 Document: "${docTitle || 'Uploaded Academic PDF'}"
 ${continuityNote}
 
 RULES (follow strictly):
 1. Create as MANY lessons as needed.
-2. EACH lesson must cover EXACTLY ONE single, atomic concept or skill.
-3. If the text contains 5 distinct ideas → create 5 separate lessons.
-4. Never combine multiple concepts into one lesson.
-5. Cover every important idea — be generous with the number of lessons.
+2. EACH lesson must cover EXACTLY ONE atomic concept, claim, event, or skill drawn from the text.
+3. If the passage contains several distinct ideas, split them into separate lessons — do not merge.
+4. Never invent facts, names, dates, or quotes that are not supported by the TEXT TO PROCESS below. If something is unclear in the source, say what the text actually states and what is ambiguous.
 
 TITLE RULES:
-- Use specific, concept-focused titles only.
-- Never use generic titles like "Introduction", "Overview", "Summary", "Conclusion", "Background".
+- Specific and descriptive (include the topic, actor, or tension when possible).
+- Never use generic titles: "Introduction", "Overview", "Summary", "Conclusion", "Background", "Key Points".
 
-EXPLANATION RULES:
-- Write as if you are directly teaching the student.
-- Start straight into the concept. No meta-language ("This lesson explains...", "In this section...").
-- 4–6 clear, natural sentences.
+EXPLANATION — STRUCTURE AND DEPTH (critical):
+- Write ONLY in third-person explanatory voice (no "In this lesson we will…", no "This section discusses…").
+- Minimum length: **at least 8 full sentences** per lesson unless the source excerpt is genuinely too short to justify that.
+- Format the explanation as **three paragraphs separated by \\n\\n** (blank line between paragraphs):
+
+  PARAGRAPH 1 — Open with the **precise claim or idea** this lesson covers. Then add 2–4 sentences that unpack it using **concrete details from the text**: names of people, institutions, dates, definitions, causal links (because/therefore), or quoted or closely paraphrased phrases. If the text uses technical terms, define them as the document does.
+
+  PARAGRAPH 2 — Explain **how this idea is argued or evidenced** in the passage: reasoning steps, examples, comparisons, or narrative sequence **as given in the source**. Name the evidence type (e.g. historical example, statistic, author’s rhetorical move) when the text provides it.
+
+  PARAGRAPH 3 — State **one or two implications**: what follows from this idea in the document’s line of thought, what it contrasts with, or what question it leaves open — still grounded in the text, not generic life advice.
+
+- BANNED (do not use vague filler): standalone phrases like "very important", "many people believe", "it is interesting to note", "plays a significant role", "various aspects", "in today’s world" **unless** immediately followed by specific content from the text.
 
 KEY POINTS:
-- 3–5 concrete, memorable insights.
+- 4–6 bullet-ready strings; each must be a **complete, specific claim** (not a label). Prefer "who did what / why it matters" over "understanding the concept".
 
 Return ONLY valid JSON:
 
@@ -116,8 +123,8 @@ Return ONLY valid JSON:
   "lessons": [
     {
       "title": "Very specific concept title",
-      "explanation": "Direct teaching text...",
-      "key_points": ["Concrete insight 1", "Concrete insight 2"]
+      "explanation": "Paragraph one sentences…\\n\\nParagraph two sentences…\\n\\nParagraph three sentences…",
+      "key_points": ["Specific claim 1", "Specific claim 2"]
     }
   ]
 }
@@ -208,29 +215,36 @@ async function generateLessonsFromText(fullText, fileName) {
   };
 }
 
-// ─── DEEP EXPLAIN (unchanged, still works well) ───────────────────────────────
+// ─── DEEP EXPLAIN — multi-section, segment-grounded tutor content ───────────────
 async function deepExplainLesson({ title, explanation, key_points, documentTitle }) {
   const response = await getGroq().chat.completions.create({
     model: GROQ_MODEL,
-    max_tokens: 2048,
-    temperature: 0.6,
+    max_tokens: 3072,
+    temperature: 0.55,
     messages: [{
       role: 'user',
-      content: `You are a friendly expert tutor.
+      content: `You are a friendly expert tutor. Ground EVERYTHING in this lesson segment only — do not invent facts not supported by the text below.
+
 Document: "${documentTitle || 'Uploaded PDF'}"
-Lesson: "${title}"
+Lesson segment title: "${title}"
 
-Previous explanation: "${explanation}"
-Key points: ${(key_points || []).map(p => `- ${p}`).join('\n') || 'None'}
+Segment explanation (primary source):
+"""${explanation}"""
 
-Return ONLY valid JSON with richer explanation:
+Key points from the segment:
+${(key_points || []).map(p => `- ${p}`).join('\n') || 'None'}
+
+Return ONLY valid JSON (no markdown fences). Each string field must be substantive (multiple sentences where asked).
 
 {
-  "detailed_explanation": "Exactly 3 paragraphs separated by \\n\\n. Teach directly.",
-  "examples": ["Relatable example 1.", "Relatable example 2."],
-  "why_it_matters": "One punchy sentence.",
-  "common_misconceptions": ["Students think X, but actually Y.", "Another common mistake."],
-  "study_tips": ["Practical tip 1.", "Practical tip 2."]
+  "detailed_explanation": "4–6 short paragraphs separated by \\n\\n. Teach directly: unpack the segment step by step.",
+  "conceptual_breakdown": "2–3 paragraphs: define terms, actors, and logic used in this segment.",
+  "context_and_debates": "2–3 paragraphs: different viewpoints, tensions, or historical/academic angles implied by THIS segment (stay faithful to the text).",
+  "connections": "1–2 paragraphs: how this segment links to earlier/later ideas in the same document theme (infer only if reasonable from the segment).",
+  "examples": ["Concrete example 1 tied to the segment.", "Concrete example 2 tied to the segment.", "Optional third example."],
+  "why_it_matters": "2–4 sentences on why this segment matters for understanding the document.",
+  "common_misconceptions": ["Misconception vs correction 1.", "Misconception vs correction 2.", "Optional third."],
+  "study_tips": ["Practical tip 1.", "Practical tip 2.", "Practical tip 3."]
 }`
     }],
   });
@@ -243,7 +257,16 @@ Return ONLY valid JSON with richer explanation:
   try {
     return JSON.parse(raw);
   } catch {
-    return { detailed_explanation: explanation, examples: [], why_it_matters: "", common_misconceptions: [], study_tips: [] };
+    return {
+      detailed_explanation: explanation,
+      conceptual_breakdown: '',
+      context_and_debates: '',
+      connections: '',
+      examples: [],
+      why_it_matters: '',
+      common_misconceptions: [],
+      study_tips: [],
+    };
   }
 }
 

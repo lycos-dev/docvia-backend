@@ -1,26 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { generateQuiz, evaluateAnswer } from '../services/readerService';
 import type { MicrotaskQuestion } from '../services/readerService';
+import { cn } from '../../../shared/utils/cn';
 
 const QUIZ_TYPES = [
-  { id: 'multiple_choice', label: 'Multiple Choice', icon: '🔵' },
-  { id: 'true_false', label: 'True / False', icon: '⚖️' },
-  { id: 'identification', label: 'Identification', icon: '🔍' },
-  { id: 'short_answer', label: 'Short Answer', icon: '✏️' },
-  { id: 'essay', label: 'Essay', icon: '📝' },
+  { id: 'multiple_choice', label: 'Multiple choice', icon: '◉' },
+  { id: 'true_false', label: 'True / false', icon: '⊕' },
+  { id: 'identification', label: 'Identification', icon: '◇' },
+  { id: 'short_answer', label: 'Short answer', icon: '✎' },
+  { id: 'essay', label: 'Essay', icon: '¶' },
 ];
 
 interface QuizPanelProps {
   documentTitle: string;
   lessonTitle: string;
   lessonContent: string;
+  isDark?: boolean;
   token?: string;
+  restartSignal?: number;
+  onSessionChange?: (inProgress: boolean) => void;
   onClose?: () => void;
 }
 
 type PanelState = 'picker' | 'loading' | 'question' | 'result' | 'summary';
 
-export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, token, onClose }: QuizPanelProps) {
+export default function QuizPanel({
+  documentTitle,
+  lessonTitle,
+  lessonContent,
+  isDark = false,
+  token,
+  restartSignal = 0,
+  onSessionChange,
+  onClose,
+}: QuizPanelProps) {
   const [panelState, setPanelState] = useState<PanelState>('picker');
   const [quizType, setQuizType] = useState('multiple_choice');
   const [quizMode, setQuizMode] = useState<'quick' | 'custom'>('quick');
@@ -35,6 +48,33 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
   const [evaluating, setEvaluating] = useState(false);
 
   const currentQuestion = questions[questionIdx];
+  const inProgress = panelState === 'loading' || panelState === 'question' || panelState === 'result';
+
+  const resetQuiz = () => {
+    setPanelState('picker');
+    setQuizType('multiple_choice');
+    setQuizMode('quick');
+    setQuizCount(3);
+    setQuestions([]);
+    setQuestionIdx(0);
+    setUserAnswer('');
+    setSelectedOption(null);
+    setFeedback(null);
+    setAskedQuestions([]);
+    setScore({ correct: 0, total: 0 });
+    setEvaluating(false);
+    onSessionChange?.(false);
+  };
+
+  useEffect(() => {
+    onSessionChange?.(inProgress);
+  }, [inProgress, onSessionChange]);
+
+  useEffect(() => {
+    if (restartSignal > 0) {
+      resetQuiz();
+    }
+  }, [restartSignal]);
 
   const startQuiz = async () => {
     setPanelState('loading');
@@ -44,7 +84,6 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
     const count = quizMode === 'quick' ? 1 : quizCount;
     const result = await generateQuiz(lessonTitle, lessonContent, documentTitle, quizType, count, askedQuestions, token);
     if (result.success && result.tasks && result.tasks.length > 0) {
-      // Dedup
       const seen = new Set(askedQuestions.map((q) => q.toLowerCase().trim()));
       const deduped = result.tasks.filter((t) => {
         const k = (t.question ?? '').toLowerCase().trim();
@@ -68,20 +107,20 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
 
   const submitAnswer = async () => {
     if (!currentQuestion) return;
-    const answer =
+    const answerPayload =
       currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'true_false'
         ? selectedOption !== null
-          ? currentQuestion.options[selectedOption]
+          ? selectedOption
           : ''
         : userAnswer.trim();
-    if (!answer) return;
+    if (answerPayload === '' || answerPayload === null) return;
 
     setEvaluating(true);
     const result = await evaluateAnswer(
-      currentQuestion.question,
-      answer,
-      currentQuestion.correctAnswer ?? currentQuestion.options?.[0] ?? '',
-      currentQuestion.type,
+      currentQuestion,
+      answerPayload,
+      lessonTitle,
+      lessonContent,
       token
     );
     setEvaluating(false);
@@ -97,7 +136,7 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
     setPanelState('result');
   };
 
-  const nextQuestion = () => {
+  const nextQuestion = async () => {
     if (questionIdx + 1 < questions.length) {
       setQuestionIdx((i) => i + 1);
       setFeedback(null);
@@ -106,7 +145,35 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
       setPanelState('question');
     } else {
       if (quizMode === 'quick') {
-        // Quick quiz: infinite — generate next question
+        setPanelState('loading');
+        setFeedback(null);
+        setSelectedOption(null);
+        setUserAnswer('');
+        const result = await generateQuiz(
+          lessonTitle,
+          lessonContent,
+          documentTitle,
+          quizType,
+          1,
+          askedQuestions,
+          token
+        );
+        if (result.success && result.tasks && result.tasks.length > 0) {
+          const seen = new Set(askedQuestions.map((q) => q.toLowerCase().trim()));
+          const deduped = result.tasks.filter((t) => {
+            const k = (t.question ?? '').toLowerCase().trim();
+            if (!k || seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          });
+          if (deduped.length > 0) {
+            setQuestions(deduped);
+            setQuestionIdx(0);
+            setAskedQuestions((prev) => [...prev, ...deduped.map((t) => t.question)]);
+            setPanelState('question');
+            return;
+          }
+        }
         setPanelState('picker');
       } else {
         setPanelState('summary');
@@ -114,53 +181,148 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
     }
   };
 
+  const shell = 'flex flex-col min-h-0 max-h-[min(82vh,680px)]';
+  const headerBar = cn(
+    'shrink-0 flex items-start justify-between gap-3 px-5 py-4 border-b',
+    isDark ? 'border-white/10 bg-gradient-to-r from-amber-900/40 to-orange-950/30' : 'border-amber-100/80 bg-gradient-to-r from-amber-50 to-orange-50/90',
+  );
+
+  const CloseBtn = () =>
+    onClose ? (
+      <button
+        type="button"
+        onClick={onClose}
+        className={cn(
+          'shrink-0 rounded-xl p-2 text-lg leading-none transition-colors',
+          isDark ? 'text-zinc-400 hover:bg-white/10 hover:text-white' : 'text-zinc-500 hover:bg-black/5 hover:text-zinc-900',
+        )}
+        aria-label="Close quiz"
+      >
+        ✕
+      </button>
+    ) : null;
+
   if (panelState === 'picker') {
     return (
-      <div className="rounded-xl overflow-hidden border-2 border-amber-300 dark:border-amber-700" style={{ animation: 'fadeUp 0.25s ease' }}>
-        <div className="flex items-center justify-between px-5 py-3" style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
-          <h4 className="text-sm font-bold text-white">📝 Take a Quiz</h4>
-          {onClose && <button onClick={onClose} className="text-white/70 hover:text-white text-lg leading-none" aria-label="Close quiz">✕</button>}
-        </div>
-        <div className="p-4 space-y-4 bg-amber-50 dark:bg-[#1c1a10]">
-        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Set Up Your Quiz</h4>
-
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2 uppercase tracking-wide">Question Type</p>
-          <div className="flex flex-wrap gap-1.5">
-            {QUIZ_TYPES.map((t) => (
-              <button key={t.id} onClick={() => setQuizType(t.id)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${quizType === t.id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
-                {t.icon} {t.label}
-              </button>
-            ))}
+      <div className={cn(shell, isDark ? 'bg-[#0f1419]' : 'bg-white')}>
+        <div className={headerBar}>
+          <div className="min-w-0">
+            <p className={cn('text-[10px] font-bold uppercase tracking-[0.18em] mb-1', isDark ? 'text-amber-200/70' : 'text-amber-800/80')}>
+              Quiz · This segment
+            </p>
+            <h3 className={cn('text-base font-bold leading-snug line-clamp-2', isDark ? 'text-white' : 'text-zinc-900')}>
+              {lessonTitle}
+            </h3>
+            <p className={cn('text-xs mt-1 truncate', isDark ? 'text-zinc-500' : 'text-zinc-500')} title={documentTitle}>
+              {documentTitle}
+            </p>
           </div>
+          <CloseBtn />
         </div>
 
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-2 uppercase tracking-wide">Quiz Mode</p>
-          <div className="flex gap-2">
-            {(['quick', 'custom'] as const).map((mode) => (
-              <button key={mode} onClick={() => setQuizMode(mode)}
-                className={`flex-1 py-1.5 rounded-xl text-xs font-medium transition-colors ${quizMode === mode ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
-                {mode === 'quick' ? '⚡ Quick (infinite)' : '🎯 Custom'}
-              </button>
-            ))}
-          </div>
-          {quizMode === 'custom' && (
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">Questions:</span>
-              <input type="range" min={2} max={10} value={quizCount} onChange={(e) => setQuizCount(Number(e.target.value))}
-                className="flex-1 accent-blue-600" />
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 w-4">{quizCount}</span>
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+          <div>
+            <p className={cn('text-[11px] font-semibold uppercase tracking-wide mb-2', isDark ? 'text-zinc-500' : 'text-zinc-500')}>
+              Question type
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {QUIZ_TYPES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setQuizType(t.id)}
+                  className={cn(
+                    'rounded-xl border px-3 py-2.5 text-left text-xs font-medium transition-all',
+                    quizType === t.id
+                      ? isDark
+                        ? 'border-amber-400/60 bg-amber-500/15 text-amber-100 ring-1 ring-amber-400/30'
+                        : 'border-amber-400 bg-amber-50 text-amber-950 ring-1 ring-amber-200'
+                      : isDark
+                        ? 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'
+                        : 'border-zinc-200 bg-zinc-50/80 text-zinc-700 hover:border-zinc-300',
+                  )}
+                >
+                  <span className="mr-1.5 opacity-80">{t.icon}</span>
+                  {t.label}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
+
+          <div>
+            <p className={cn('text-[11px] font-semibold uppercase tracking-wide mb-2', isDark ? 'text-zinc-500' : 'text-zinc-500')}>
+              Mode
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setQuizMode('quick')}
+                className={cn(
+                  'rounded-2xl border p-4 text-left transition-all',
+                  quizMode === 'quick'
+                    ? isDark
+                      ? 'border-sky-500/50 bg-sky-500/10 ring-1 ring-sky-400/20'
+                      : 'border-sky-300 bg-sky-50 ring-1 ring-sky-100'
+                    : isDark
+                      ? 'border-white/10 hover:bg-white/5'
+                      : 'border-zinc-200 hover:bg-zinc-50',
+                )}
+              >
+                <p className={cn('text-sm font-bold', isDark ? 'text-sky-200' : 'text-sky-900')}>Quick</p>
+                <p className={cn('text-[11px] mt-1 leading-relaxed', isDark ? 'text-zinc-400' : 'text-zinc-600')}>
+                  One question at a time — stay in flow.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuizMode('custom')}
+                className={cn(
+                  'rounded-2xl border p-4 text-left transition-all',
+                  quizMode === 'custom'
+                    ? isDark
+                      ? 'border-violet-500/50 bg-violet-500/10 ring-1 ring-violet-400/20'
+                      : 'border-violet-300 bg-violet-50 ring-1 ring-violet-100'
+                    : isDark
+                      ? 'border-white/10 hover:bg-white/5'
+                      : 'border-zinc-200 hover:bg-zinc-50',
+                )}
+              >
+                <p className={cn('text-sm font-bold', isDark ? 'text-violet-200' : 'text-violet-900')}>Custom</p>
+                <p className={cn('text-[11px] mt-1 leading-relaxed', isDark ? 'text-zinc-400' : 'text-zinc-600')}>
+                  Set how many questions in one run.
+                </p>
+              </button>
+            </div>
+            {quizMode === 'custom' && (
+              <div className="mt-4 flex items-center gap-3">
+                <span className={cn('text-xs', isDark ? 'text-zinc-400' : 'text-zinc-600')}>Questions</span>
+                <input
+                  type="range"
+                  min={2}
+                  max={10}
+                  value={quizCount}
+                  onChange={(e) => setQuizCount(Number(e.target.value))}
+                  className="flex-1 accent-amber-600"
+                />
+                <span className={cn('text-sm font-bold tabular-nums w-6', isDark ? 'text-white' : 'text-zinc-900')}>
+                  {quizCount}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <button onClick={startQuiz}
-          className="w-full py-2.5 text-white rounded-xl text-sm font-semibold transition-all hover:-translate-y-0.5"
-          style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
-          {quizMode === 'quick' ? '⚡ Start Quick Quiz →' : `🎯 Start ${quizCount}-Question Quiz →`}
-        </button>
+        <div className={cn('shrink-0 px-5 pb-5 pt-0', isDark ? 'border-t border-white/10' : 'border-t border-zinc-100')}>
+          <button
+            type="button"
+            onClick={startQuiz}
+            className={cn(
+              'w-full py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg transition-transform active:scale-[0.99]',
+              'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:brightness-105 shadow-amber-500/25',
+            )}
+          >
+            {quizMode === 'quick' ? 'Start quick quiz' : `Start ${quizCount}-question quiz`}
+          </button>
         </div>
       </div>
     );
@@ -168,9 +330,31 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
 
   if (panelState === 'loading') {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3">
-        <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-gray-400 dark:text-gray-500">Generating questions…</p>
+      <div className={cn(shell, 'relative items-center justify-center py-16', isDark ? 'bg-[#0f1419]' : 'bg-white')}>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              'absolute right-4 top-4 rounded-xl p-2 text-lg leading-none z-10',
+              isDark ? 'text-zinc-400 hover:bg-white/10 hover:text-white' : 'text-zinc-500 hover:bg-black/5',
+            )}
+            aria-label="Close quiz"
+          >
+            ✕
+          </button>
+        )}
+        <div className="flex flex-col items-center gap-4 px-6">
+          <div
+            className={cn(
+              'h-12 w-12 rounded-full border-2 border-t-transparent animate-spin',
+              isDark ? 'border-amber-400' : 'border-amber-600',
+            )}
+          />
+          <p className={cn('text-sm font-medium', isDark ? 'text-zinc-400' : 'text-zinc-600')}>
+            Generating questions from your segment…
+          </p>
+        </div>
       </div>
     );
   }
@@ -178,94 +362,187 @@ export default function QuizPanel({ documentTitle, lessonTitle, lessonContent, t
   if (panelState === 'summary') {
     const pct = score.total > 0 ? Math.round((score.correct / score.total) * 100) : 0;
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 px-4">
-        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">{pct}%</p>
-        <p className="text-sm text-gray-600 dark:text-gray-400">{score.correct} / {score.total} correct</p>
-        {pct >= 80 && <p className="text-sm font-medium text-green-600 dark:text-green-400">🎉 Great job!</p>}
-        {pct < 50 && <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Keep practising! Try again below.</p>}
-        <button onClick={() => { setAskedQuestions([]); setPanelState('picker'); setScore({ correct: 0, total: 0 }); }}
-          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors">
-          Try Again
-        </button>
+      <div className={cn(shell, 'relative', isDark ? 'bg-[#0f1419]' : 'bg-white')}>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              'absolute right-4 top-4 z-10 rounded-xl p-2 text-lg leading-none',
+              isDark ? 'text-zinc-400 hover:bg-white/10 hover:text-white' : 'text-zinc-500 hover:bg-black/5',
+            )}
+            aria-label="Close quiz"
+          >
+            ✕
+          </button>
+        )}
+        <div className="flex flex-col items-center justify-center flex-1 gap-5 px-8 py-12 text-center">
+          <div
+            className={cn(
+              'text-5xl font-black tabular-nums bg-clip-text text-transparent',
+              isDark ? 'bg-gradient-to-br from-emerald-300 to-sky-400' : 'bg-gradient-to-br from-emerald-600 to-sky-600',
+            )}
+            style={{ WebkitBackgroundClip: 'text' }}
+          >
+            {pct}%
+          </div>
+          <p className={cn('text-sm', isDark ? 'text-zinc-400' : 'text-zinc-600')}>
+            {score.correct} / {score.total} correct
+          </p>
+          {pct >= 80 && <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Great work.</p>}
+          {pct < 50 && pct > 0 && (
+            <p className="text-sm text-amber-700 dark:text-amber-300">Keep going — review the segment and try again.</p>
+          )}
+          <button
+            type="button"
+            onClick={resetQuiz}
+            className="mt-2 px-8 py-3 rounded-2xl text-sm font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:brightness-105 shadow-lg shadow-blue-500/20"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
 
-  // Question view
   const isMC = currentQuestion?.type === 'multiple_choice' || currentQuestion?.type === 'true_false';
   const isTextAnswer = !isMC;
   const totalQ = questions.length;
-  const pct = totalQ > 1 ? Math.round((questionIdx / totalQ) * 100) : 0;
 
   return (
-    <div className="flex flex-col h-full p-4 gap-3 overflow-y-auto">
-      {/* Progress bar */}
-      {totalQ > 1 && (
-        <div>
-          <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-          </div>
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Q {questionIdx + 1} / {totalQ}</p>
+    <div className={cn(shell, isDark ? 'bg-[#0f1419]' : 'bg-white')}>
+      <div className={headerBar}>
+        <div className="min-w-0 flex-1">
+          <p className={cn('text-[10px] font-bold uppercase tracking-[0.18em] mb-0.5', isDark ? 'text-amber-200/70' : 'text-amber-800/80')}>
+            {quizMode === 'quick' ? 'Quick quiz' : 'Custom quiz'}
+          </p>
+          <p className={cn('text-xs line-clamp-1', isDark ? 'text-zinc-500' : 'text-zinc-500')} title={lessonTitle}>
+            {lessonTitle}
+          </p>
         </div>
-      )}
+        <CloseBtn />
+      </div>
 
-      {/* Question */}
-      <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-relaxed">
-        {currentQuestion?.question}
-      </p>
-
-      {/* Options (MC / T-F) */}
-      {isMC && panelState === 'question' && (
-        <div className="space-y-2">
-          {currentQuestion.options.map((opt, i) => (
-            <button key={i} onClick={() => setSelectedOption(i)}
-              className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-colors ${selectedOption === i ? 'bg-blue-600 text-white' : 'bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'}`}>
-              <span className="font-semibold mr-2">
-                {currentQuestion.type === 'true_false' ? (i === 0 ? 'T' : 'F') : String.fromCharCode(65 + i)}.
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        {totalQ > 0 && (
+          <div>
+            <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wide mb-1.5">
+              <span className={isDark ? 'text-zinc-500' : 'text-zinc-500'}>
+                Question {questionIdx + 1} of {totalQ}
               </span>
-              {opt.replace(/^[A-DFT]\.\s*/, '')}
-            </button>
-          ))}
-        </div>
-      )}
+              <span className={isDark ? 'text-zinc-500' : 'text-zinc-500'}>
+                {totalQ > 1 ? Math.round(((questionIdx + 1) / totalQ) * 100) : 100}%
+              </span>
+            </div>
+            <div className={cn('h-2 rounded-full overflow-hidden', isDark ? 'bg-zinc-800' : 'bg-zinc-100')}>
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
+                style={{ width: `${totalQ > 1 ? ((questionIdx + 1) / totalQ) * 100 : 100}%` }}
+              />
+            </div>
+          </div>
+        )}
 
-      {/* Text answer */}
-      {isTextAnswer && panelState === 'question' && (
-        <textarea
-          value={userAnswer}
-          onChange={(e) => setUserAnswer(e.target.value)}
-          placeholder="Type your answer here…"
-          rows={3}
-          className="w-full resize-none rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-        />
-      )}
+        <p className={cn('text-[15px] md:text-base font-semibold leading-relaxed', isDark ? 'text-zinc-100' : 'text-zinc-900')}>
+          {currentQuestion?.question}
+        </p>
 
-      {/* Submit */}
-      {panelState === 'question' && (
-        <button onClick={submitAnswer} disabled={evaluating || (isMC ? selectedOption === null : !userAnswer.trim())}
-          className="py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          {evaluating ? 'Evaluating…' : 'Submit Answer'}
-        </button>
-      )}
+        {isMC && panelState === 'question' && currentQuestion && (
+          <div className="space-y-2">
+            {currentQuestion.options.map((opt, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setSelectedOption(i)}
+                className={cn(
+                  'w-full text-left rounded-xl border px-4 py-3 text-sm transition-all',
+                  selectedOption === i
+                    ? isDark
+                      ? 'border-amber-400 bg-amber-500/15 text-white ring-1 ring-amber-400/40'
+                      : 'border-amber-400 bg-amber-50 text-zinc-900 ring-1 ring-amber-200'
+                    : isDark
+                      ? 'border-white/10 bg-white/[0.03] text-zinc-200 hover:bg-white/10'
+                      : 'border-zinc-200 bg-zinc-50/50 text-zinc-800 hover:border-zinc-300',
+                )}
+              >
+                <span className="font-bold mr-2 text-amber-600 dark:text-amber-400">
+                  {currentQuestion.type === 'true_false' ? (i === 0 ? 'T' : 'F') : String.fromCharCode(65 + i)}.
+                </span>
+                {opt.replace(/^[A-DFT]\.\s*/, '')}
+              </button>
+            ))}
+          </div>
+        )}
 
-      {/* Feedback */}
-      {panelState === 'result' && feedback && (
-        <div className={`rounded-xl p-3 text-sm ${feedback.isCorrect ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'}`}>
-          <p className="font-semibold mb-1">{feedback.isCorrect ? '✅ Correct!' : '❌ Not quite'}</p>
-          {feedback.feedback && <p className="text-xs">{feedback.feedback}</p>}
-          {!feedback.isCorrect && feedback.correctAnswer && (
-            <p className="text-xs mt-1">Correct answer: <span className="font-semibold">{feedback.correctAnswer}</span></p>
-          )}
-        </div>
-      )}
+        {isTextAnswer && panelState === 'question' && (
+          <textarea
+            value={userAnswer}
+            onChange={(e) => setUserAnswer(e.target.value)}
+            placeholder="Type your answer…"
+            rows={4}
+            className={cn(
+              'w-full resize-none rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2',
+              isDark
+                ? 'border-white/10 bg-[#1a1f26] text-zinc-100 placeholder:text-zinc-600 focus:ring-amber-500/30'
+                : 'border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-400 focus:ring-amber-500/30',
+            )}
+          />
+        )}
 
-      {/* Next */}
-      {panelState === 'result' && (
-        <button onClick={nextQuestion}
-          className="py-2 bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 dark:hover:bg-gray-500 text-white rounded-xl text-sm font-semibold transition-colors">
-          {questionIdx + 1 < questions.length ? 'Next Question →' : quizMode === 'quick' ? 'Another Question →' : 'View Results'}
-        </button>
-      )}
+        {panelState === 'question' && (
+          <button
+            type="button"
+            onClick={submitAnswer}
+            disabled={evaluating || (isMC ? selectedOption === null : !userAnswer.trim())}
+            className={cn(
+              'w-full py-3 rounded-2xl text-sm font-bold text-white transition-opacity',
+              'bg-gradient-to-r from-blue-600 to-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20',
+            )}
+          >
+            {evaluating ? 'Checking…' : 'Submit answer'}
+          </button>
+        )}
+
+        {panelState === 'result' && feedback && (
+          <div
+            className={cn(
+              'rounded-2xl border p-4 text-sm',
+              feedback.isCorrect
+                ? isDark
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                : isDark
+                  ? 'border-red-500/40 bg-red-500/10 text-red-100'
+                  : 'border-red-200 bg-red-50 text-red-950',
+            )}
+          >
+            <p className="font-bold mb-1">{feedback.isCorrect ? 'Correct' : 'Not quite'}</p>
+            {feedback.feedback && <p className="text-xs opacity-95 leading-relaxed">{feedback.feedback}</p>}
+            {!feedback.isCorrect && feedback.correctAnswer && (
+              <p className="text-xs mt-2 opacity-90">
+                Expected: <span className="font-semibold">{feedback.correctAnswer}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {panelState === 'result' && (
+          <button
+            type="button"
+            onClick={nextQuestion}
+            className={cn(
+              'w-full py-3 rounded-2xl text-sm font-bold text-white',
+              'bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-700 dark:hover:bg-zinc-600',
+            )}
+          >
+            {questionIdx + 1 < questions.length
+              ? 'Next question'
+              : quizMode === 'quick'
+                ? 'Another question'
+                : 'View results'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
