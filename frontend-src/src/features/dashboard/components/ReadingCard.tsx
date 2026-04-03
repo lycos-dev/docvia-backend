@@ -29,9 +29,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
 
   const handleCardClick = () => {
     if (!isEditingTitle) {
-      // FIX: use filename (backend storage key) not numeric id
-      // TODO (backend): if lessons become per-user, switch back to document.id
-      // and update the backend to scope lesson records by userId
+      // Use filename (backend storage key) — not numeric id
       navigate(`/roadmap/${encodeURIComponent(document.filename)}`);
     }
   };

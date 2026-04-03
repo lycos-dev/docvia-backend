@@ -36,9 +36,7 @@ export default function Sidebar() {
   };
 
   const handleFileClick = (file: UploadedFile) => {
-    // FIX: use filename (backend storage key) not numeric id
-    // TODO (backend): if lessons become per-user, switch back to file.id
-    // and update the backend to scope lesson records by userId
+    // Use filename (backend storage key) — not numeric id
     navigate(`/roadmap/${encodeURIComponent(file.filename)}`);
   };
 
