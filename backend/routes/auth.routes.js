@@ -2,86 +2,30 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth.middleware');
 const {
-  register,
-  login,
-  signUp,
-  signIn,
-  forgotPassword,
-  resetPassword,
-  googleSignIn,
-  googleVerify,
-  getProfile,
-  logout
+  register, login, signUp, signIn,
+  forgotPassword, resetPassword,
+  googleSignIn, googleVerify,
+  getProfile, logout,
+  saveGroqKey, deleteGroqKey, getGroqKeyStatus,
 } = require('../controllers/auth.controller');
 
-/**
- * @route   POST /api/auth/register
- * @desc    Register a new user
- * @access  Public
- */
-router.post('/register', register);
-
-/**
- * @route   POST /api/auth/signup
- * @desc    Sign up a new user (alias for register)
- * @access  Public
- */
-router.post('/signup', signUp);
-
-/**
- * @route   POST /api/auth/login
- * @desc    Login user
- * @access  Public
- */
-router.post('/login', login);
-
-/**
- * @route   POST /api/auth/signin
- * @desc    Sign in user (alias for login)
- * @access  Public
- */
-router.post('/signin', signIn);
-
-/**
- * @route   POST /api/auth/forgot-password
- * @desc    Send password reset email
- * @access  Public
- */
+// ── Public routes ─────────────────────────────────────────────────────────────
+router.post('/register',        register);
+router.post('/signup',          signUp);
+router.post('/login',           login);
+router.post('/signin',          signIn);
 router.post('/forgot-password', forgotPassword);
+router.post('/reset-password',  resetPassword);
+router.get('/google',           googleSignIn);
+router.post('/google/verify',   googleVerify);
 
-/**
- * @route   POST /api/auth/reset-password
- * @desc    Reset password with token
- * @access  Public
- */
-router.post('/reset-password', resetPassword);
+// ── Protected routes ──────────────────────────────────────────────────────────
+router.get('/profile',          authenticateToken, getProfile);
+router.post('/logout',          authenticateToken, logout);
 
-/**
- * @route   GET /api/auth/google
- * @desc    Initiate Google OAuth sign-in
- * @access  Public
- */
-router.get('/google', googleSignIn);
-
-/**
- * @route   POST /api/auth/google/verify
- * @desc    Verify Google OAuth token and get JWT
- * @access  Public
- */
-router.post('/google/verify', googleVerify);
-
-/**
- * @route   GET /api/auth/profile
- * @desc    Get user profile
- * @access  Private (requires authentication)
- */
-router.get('/profile', authenticateToken, getProfile);
-
-/**
- * @route   POST /api/auth/logout
- * @desc    Logout user
- * @access  Private (requires authentication)
- */
-router.post('/logout', authenticateToken, logout);
+// ── Groq API key management ───────────────────────────────────────────────────
+router.get('/groq-key',         authenticateToken, getGroqKeyStatus);
+router.put('/groq-key',         authenticateToken, saveGroqKey);
+router.delete('/groq-key',      authenticateToken, deleteGroqKey);
 
 module.exports = router;

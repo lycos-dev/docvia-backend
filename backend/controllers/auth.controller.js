@@ -1,4 +1,5 @@
 const { supabase } = require('../config/supabase');
+const { assignKeyToUser } = require('../services/groqkeymanager.service');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -87,6 +88,9 @@ const register = async (req, res) => {
         error: error.message || 'Registration failed. Please try again.'
       });
     }
+
+    // Assign a Groq key to the new user
+    await assignKeyToUser(data.user.id);
 
     // Generate JWT token
     const token = generateToken(data.user.id, data.user.email);
@@ -475,6 +479,84 @@ const logout = async (req, res) => {
 // Aliases for alternative naming
 const signUp = register;
 const signIn = login;
+/**
+ * Save or update the user's Groq API key
+ * PUT /api/auth/groq-key
+ */
+const saveGroqKey = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { groq_api_key } = req.body;
+
+    if (!groq_api_key || typeof groq_api_key !== 'string') {
+      return res.status(400).json({ success: false, error: 'groq_api_key is required.' });
+    }
+
+    const { error } = await supabase
+      .from('user_profiles')
+      .upsert({ user_id: userId, groq_api_key: groq_api_key.trim() }, { onConflict: 'user_id' });
+
+    if (error) {
+      console.error('Save Groq key error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to save Groq API key.' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Groq API key saved successfully.' });
+  } catch (error) {
+    console.error('saveGroqKey error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to save Groq API key.' });
+  }
+};
+
+/**
+ * Delete the user's Groq API key (revert to shared key)
+ * DELETE /api/auth/groq-key
+ */
+const deleteGroqKey = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ groq_api_key: null })
+      .eq('user_id', userId);
+
+    if (error) {
+      return res.status(500).json({ success: false, error: 'Failed to remove Groq API key.' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Groq API key removed. Falling back to shared key.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Failed to remove Groq API key.' });
+  }
+};
+
+/**
+ * Check whether the user has a Groq key set (without revealing the key itself)
+ * GET /api/auth/groq-key
+ */
+const getGroqKeyStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('groq_api_key')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      return res.status(500).json({ success: false, error: 'Failed to fetch key status.' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      hasKey: !!(data?.groq_api_key),
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'Failed to fetch key status.' });
+  }
+};
 
 module.exports = {
   register,
@@ -486,5 +568,8 @@ module.exports = {
   googleSignIn,
   googleVerify,
   getProfile,
-  logout
+  logout,
+  saveGroqKey,
+  deleteGroqKey,
+  getGroqKeyStatus,
 };

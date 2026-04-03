@@ -1,19 +1,19 @@
 /**
  * LESSON AI SERVICE — Powered by GROQ (Llama-3.3-70b)
+ * Groq client is instantiated per-request using the user's own API key.
  */
 
 const Groq = require('groq-sdk');
-
-let groq = null;
-function getGroq() {
-  if (!groq) groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  return groq;
-}
 
 const CHUNK_SIZE  = 10_000;
 const MAX_CHUNKS  = 20;
 const GROQ_MODEL  = 'llama-3.3-70b-versatile';
 const GROQ_TOKENS = 4096;
+
+/** Returns a Groq client using the user's key, falling back to the env key. */
+function getGroq(apiKey) {
+  return new Groq({ apiKey: apiKey || process.env.GROQ_API_KEY });
+}
 
 // ─── TEXT CHUNKING ────────────────────────────────────────────────────────────
 
@@ -34,15 +34,12 @@ function chunkText(text, chunkSize = CHUNK_SIZE) {
 
 // ─── DOCUMENT META ────────────────────────────────────────────────────────────
 
-async function extractDocumentMeta(preview, fileName) {
-  const response = await getGroq().chat.completions.create({
+async function extractDocumentMeta(preview, fileName, apiKey) {
+  const response = await getGroq(apiKey).chat.completions.create({
     model: GROQ_MODEL, max_tokens: 256, temperature: 0.3, stream: false,
     messages: [{
       role: 'user',
-      content: `Given this document excerpt (filename: "${fileName}"), return ONLY valid JSON with no markdown:
-{ "title": "descriptive document title", "overview": "2-sentence learning overview" }
-
-EXCERPT:\n${preview.slice(0, 3000)}`,
+      content: `Given this document excerpt (filename: "${fileName}"), return ONLY valid JSON with no markdown:\n{ "title": "descriptive document title", "overview": "2-sentence learning overview" }\n\nEXCERPT:\n${preview.slice(0, 3000)}`,
     }],
   });
   const raw = response.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
@@ -51,10 +48,10 @@ EXCERPT:\n${preview.slice(0, 3000)}`,
 
 // ─── LESSON GENERATION ────────────────────────────────────────────────────────
 
-async function generateLessonsForChunk(chunk, chunkIdx, totalChunks, docTitle = '') {
+async function generateLessonsForChunk(chunk, chunkIdx, totalChunks, docTitle = '', apiKey) {
   const note = totalChunks > 1 ? `\nThis is chunk ${chunkIdx + 1} of ${totalChunks}. Maintain continuity.` : '';
 
-  const response = await getGroq().chat.completions.create({
+  const response = await getGroq(apiKey).chat.completions.create({
     model: GROQ_MODEL, max_tokens: GROQ_TOKENS, temperature: 0.5, stream: false,
     messages: [{
       role: 'user',
@@ -121,14 +118,14 @@ function mergeLessons(allLessons) {
 
 // ─── MAIN PIPELINE ────────────────────────────────────────────────────────────
 
-async function generateLessonsFromText(fullText, fileName) {
+async function generateLessonsFromText(fullText, fileName, apiKey) {
   if (!fullText || fullText.trim().length < 30) {
     throw new Error('Insufficient text extracted from PDF.');
   }
 
   console.log('[LessonAI] Extracting document meta...');
   let meta = { title: fileName.replace(/\.pdf$/i, ''), overview: '' };
-  try { meta = await extractDocumentMeta(fullText, fileName); }
+  try { meta = await extractDocumentMeta(fullText, fileName, apiKey); }
   catch (e) { console.warn('[LessonAI] Meta extraction failed, using filename:', e.message); }
 
   const chunks = chunkText(fullText);
@@ -140,7 +137,7 @@ async function generateLessonsFromText(fullText, fileName) {
     const batch   = chunks.slice(i, i + CONCURRENCY);
     const results = await Promise.all(
       batch.map((chunk, bIdx) =>
-        generateLessonsForChunk(chunk, i + bIdx, chunks.length, meta.title)
+        generateLessonsForChunk(chunk, i + bIdx, chunks.length, meta.title, apiKey)
           .catch(err => { console.warn(`[LessonAI] Chunk ${i + bIdx} failed:`, err.message); return []; })
       )
     );
@@ -157,8 +154,8 @@ async function generateLessonsFromText(fullText, fileName) {
 
 // ─── DEEP EXPLANATION ─────────────────────────────────────────────────────────
 
-async function deepExplainLesson({ title, explanation, key_points, documentTitle }) {
-  const response = await getGroq().chat.completions.create({
+async function deepExplainLesson({ title, explanation, key_points, documentTitle }, apiKey) {
+  const response = await getGroq(apiKey).chat.completions.create({
     model: GROQ_MODEL, max_tokens: 2048, temperature: 0.6, stream: false,
     messages: [{
       role: 'user',
