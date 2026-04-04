@@ -1,5 +1,7 @@
 const BASE = '/api/auth';
 
+import { supabase } from '../utils/supabaseClient';
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -92,10 +94,70 @@ export async function logout(token: string): Promise<SimpleResult> {
   return safeJson<SimpleResult>(res, { success: false });
 }
 
-export async function getGoogleAuthUrl(): Promise<{ success: boolean; url?: string; error?: string }> {
-  const res = await fetch(`${BASE}/google`);
-  if (res.redirected) {
-    return { success: true, url: res.url };
+/**
+ * Initiate Google OAuth login via Supabase
+ * Redirects user to Google login, then back to /auth/callback
+ */
+export async function loginWithGoogle(): Promise<void> {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+
+    if (error) {
+      console.error('Google OAuth error:', error);
+      throw new Error(error.message || 'Failed to initiate Google sign-in');
+    }
+
+    if (data?.url) {
+      window.location.href = data.url;
+    }
+  } catch (error) {
+    console.error('loginWithGoogle error:', error);
+    throw error;
   }
-  return safeJson(res, { success: false, error: 'Server did not return a response.' });
 }
+
+/**
+ * Get the current Supabase session (from OAuth callback)
+ * Called after the user returns from Google login
+ */
+export async function getSession() {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    return data.session;
+  } catch (error) {
+    console.error('getSession error:', error);
+    return null;
+  }
+}
+
+/**
+ * Verify and exchange Supabase OAuth session for app JWT token
+ * This is called after successful Google OAuth
+ */
+export async function verifyGoogleSession(): Promise<AuthResult> {
+  try {
+    const session = await getSession();
+    
+    if (!session?.access_token) {
+      return { success: false, error: 'No valid session found' };
+    }
+
+    // Send the Supabase access token to our backend to verify and get a JWT
+    const res = await apiPost('/google/verify', { access_token: session.access_token });
+    return safeJson<AuthResult>(res, { success: false, error: 'Server did not return a response.' });
+  } catch (error) {
+    console.error('verifyGoogleSession error:', error);
+    return { success: false, error: 'Failed to verify Google session' };
+  }
+}
+

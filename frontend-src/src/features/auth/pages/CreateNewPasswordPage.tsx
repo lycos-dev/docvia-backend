@@ -34,8 +34,22 @@ export const CreateNewPasswordPage: React.FC = () => {
   const strength = getStrength(password);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.replace('#', ''));
-    setAccessToken(params.get('access_token'));
+    // Extract token from URL hash (Supabase sends it as #access_token=...&type=recovery)
+    const hash = window.location.hash.replace('#', '');
+    console.log('🔑 Reset page hash:', hash);
+    
+    const params = new URLSearchParams(hash);
+    const token = params.get('access_token');
+    const type = params.get('type');
+    
+    console.log('📝 Extracted token:', token ? 'found' : 'not found');
+    console.log('📝 Recovery type:', type);
+    
+    if (!token) {
+      console.warn('⚠️ No access token found in URL. This page should only be accessed via the password reset email link.');
+    }
+    
+    setAccessToken(token);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,8 +80,15 @@ export const CreateNewPasswordPage: React.FC = () => {
 
     setErrors({});
     setIsLoading(true);
+    console.log('🔄 Submitting password reset with token...');
     const result = await authService.resetPassword(accessToken as string, password);
     setIsLoading(false);
+    
+    if (result.success) {
+      console.log('✅ Password reset successful');
+    } else {
+      console.error('❌ Password reset failed:', result.error);
+    }
 
     if (result.success) {
       navigate('/signin');
