@@ -211,9 +211,16 @@ const forgotPassword = async (req, res) => {
       });
     }
 
+    // Construct the frontend URL for password reset
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetRedirectUrl = `${frontendUrl}/create-new-password`;
+    
+    console.log('📧 Sending password reset email...');
+    console.log(`   Redirect URL: ${resetRedirectUrl}`);
+
     // Send password reset email via Supabase
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/create-new-password`,
+      redirectTo: resetRedirectUrl,
     });
 
     if (error) {
@@ -327,7 +334,7 @@ const googleSignIn = async (req, res) => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3001'}`,
+        redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

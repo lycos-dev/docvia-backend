@@ -16,6 +16,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  verifyOAuthSession: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -64,15 +65,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const loginWithGoogle = useCallback(async () => {
-    const result = await authService.getGoogleAuthUrl();
-    if (result.success && result.url) {
-      window.location.href = result.url;
+    await authService.loginWithGoogle();
+  }, []);
+
+  const verifyOAuthSession = useCallback(async () => {
+    const result = await authService.verifyGoogleSession();
+    if (result.success && result.data) {
+      localStorage.setItem(TOKEN_KEY, result.data.token);
+      setToken(result.data.token);
+      setUser({ id: result.data.user.id, email: result.data.user.email });
+      return { success: true };
     }
+    return { success: false, error: result.error ?? 'OAuth verification failed.' };
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isAuthenticated: !!token && !!user, isLoading, login, logout, loginWithGoogle }}
+      value={{ user, token, isAuthenticated: !!token && !!user, isLoading, login, logout, loginWithGoogle, verifyOAuthSession }}
     >
       {children}
     </AuthContext.Provider>
