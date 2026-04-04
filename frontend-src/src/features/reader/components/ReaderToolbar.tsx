@@ -52,7 +52,7 @@ export default function ReaderToolbar({
       <button
         onClick={onBack}
         className={cn(
-          'shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors',
+          'shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer',
           'text-[#6B7280] dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-white/10',
         )}
         aria-label="Back to roadmap"
@@ -109,7 +109,7 @@ export default function ReaderToolbar({
         <button
           onClick={onTogglePanel}
           className={cn(
-            'p-1.5 rounded-lg transition-colors',
+            'p-1.5 rounded-lg transition-colors cursor-pointer',
             isPanelOpen
               ? 'bg-[#3B82F6]/10 text-[#3B82F6] dark:text-[#60A5FA]'
               : 'text-[#6B7280] dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-white/10',
@@ -122,7 +122,7 @@ export default function ReaderToolbar({
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="p-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+          className="p-1.5 rounded-lg text-[#6B7280] dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
           aria-label="Toggle theme"
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}

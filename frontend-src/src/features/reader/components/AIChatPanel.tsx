@@ -148,7 +148,7 @@ export default function AIChatPanel({
                 key={chip}
                 onClick={() => handleSend(chip)}
                 className={cn(
-                  "w-full text-left px-3 py-2 rounded-xl text-sm transition-colors",
+                  "w-full text-left px-3 py-2 rounded-xl text-sm transition-colors cursor-pointer",
                   "bg-gray-50 dark:bg-[#0f172a]",
                   "text-[#111827] dark:text-[#F1F5F9]",
                   "border border-black/10 dark:border-white/10",
@@ -236,13 +236,13 @@ export default function AIChatPanel({
               "disabled:opacity-50",
               "max-h-[76px] overflow-y-auto",
             )}
-            style={{ fontFamily: "Poppins, sans-serif" }}
+            style={{ fontFamily: "Inter, sans-serif" }}
           />
           <button
             onClick={() => handleSend(inputValue)}
             disabled={!inputValue.trim() || isTyping}
             className={cn(
-              "shrink-0 p-1.5 rounded-lg transition-colors",
+              "shrink-0 p-1.5 rounded-lg transition-colors cursor-pointer",
               inputValue.trim() && !isTyping
                 ? "bg-[#3B82F6] text-white hover:bg-[#2563EB]"
                 : "bg-gray-200 dark:bg-white/10 text-gray-400 dark:text-white/30 cursor-not-allowed",

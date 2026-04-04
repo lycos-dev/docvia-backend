@@ -322,7 +322,7 @@ export default function ReaderPage() {
                   }
                 }}
                 className={cn(
-                  "px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors",
+                  "px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors cursor-pointer",
                   mainView === v
                     ? "text-[#3B82F6] border-b-2 border-[#3B82F6] bg-transparent"
                     : isDark
@@ -405,12 +405,16 @@ export default function ReaderPage() {
                   onClick={handleMarkComplete}
                   disabled={isCompleted}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all",
+                    "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer",
                     isCompleted
                       ? isDark
-                        ? "bg-white/10 text-[#94A3B8] cursor-default"
-                        : "bg-gray-100 text-[#6B7280] cursor-default"
-                      : "bg-linear-to-r from-[#059669] to-[#10b981] text-white shadow-md hover:-translate-y-0.5",
+                        ? "bg-white/10 text-[#94A3B8] cursor-default" // Muted gray for completed (Dark)
+                        : "bg-gray-100 text-[#6B7280] cursor-default" // Muted gray for completed (Light)
+                      : "bg-[#FAFAFA] text-[#727272] border border-[#bbbdbf] shadow-md " +
+                          // --- ADDED HOVER EFFECTS BELOW ---
+                          "hover:-translate-y-0.5 hover:shadow-lg hover:bg-white " +
+                          "hover:border-[#80AAE8] hover:text-[#80AAE8] " +
+                          "active:scale-95",
                   )}
                 >
                   {isCompleted ? "↩ Mark as Incomplete" : "✓ Mark as Complete"}
@@ -418,13 +422,20 @@ export default function ReaderPage() {
                 <button
                   onClick={() => setShowQuiz(true)}
                   ref={takeQuizButtonRef}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 text-white"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 active:scale-95 text-white cursor-pointer"
                   style={{
-                    background: "linear-gradient(135deg,#f59e0b,#d97706)",
-                    boxShadow: "0 3px 10px rgba(245,158,11,0.3)",
+                    // Using #4F7CDD as the primary, with a slightly deeper blue for the gradient edge
+                    background:
+                      "linear-gradient(135deg, #4F7CDD 0%, #6094e0 100%)",
+                    // Glowing effect using the theme blue
+                    boxShadow: isDark
+                      ? "0 4px 15px rgba(128, 170, 232, 0.25)"
+                      : "0 4px 12px rgba(96, 148, 224, 0.3)",
                   }}
                 >
-                  📝 {quizInProgress ? "Continue Quiz" : "Take Quiz"}
+                  <span className="tracking-tight">
+                    {quizInProgress ? "Continue Quiz" : "Take Quiz"}
+                  </span>
                 </button>
                 {quizInProgress && (
                   <button
@@ -432,7 +443,7 @@ export default function ReaderPage() {
                       setQuizRestartSignal((v) => v + 1);
                       setShowQuiz(true);
                     }}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-[#f59e0b]/40 text-[#b45309] dark:text-[#fbbf24] hover:bg-[#f59e0b]/10 transition-colors"
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-[#f59e0b]/40 text-[#b45309] dark:text-[#fbbf24] hover:bg-[#f59e0b]/10 transition-colors cursor-pointer"
                     title="Start a fresh quiz session"
                   >
                     Start New
@@ -444,7 +455,7 @@ export default function ReaderPage() {
                   onClick={handlePrevLesson}
                   disabled={lessonIndex === 0}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors",
+                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer",
                     isDark
                       ? "border-white/10 text-[#94A3B8] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed"
                       : "border-black/10 text-[#6B7280] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed",
@@ -458,7 +469,7 @@ export default function ReaderPage() {
                     !lessonSet || lessonIndex >= lessonSet.lessons.length - 1
                   }
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors",
+                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer",
                     isDark
                       ? "border-white/10 text-[#94A3B8] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed"
                       : "border-black/10 text-[#6B7280] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed",
@@ -496,7 +507,7 @@ export default function ReaderPage() {
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   className={cn(
-                    "shrink-0 px-4 py-3 text-xs font-semibold transition-colors whitespace-nowrap",
+                    "shrink-0 px-4 py-3 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer",
                     activeTab === tab.key
                       ? "text-[#3B82F6] border-b-2 border-[#3B82F6]"
                       : isDark
@@ -854,32 +865,41 @@ function LessonContent({
       </div>
 
       {/* Go Deeper */}
-      <div className="flex items-center gap-4 mt-2">
+      <div className="flex items-center gap-4 mt-4">
         <div
           className="flex-1 h-px"
           style={{ background: isDark ? "rgba(255,255,255,0.1)" : "#E5E7EB" }}
         />
+
         <button
           ref={goDeeperButtonRef}
           onClick={onGoDeeper}
-          className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all hover:-translate-y-0.5"
+          className="shrink-0 flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5 active:scale-95 cursor-pointer"
           style={{
-            background: isDark ? "rgba(139,92,246,0.15)" : "#F5F3FF",
-            color: "#7C3AED",
-            border: `1.5px dashed ${deepDiveOpen ? "#7c3aed" : "#c4b5fd"}`,
+            background: isDark ? "#022658" : "#FFFFFF", // Use your brand navy for dark mode
+            color: "#4F83DA",
+            border: `1px solid ${isDark ? "#1E40AF" : "#D1E1F8"}`,
+            // This is the "Glowing Blue" magic:
+            boxShadow: isDark
+              ? "0 0 15px rgba(59, 130, 246, 0.25), 0 0 5px rgba(59, 130, 246, 0.1)"
+              : "0 4px 12px rgba(79, 131, 218, 0.12)",
           }}
         >
-          🔬 Go Deeper on this Lesson
+          <span className="text-base">🔍</span>
+          <span style={{ fontFamily: "Inter, sans-serif" }}>
+            Go Deeper on this Lesson
+          </span>
           <span
-            className="text-xs transition-transform duration-200"
+            className="ml-1 text-[10px] transition-transform duration-300"
             style={{
-              display: "inline-block",
               transform: deepDiveOpen ? "rotate(180deg)" : "none",
+              opacity: 0.8,
             }}
           >
-            ▾
+            ▼
           </span>
         </button>
+
         <div
           className="flex-1 h-px"
           style={{ background: isDark ? "rgba(255,255,255,0.1)" : "#E5E7EB" }}
@@ -933,7 +953,7 @@ function LessonError({
       </p>
       <button
         onClick={onBack}
-        className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+        className="px-4 py-2 rounded-lg text-sm font-semibold text-white cursor-pointer"
         style={{ background: "#3B82F6" }}
       >
         ← Back to Roadmap
