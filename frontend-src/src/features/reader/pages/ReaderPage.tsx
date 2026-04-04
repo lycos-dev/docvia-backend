@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
+import { useTimeTracker } from '../../../shared/hooks/useTimeTracker';
 import { useAuth } from '../../../shared/contexts/AuthContext';
 import * as pdfService from '../../../shared/services/pdfService';
 import type { BackendLesson, LessonSet } from '../../../shared/services/pdfService';
@@ -70,7 +71,7 @@ export default function ReaderPage() {
 
   // ── Notes (auto-save via debounce) ────────────────────────────────────────
   const [notes, setNotes] = useState('');
-  const notesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notesDebounceRef = useRef<number | null>(null);
 
   // Load saved notes when lesson changes
   useEffect(() => {
@@ -85,8 +86,8 @@ export default function ReaderPage() {
   const handleNotesChange = (value: string) => {
     setNotes(value);
     // Debounce save — 500ms after last keystroke
-    if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
-    notesDebounceRef.current = setTimeout(() => {
+    if (notesDebounceRef.current !== null) window.clearTimeout(notesDebounceRef.current);
+    notesDebounceRef.current = window.setTimeout(() => {
       try {
         localStorage.setItem(NOTES_KEY(documentId, lessonId), value);
       } catch { /* quota errors ignored */ }
@@ -120,6 +121,9 @@ export default function ReaderPage() {
     lessonSet && lessonSet.lessons.length > 0
       ? lessonSet.totalLessons || lessonSet.lessons.length
       : 0;
+
+  // ── Time tracking — only accrues while tab is visible + window focused ──────
+  useTimeTracker({ documentId, lessonId });
 
   // Track open lesson + total count for Progress page (no fake default like 10)
   useEffect(() => {
@@ -566,7 +570,7 @@ interface LessonContentProps {
   isDark: boolean;
   deepDiveOpen: boolean;
   onGoDeeper: () => void;
-  goDeeperButtonRef: React.RefObject<HTMLButtonElement | null>;
+  goDeeperButtonRef: React.RefObject<HTMLButtonElement>;
   keyPoints: string[];
 }
 

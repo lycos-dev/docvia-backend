@@ -10,6 +10,7 @@ import {
   ChevronRight, Maximize2,
 } from 'lucide-react';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
+import { useTimeTracker } from '../../../shared/hooks/useTimeTracker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Lesson {
@@ -896,6 +897,18 @@ export default function RoadmapPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [usingFallback, setUsingFallback] = useState(false);
   const [fallbackDismissed, setFallbackDismissed] = useState(false);
+
+  // ── Derive the current lesson id from whichever module is marked current ──
+  const currentModule = modules.find(m => m.isCurrent);
+  const currentLessonIdForTracker = currentModule?.lessons.find(l => l.isCurrent)?.id
+    ?? currentModule?.lessons[0]?.id
+    ?? null;
+
+  // ── Time tracking — accrues while user is on the roadmap studying ──────────
+  useTimeTracker({
+    documentId: loadingState === 'ready' ? pdfId : null,
+    lessonId:   loadingState === 'ready' ? currentLessonIdForTracker : null,
+  });
 
   useEffect(() => {
     let cancelled = false;

@@ -36,6 +36,8 @@ interface ProgressStore {
   lessonProgress: Record<string, LessonProgress>;
   streak: StreakData;
   dailyCompletions: Record<string, number>;
+  /** YYYY-MM-DD → total seconds studied that day */
+  dailyTimeSeconds: Record<string, number>;
 }
 
 interface ProgressContextValue {
@@ -46,6 +48,14 @@ interface ProgressContextValue {
   /** Updates current lesson + last access; pass totalLessons when known so % stays accurate */
   setCurrentLesson: (documentId: string, lessonId: string, totalLessons?: number) => void;
   getDocumentProgress: (documentId: string) => DocumentProgress | null;
+  /**
+   * Adds seconds to the timeSpentSeconds counter for the given lesson.
+   * Called by useTimeTracker — only fires while the user is actively studying
+   * (tab visible + window focused) on the Roadmap or Reader pages.
+   */
+  addTimeSpent: (documentId: string, lessonId: string, seconds: number) => void;
+  /** YYYY-MM-DD → seconds studied; used for 7-day activity detail */
+  dailyTimeSeconds: Record<string, number>;
 }
 
 const ProgressContext = createContext<ProgressContextValue | null>(null);
@@ -127,6 +137,7 @@ const INITIAL_STORE: ProgressStore = {
   lessonProgress: {},
   streak: INITIAL_STREAK,
   dailyCompletions: {},
+  dailyTimeSeconds: {},
 };
 
 function loadStore(): ProgressStore {
@@ -246,6 +257,37 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const addTimeSpent = useCallback(
+    (documentId: string, lessonId: string, seconds: number) => {
+      if (seconds <= 0) return;
+      setStore((prev) => {
+        const key = `${documentId}:${lessonId}`;
+        const existing = prev.lessonProgress[key];
+        const lessonProg: LessonProgress = {
+          lessonId,
+          documentId,
+          isCompleted:      existing?.isCompleted      ?? false,
+          completedAt:      existing?.completedAt      ?? null,
+          timeSpentSeconds: (existing?.timeSpentSeconds ?? 0) + seconds,
+          attempts:         existing?.attempts          ?? 0,
+        };
+        const today = todayISO();
+        const dailyTimeSeconds = {
+          ...prev.dailyTimeSeconds,
+          [today]: (prev.dailyTimeSeconds?.[today] ?? 0) + seconds,
+        };
+        const next: ProgressStore = {
+          ...prev,
+          lessonProgress: { ...prev.lessonProgress, [key]: lessonProg },
+          dailyTimeSeconds,
+        };
+        saveStore(next);
+        return next;
+      });
+    },
+    []
+  );
+
   const getDocumentProgress = useCallback(
     (documentId: string): DocumentProgress | null =>
       store.documentProgress[documentId] ?? null,
@@ -261,6 +303,8 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         markLessonComplete,
         setCurrentLesson,
         getDocumentProgress,
+        addTimeSpent,
+        dailyTimeSeconds: store.dailyTimeSeconds ?? {},
       }}
     >
       {children}
