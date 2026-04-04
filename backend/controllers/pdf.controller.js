@@ -1,5 +1,6 @@
 const { supabase } = require('../config/supabase');
 const path = require('path');
+const crypto = require('crypto');
 
 /**
  * Validate PDF file
@@ -279,4 +280,83 @@ const getFile = async (req, res) => {
   }
 };
 
-module.exports = { uploadPDF, listPDFs, deletePDF, renamePDF, validatePDF, getFile };
+// ─── CHECK FOR DUPLICATES ─────────────────────────────────────────────────────
+
+/**
+ * Check if a PDF with the same content hash and title already exists for the user
+ * @route POST /api/pdf/check-duplicate
+ */
+const checkForDuplicates = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
+    const { contentHash, title } = req.body;
+    if (!contentHash || !title) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+        required: ['contentHash', 'title'],
+      });
+    }
+
+    // Get all files for this user
+    const { data: files, error } = await supabase
+      .storage
+      .from('academic-pdfs')
+      .list(userPrefix(userId), { limit: 1000, offset: 0 });
+
+    if (error) {
+      console.error('Supabase list error:', error);
+      return res.status(500).json({ success: false, error: 'Failed to check duplicates', message: error.message });
+    }
+
+    if (!files || files.length === 0) {
+      return res.status(200).json({ success: true, isDuplicate: false, duplicates: [] });
+    }
+
+    // Download and check content hash of existing files
+    const duplicates = [];
+    for (const file of files) {
+      const storagePath = `${userPrefix(userId)}/${file.name}`;
+      const { data: fileData, error: dlErr } = await supabase
+        .storage
+        .from('academic-pdfs')
+        .download(storagePath);
+
+      if (dlErr) {
+        console.error(`Failed to download ${file.name}:`, dlErr);
+        continue;
+      }
+
+      const buffer = Buffer.from(await fileData.arrayBuffer());
+      const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
+      const displayName = file.name
+        .replace(/^\d+_[a-z0-9]+_/i, '')
+        .replace(/_/g, ' ')
+        .replace(/\.pdf$/i, '');
+
+      if (fileHash === contentHash) {
+        duplicates.push({
+          filename: file.name,
+          displayName,
+        });
+      }
+    }
+
+    const isDuplicate = duplicates.length > 0;
+    return res.status(200).json({
+      success: true,
+      isDuplicate,
+      duplicates,
+      message: isDuplicate
+        ? `Found ${duplicates.length} file(s) with the same content.`
+        : 'No duplicates found.',
+    });
+  } catch (error) {
+    console.error('Check duplicates error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
+  }
+};
+
+module.exports = { uploadPDF, listPDFs, deletePDF, renamePDF, validatePDF, getFile, checkForDuplicates };

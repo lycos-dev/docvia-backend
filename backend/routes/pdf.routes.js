@@ -3,7 +3,7 @@ const router  = express.Router();
 const multer  = require('multer');
 
 const { authenticateToken } = require('../middleware/auth.middleware');
-const { uploadPDF, listPDFs, deletePDF, renamePDF, getFile } = require('../controllers/pdf.controller');
+const { uploadPDF, listPDFs, deletePDF, renamePDF, getFile, checkForDuplicates } = require('../controllers/pdf.controller');
 const {
   segmentPDFEndpoint,
   getSegmentsEndpoint,
@@ -40,6 +40,7 @@ router.use(authenticateToken);
 
 // ── PDF CRUD ──────────────────────────────────────────────────────────────────
 router.post('/upload', upload.single('pdf'), uploadPDF);
+router.post('/check-duplicate', checkForDuplicates);
 router.get('/list', listPDFs);
 router.get('/file/:filename', getFile);
 

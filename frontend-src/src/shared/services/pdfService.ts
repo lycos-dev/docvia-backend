@@ -41,6 +41,14 @@ export interface LessonSetResult {
   message?: string;
 }
 
+export interface DuplicateCheckResult {
+  success: boolean;
+  isDuplicate: boolean;
+  duplicates: Array<{ filename: string; displayName: string }>;
+  message?: string;
+  error?: string;
+}
+
 // Safely parse JSON — returns a fallback if the body is empty or non-JSON
 async function safeJson<T>(res: Response, fallback: T): Promise<T> {
   try {
@@ -183,4 +191,47 @@ export async function getLessons(pdfId: string, userId: string, token?: string):
     },
   });
   return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
+}
+
+/** Calculate SHA-256 hash of a file */
+export async function calculateFileHash(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Check if a PDF with the same content already exists */
+export async function checkForDuplicates(
+  file: File,
+  token: string
+): Promise<DuplicateCheckResult> {
+  try {
+    const contentHash = await calculateFileHash(file);
+    const title = file.name.replace(/\.pdf$/i, '').replace(/_/g, ' ');
+
+    const res = await fetch(`${BASE}/check-duplicate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ contentHash, title }),
+    });
+
+    return safeJson<DuplicateCheckResult>(res, {
+      success: false,
+      isDuplicate: false,
+      duplicates: [],
+      error: 'Server did not return a response.',
+    });
+  } catch (error) {
+    console.error('Error checking for duplicates:', error);
+    return {
+      success: false,
+      isDuplicate: false,
+      duplicates: [],
+      error: 'Failed to check for duplicates. Please try again.',
+    };
+  }
 }
