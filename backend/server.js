@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const net = require('net');
+const { execSync } = require('child_process');
 const pdfRoutes = require('./routes/pdf.routes');
 require('dotenv').config();
 
@@ -35,7 +37,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/pdf', pdfRoutes);
 
 // Health check endpoint for API
-// Health check endpoint for API
 app.get('/api', (req, res) => {
   res.json({
     success: true,
@@ -63,7 +64,6 @@ app.get('/api', (req, res) => {
 
 // Serve index.html for all non-API routes (SPA support)
 app.get('*', (req, res) => {
-  // Only serve HTML for non-API routes
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
   } else {
@@ -83,13 +83,66 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
+// ── Port release helper ───────────────────────────────────────────────────────
+// Checks if a port is in use and kills the occupying process (Windows + Unix).
+function freePort(port) {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+
+    tester.once('error', (err) => {
+      if (err.code !== 'EADDRINUSE') return resolve(); // unknown error — let listen fail naturally
+      console.log(`⚠️  Port ${port} is in use — attempting to free it...`);
+      try {
+        if (process.platform === 'win32') {
+          // netstat output: "  TCP  0.0.0.0:3001  ...  LISTENING  <pid>"
+          const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8' });
+          const lines = out.trim().split('\n');
+          const pids = new Set();
+          for (const line of lines) {
+            if (!line.includes('LISTENING')) continue;
+            const parts = line.trim().split(/\s+/);
+            const pid = parts[parts.length - 1];
+            if (pid && pid !== '0') pids.add(pid);
+          }
+          for (const pid of pids) {
+            try {
+              execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+              console.log(`✅ Killed PID ${pid} holding port ${port}`);
+            } catch (_) { /* already gone */ }
+          }
+        } else {
+          // macOS / Linux
+          const out = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf8' });
+          const pids = out.trim().split('\n').filter(Boolean);
+          for (const pid of pids) {
+            try {
+              execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+              console.log(`✅ Killed PID ${pid} holding port ${port}`);
+            } catch (_) { /* already gone */ }
+          }
+        }
+      } catch (_) {
+        // findstr / lsof returned nothing — port may have freed itself
+      }
+      // Give the OS a moment to release the port
+      setTimeout(resolve, 500);
+    });
+
+    tester.once('listening', () => tester.close(resolve)); // port is free
+    tester.listen(port);
+  });
+}
+
+// ── Start server ──────────────────────────────────────────────────────────────
 const startServer = async () => {
   try {
+    // Free the port before binding (no-op if already free)
+    await freePort(PORT);
+
     // Test Supabase connection
     console.log('🔄 Testing Supabase connection...');
     const connected = await testConnection();
-    
+
     if (!connected) {
       console.error('⚠️  Warning: Could not verify Supabase connection');
       console.error('Please check your SUPABASE_URL and SUPABASE_ANON_KEY in .env file');
