@@ -17,6 +17,9 @@ export interface ChatMessage {
 }
 
 export interface ChatResponse {
+  [x: string]: string | undefined
+  // Safely parse JSON — returns a fallback if the body is empty or non-JSON
+  ;
   success: boolean;
   reply?: string;
   error?: string;

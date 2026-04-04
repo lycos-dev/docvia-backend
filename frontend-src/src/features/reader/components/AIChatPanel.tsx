@@ -1,11 +1,12 @@
 // src/features/reader/components/AIChatPanel.tsx
-import { useState, useEffect, useRef } from 'react';
-import { Send } from 'lucide-react';
-import { cn } from '../../../shared/utils/cn';
+import { useState, useEffect, useRef } from "react";
+import { Send } from "lucide-react";
+import { cn } from "../../../shared/utils/cn";
+import { sendChat } from "../services/readerService";
 
 interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
   timestamp: Date;
 }
@@ -13,38 +14,50 @@ interface ChatMessage {
 interface AIChatPanelProps {
   documentId: string;
   lessonId: string;
+  lessonTitle: string;
+  lessonContent: string;
   isDark: boolean;
+  token?: string;
   /** When set, auto-sends this message into the chat */
   injectMessage?: string | null;
   onInjectHandled?: () => void;
 }
 
 const STARTER_CHIPS = [
-  'Explain this section in simple terms',
-  'Give me a quiz on this lesson',
-  'What are the key takeaways?',
+  "Explain this section in simple terms",
+  "Give me a quiz on this lesson",
+  "What are the key takeaways?",
 ];
 
-const MOCK_RESPONSE =
-  'This is a mock response while the backend is being set up. Once the AI backend is connected, you\'ll get real intelligent answers about this lesson.';
+const DEFAULT_ERROR_RESPONSE =
+  "I could not reach the AI tutor right now. Please try again in a moment.";
 
-export default function AIChatPanel({ documentId, lessonId, isDark, injectMessage, onInjectHandled }: AIChatPanelProps) {
+export default function AIChatPanel({
+  documentId,
+  lessonId,
+  lessonTitle,
+  lessonContent,
+  isDark,
+  token,
+  injectMessage,
+  onInjectHandled,
+}: AIChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputValue, setInputValue] = useState<string>('');
+  const [inputValue, setInputValue] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-scroll to latest message
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
   // Auto-resize textarea
   const adjustTextareaHeight = () => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = 'auto';
+    el.style.height = "auto";
     const lineHeight = 20;
     const maxHeight = lineHeight * 3 + 16; // 3 rows + padding
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
@@ -56,54 +69,58 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
-      role: 'user',
+      role: "user",
       content: trimmed,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    setInputValue('');
+    setInputValue("");
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = "auto";
     }
     setIsTyping(true);
 
     try {
-      const response = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId, lessonId, message: trimmed }),
-      });
-
-      if (!response.ok) throw new Error('API error');
-
-      const data = (await response.json()) as { reply?: string; message?: string };
-      const replyText = data.reply ?? data.message ?? MOCK_RESPONSE;
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const data = await sendChat(
+        documentId,
+        lessonTitle,
+        lessonContent,
+        trimmed,
+        history,
+      );
+      if (!data.success || !data.reply) {
+        throw new Error(data.error ?? data.message ?? "Chat request failed.");
+      }
+      const replyText = data.reply;
 
       setMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
-          role: 'assistant',
+          role: "assistant",
           content: replyText,
           timestamp: new Date(),
         },
       ]);
     } catch {
-      // Simulate typing delay then mock response
-      await new Promise<void>((resolve) => setTimeout(resolve, 1500));
       setMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
-          role: 'assistant',
-          content: MOCK_RESPONSE,
+          role: "assistant",
+          content: DEFAULT_ERROR_RESPONSE,
           timestamp: new Date(),
         },
       ]);
     } finally {
       setIsTyping(false);
     }
+    // message history and lesson context are required for contextual tutoring replies
   };
 
   // Auto-send injected messages (from TextSelectionTooltip)
@@ -112,19 +129,22 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
       handleSend(injectMessage);
       onInjectHandled?.();
     }
-  // handleSend is stable within a render; injectMessage is the trigger
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // handleSend is stable within a render; injectMessage is the trigger
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [injectMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend(inputValue);
     }
   };
 
   return (
-    <div className="flex flex-col h-full" style={{ fontFamily: 'Poppins, sans-serif' }}>
+    <div
+      className="flex flex-col h-full"
+      style={{ fontFamily: "Poppins, sans-serif" }}
+    >
       {/* Messages list */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && !isTyping && (
@@ -137,11 +157,11 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
                 key={chip}
                 onClick={() => handleSend(chip)}
                 className={cn(
-                  'w-full text-left px-3 py-2 rounded-xl text-sm transition-colors',
-                  'bg-gray-50 dark:bg-[#0f172a]',
-                  'text-[#111827] dark:text-[#F1F5F9]',
-                  'border border-black/10 dark:border-white/10',
-                  'hover:bg-gray-100 dark:hover:bg-white/5',
+                  "w-full text-left px-3 py-2 rounded-xl text-sm transition-colors",
+                  "bg-gray-50 dark:bg-[#0f172a]",
+                  "text-[#111827] dark:text-[#F1F5F9]",
+                  "border border-black/10 dark:border-white/10",
+                  "hover:bg-gray-100 dark:hover:bg-white/5",
                 )}
               >
                 {chip}
@@ -153,17 +173,20 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}
+            className={cn(
+              "flex",
+              msg.role === "user" ? "justify-end" : "justify-start",
+            )}
           >
             <div
               className={cn(
-                'max-w-[85%] px-4 py-2 text-sm leading-relaxed',
-                msg.role === 'user'
-                  ? 'bg-[#3B82F6] text-white rounded-2xl rounded-tr-sm'
+                "max-w-[85%] px-4 py-2 text-sm leading-relaxed",
+                msg.role === "user"
+                  ? "bg-[#3B82F6] text-white rounded-2xl rounded-tr-sm"
                   : cn(
-                      'rounded-2xl rounded-tl-sm',
-                      'bg-gray-100 dark:bg-[#0f172a]',
-                      'text-[#111827] dark:text-[#F1F5F9]',
+                      "rounded-2xl rounded-tl-sm",
+                      "bg-gray-100 dark:bg-[#0f172a]",
+                      "text-[#111827] dark:text-[#F1F5F9]",
                     ),
               )}
             >
@@ -177,8 +200,8 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
           <div className="flex justify-start">
             <div
               className={cn(
-                'px-4 py-3 rounded-2xl rounded-tl-sm',
-                'bg-gray-100 dark:bg-[#0f172a]',
+                "px-4 py-3 rounded-2xl rounded-tl-sm",
+                "bg-gray-100 dark:bg-[#0f172a]",
               )}
             >
               <TypingDots isDark={isDark} />
@@ -192,16 +215,16 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
       {/* Input area */}
       <div
         className={cn(
-          'shrink-0 p-3 border-t border-black/10 dark:border-white/10',
-          'bg-white dark:bg-[#1e293b]',
+          "shrink-0 p-3 border-t border-black/10 dark:border-white/10",
+          "bg-white dark:bg-[#1e293b]",
         )}
       >
         <div
           className={cn(
-            'flex items-end gap-2 rounded-xl border px-3 py-2',
-            'bg-gray-50 dark:bg-[#0f172a]',
-            'border-black/10 dark:border-white/10',
-            'focus-within:ring-1 focus-within:ring-[#3B82F6]',
+            "flex items-end gap-2 rounded-xl border px-3 py-2",
+            "bg-gray-50 dark:bg-[#0f172a]",
+            "border-black/10 dark:border-white/10",
+            "focus-within:ring-1 focus-within:ring-[#3B82F6]",
           )}
         >
           <textarea
@@ -216,22 +239,22 @@ export default function AIChatPanel({ documentId, lessonId, isDark, injectMessag
             placeholder="Ask about this lesson…"
             disabled={isTyping}
             className={cn(
-              'flex-1 resize-none bg-transparent text-sm leading-5 outline-none',
-              'text-[#111827] dark:text-[#F1F5F9]',
-              'placeholder:text-[#6B7280] dark:placeholder:text-[#94A3B8]',
-              'disabled:opacity-50',
-              'max-h-[76px] overflow-y-auto',
+              "flex-1 resize-none bg-transparent text-sm leading-5 outline-none",
+              "text-[#111827] dark:text-[#F1F5F9]",
+              "placeholder:text-[#6B7280] dark:placeholder:text-[#94A3B8]",
+              "disabled:opacity-50",
+              "max-h-[76px] overflow-y-auto",
             )}
-            style={{ fontFamily: 'Poppins, sans-serif' }}
+            style={{ fontFamily: "Poppins, sans-serif" }}
           />
           <button
             onClick={() => handleSend(inputValue)}
             disabled={!inputValue.trim() || isTyping}
             className={cn(
-              'shrink-0 p-1.5 rounded-lg transition-colors',
+              "shrink-0 p-1.5 rounded-lg transition-colors",
               inputValue.trim() && !isTyping
-                ? 'bg-[#3B82F6] text-white hover:bg-[#2563EB]'
-                : 'bg-gray-200 dark:bg-white/10 text-gray-400 dark:text-white/30 cursor-not-allowed',
+                ? "bg-[#3B82F6] text-white hover:bg-[#2563EB]"
+                : "bg-gray-200 dark:bg-white/10 text-gray-400 dark:text-white/30 cursor-not-allowed",
             )}
             aria-label="Send message"
           >
@@ -254,8 +277,8 @@ function TypingDots({ isDark }: { isDark: boolean }) {
         <span
           key={i}
           className={cn(
-            'block w-2 h-2 rounded-full',
-            isDark ? 'bg-[#94A3B8]' : 'bg-[#6B7280]',
+            "block w-2 h-2 rounded-full",
+            isDark ? "bg-[#94A3B8]" : "bg-[#6B7280]",
           )}
           style={{
             animation: `typingBounce 1.2s ease-in-out infinite`,
