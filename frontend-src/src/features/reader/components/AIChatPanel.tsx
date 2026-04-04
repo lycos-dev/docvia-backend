@@ -33,7 +33,14 @@ const DEFAULT_ERROR_RESPONSE =
   'I could not reach the AI tutor right now. Please try again in a moment.';
 
 export default function AIChatPanel({
-  documentId, lessonId, lessonTitle, lessonContent, isDark, token, injectMessage, onInjectHandled,
+  documentId,
+  lessonId: _lessonId,
+  lessonTitle,
+  lessonContent,
+  isDark,
+  token,
+  injectMessage,
+  onInjectHandled,
 }: AIChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');

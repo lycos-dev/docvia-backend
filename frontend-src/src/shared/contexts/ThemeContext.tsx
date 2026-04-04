@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 
 type Theme = 'light' | 'dark';
 
@@ -21,12 +22,33 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  const runWithViewTransition = useCallback((updateDom: () => void) => {
+    if (typeof document === 'undefined') {
+      updateDom();
+      return;
+    }
+    const doc = document as Document & {
+      startViewTransition?: (callback: () => void) => { finished: Promise<void> };
+    };
+    if (typeof doc.startViewTransition === 'function') {
+      doc.startViewTransition(() => {
+        flushSync(updateDom);
+      });
+    } else {
+      updateDom();
+    }
+  }, []);
+
   const toggleTheme = () => {
-    setThemeState(prev => prev === 'light' ? 'dark' : 'light');
+    runWithViewTransition(() => {
+      setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
+    });
   };
 
   const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
+    runWithViewTransition(() => {
+      setThemeState(newTheme);
+    });
   };
 
   return (
