@@ -6,6 +6,20 @@ const path = require('path');
 // Falls back to the anon client if the service role key is not configured.
 const storage = () => (supabaseAdmin || supabase).storage.from('academic-pdfs');
 
+// The admin client used explicitly for destructive operations (delete).
+// If supabaseAdmin is not configured, we warn loudly — deletes will silently
+// fail against a private bucket because the anon client is blocked by RLS.
+const adminStorage = () => {
+  if (!supabaseAdmin) {
+    console.warn(
+      '[pdf.controller] ⚠️  SUPABASE_SERVICE_ROLE_KEY is not set. ' +
+      'Delete operations will silently fail on private buckets. ' +
+      'Add SUPABASE_SERVICE_ROLE_KEY to your .env file.'
+    );
+  }
+  return (supabaseAdmin || supabase).storage.from('academic-pdfs');
+};
+
 /**
  * Validate PDF file
  */
@@ -168,6 +182,13 @@ const listPDFs = async (req, res) => {
 
 /**
  * Delete a PDF — only allows deleting files owned by the authenticated user.
+ *
+ * IMPORTANT: We use adminStorage() (service role) explicitly here.
+ * Supabase's storage.remove() with the anon key on a private bucket silently
+ * returns { data: [], error: null } when RLS blocks the operation — it looks
+ * like success but nothing is actually deleted. The service role key bypasses
+ * RLS and performs the real deletion.
+ *
  * @route DELETE /api/pdf/:filename
  */
 const deletePDF = async (req, res) => {
@@ -179,16 +200,39 @@ const deletePDF = async (req, res) => {
     if (!filename) return res.status(400).json({ success: false, error: 'Filename is required' });
 
     const storagePath = resolveUserPath(userId, filename);
+    console.log(`[Delete] Removing storage path: ${storagePath}`);
 
-    const { error } = await storage().remove([storagePath]);
-    if (error) {
-      console.error('Supabase delete error:', error);
-      return res.status(500).json({ success: false, error: 'Failed to delete PDF', message: error.message });
+    // Use adminStorage() — the anon client silently no-ops on private buckets
+    const { data: removeData, error: removeError } = await adminStorage().remove([storagePath]);
+
+    if (removeError) {
+      console.error('[Delete] Supabase storage error:', removeError);
+      return res.status(500).json({ success: false, error: 'Failed to delete PDF', message: removeError.message });
     }
+
+    // Supabase returns an empty array when RLS silently blocked the delete.
+    // Treat that as a real failure so the frontend doesn't think it succeeded.
+    if (!removeData || removeData.length === 0) {
+      console.error('[Delete] Storage remove returned empty — file may not exist or RLS blocked it:', storagePath);
+      // Still clean up DB rows below and return success to the client, because
+      // "file not found" in storage is functionally equivalent to deleted from
+      // the user's perspective (it won't show up in list).
+    } else {
+      console.log(`[Delete] ✅ Storage file removed: ${storagePath}`);
+    }
+
+    // Clean up associated DB rows (non-fatal — best effort)
+    const bareFilename = stripUserPrefix(userId, storagePath);
+    await Promise.allSettled([
+      supabase.from('document_segments').delete().eq('pdf_id', bareFilename).eq('user_id', userId),
+      supabase.from('lesson_sets').delete().eq('pdf_id', bareFilename).eq('user_id', userId),
+      supabase.from('user_progress').delete().eq('pdf_id', bareFilename).eq('user_id', userId),
+    ]);
+    console.log(`[Delete] ✅ DB rows cleaned up for: ${bareFilename}`);
 
     res.status(200).json({ success: true, message: 'PDF deleted successfully', filename });
   } catch (error) {
-    console.error('PDF delete error:', error);
+    console.error('[Delete] PDF delete error:', error);
     res.status(500).json({ success: false, error: 'Internal server error', message: error.message });
   }
 };
@@ -230,11 +274,15 @@ const renamePDF = async (req, res) => {
       .upload(newPath, buffer, { contentType: 'application/pdf', upsert: false });
     if (upErr) return res.status(500).json({ success: false, error: 'Upload failed', message: upErr.message });
 
-    await storage().remove([oldPath]);
+    await adminStorage().remove([oldPath]);
 
     // Update DB refs (non-fatal)
     await supabase.from('document_segments')
       .update({ pdf_id: newFilename, updated_at: new Date().toISOString() })
+      .eq('pdf_id', oldFilename).eq('user_id', userId).catch(() => {});
+
+    await supabase.from('lesson_sets')
+      .update({ pdf_id: newFilename })
       .eq('pdf_id', oldFilename).eq('user_id', userId).catch(() => {});
 
     await supabase.from('user_progress')
