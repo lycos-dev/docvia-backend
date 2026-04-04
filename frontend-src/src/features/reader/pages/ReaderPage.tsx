@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useTheme } from "../../../shared/contexts/ThemeContext";
 import { useProgressContext } from "../../../shared/contexts/ProgressContext";
 import { useAuth } from "../../../shared/contexts/AuthContext";
+import { useTimeTracker } from "../../../shared/hooks/useTimeTracker";
 import * as pdfService from "../../../shared/services/pdfService";
 import type {
   BackendLesson,
@@ -681,7 +682,7 @@ function buildLessonRows(
         keyPoints[0] ?? "Use the key takeaways above to expand on this idea.";
       rows[2].body =
         keyPoints.slice(1).join(" ") ||
-        "Ask yourself how this segment supports the document’s overall argument.";
+        "Ask yourself how this segment supports the document's overall argument.";
     }
   }
 
