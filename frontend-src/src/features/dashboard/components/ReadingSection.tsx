@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, Grid2X2, List, Upload } from 'lucide-react';
 import ReadingCard from './ReadingCard';
-import type { SortMode, TypeFilter } from '../types';
+import type { SortMode } from '../types';
+import { compareDocuments } from '../utils/documentSort';
 import { useDocuments } from '../../../shared/contexts/DocumentsContext';
 
 // Mock data was here for mocking — replaced by DocumentsContext (Task 13 wiring)
@@ -15,9 +16,7 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
   const { documents, isLoading } = useDocuments();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
-  const [typeFilter] = useState<TypeFilter>('all');
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
-  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
 
   // 300 ms debounce
@@ -30,29 +29,25 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
     const q = debouncedSearch.toLowerCase();
     return documents
       .filter((doc) => {
-        if (typeFilter !== 'all' && doc.type !== typeFilter) return false;
         if (q.length < 1) return true;
         return (
           doc.title.toLowerCase().includes(q) ||
-          doc.subtitle.toLowerCase().includes(q) ||
-          doc.type.toLowerCase().includes(q)
+          doc.subtitle.toLowerCase().includes(q)
         );
       })
-      .sort((a, b) => {
-        switch (sortMode) {
-          case 'recent': return new Date(b.lastOpened).getTime() - new Date(a.lastOpened).getTime();
-          case 'oldest': return new Date(a.lastOpened).getTime() - new Date(b.lastOpened).getTime();
-          case 'a-z': return a.title.localeCompare(b.title);
-          case 'z-a': return b.title.localeCompare(a.title);
-          default: return 0;
-        }
-      });
-  }, [documents, sortMode, typeFilter, debouncedSearch]);
+      .sort((a, b) => compareDocuments(a, b, sortMode));
+  }, [documents, sortMode, debouncedSearch]);
 
-  const getSortLabel = () => ({ recent: 'Most Recent', oldest: 'Oldest', 'a-z': 'A-Z', 'z-a': 'Z-A' }[sortMode] ?? 'Most Recent');
+  const getSortLabel = () =>
+    ({
+      recent: 'Oldest',
+      oldest: 'Most Recent',
+      'a-z': 'Title A–Z',
+      'z-a': 'Title Z–A',
+    }[sortMode] ?? 'Oldest');
 
   const isFiltered = debouncedSearch.length >= 1;
-  const total = documents.filter((d) => typeFilter === 'all' || d.type === typeFilter).length;
+  const total = documents.length;
 
   if (isLoading) {
     return (
@@ -87,22 +82,32 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
           )}
         </div>
 
-        <div className="flex gap-2 text-sm items-center">
+        <div className="flex flex-wrap gap-2 text-sm items-center justify-end">
           {/* Sort Dropdown */}
           <div className="relative">
             <button
-              onClick={() => { setSortDropdownOpen(!sortDropdownOpen); setTypeDropdownOpen(false); }}
+              type="button"
+              onClick={() => {
+                setSortDropdownOpen(!sortDropdownOpen);
+              }}
               className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors flex items-center gap-1 cursor-pointer"
             >
               {getSortLabel()}
               <ChevronDown size={14} className={`transition-transform ${sortDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {sortDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-10">
-                {(['recent', 'oldest', 'a-z', 'z-a'] as SortMode[]).map((mode) => (
-                  <button key={mode} onClick={() => { setSortMode(mode); setSortDropdownOpen(false); }}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
-                    {{ recent: 'Most Recent', oldest: 'Oldest', 'a-z': 'A-Z', 'z-a': 'Z-A' }[mode]}
+              <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20">
+                {(['oldest', 'recent', 'a-z', 'z-a'] as SortMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setSortMode(mode);
+                      setSortDropdownOpen(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  >
+                    {{ recent: 'Oldest (upload date)', oldest: 'Most Recent (upload date)', 'a-z': 'Title A–Z', 'z-a': 'Title Z–A' }[mode]}
                   </button>
                 ))}
               </div>
@@ -125,9 +130,17 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
         </div>
       </div>
 
-      <div className={viewMode === 'grid' ? 'grid sm:grid-cols-2 gap-6' : 'space-y-4'}>
+      <div
+        className={
+          viewMode === 'grid'
+            ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch'
+            : 'flex flex-col gap-4'
+        }
+      >
         {filteredAndSortedDocuments.map((doc) => (
-          <ReadingCard key={doc.id} document={doc} viewMode={viewMode} />
+          <div key={doc.id} className={viewMode === 'grid' ? 'h-full min-h-0' : undefined}>
+            <ReadingCard document={doc} viewMode={viewMode} />
+          </div>
         ))}
       </div>
 
@@ -147,14 +160,18 @@ export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSec
             </>
           ) : (
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              No documents matched your current filters.
+              No documents matched your search.
             </p>
           )}
         </div>
       )}
 
-      {(sortDropdownOpen || typeDropdownOpen) && (
-        <div className="fixed inset-0 z-0" onClick={() => { setSortDropdownOpen(false); setTypeDropdownOpen(false); }} />
+      {sortDropdownOpen && (
+        <div
+          className="fixed inset-0 z-[5]"
+          aria-hidden
+          onClick={() => setSortDropdownOpen(false)}
+        />
       )}
     </div>
   );

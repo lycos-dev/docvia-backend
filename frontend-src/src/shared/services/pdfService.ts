@@ -13,6 +13,7 @@ export interface UploadResult {
     filename: string;
     originalFilename: string;
     publicUrl: string;
+    uploadedAt?: string;
   };
   error?: string;
 }
@@ -85,12 +86,19 @@ export async function listPDFs(token?: string): Promise<PDFFile[]> {
     const json = await safeJson<{ success: boolean; data?: unknown[] }>(res, { success: false });
     if (!json.success || !Array.isArray(json.data)) return [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return json.data.map((raw: any): PDFFile => ({
-      filename: raw.name,
-      name: toDisplayName(raw.name),
-      uploadedAt: raw.created_at ?? '',
-      sizeLabel: raw.metadata?.size ? formatSize(raw.metadata.size) : '',
-    }));
+    return json.data.map((raw: unknown): PDFFile => {
+      const row = raw as Record<string, unknown>;
+      const meta = row.metadata as { size?: number } | undefined;
+      const sizeBytes = meta?.size;
+      return {
+        filename: String(row.name ?? ''),
+        name: toDisplayName(String(row.name ?? '')),
+        uploadedAt: String(
+          row.updated_at ?? row.created_at ?? row.last_modified ?? ''
+        ),
+        sizeLabel: typeof sizeBytes === 'number' && sizeBytes > 0 ? formatSize(sizeBytes) : '',
+      };
+    });
   } catch {
     return [];
   }
@@ -123,7 +131,11 @@ export async function generateLessons(
   return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
-export async function getLessons(pdfId: string, userId: string): Promise<LessonSetResult> {
-  const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`);
+export async function getLessons(pdfId: string, userId: string, token?: string): Promise<LessonSetResult> {
+  const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
   return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
 }

@@ -13,6 +13,21 @@ const EMPTY_PROGRESS: DocumentItem['progress'] = {
   streakDays: 0,
 };
 
+/** Stable upload time for sorting (API date, else leading ms in filename from backend). */
+function inferUploadedAtIso(filename: string, apiDate: string): string {
+  const trimmed = apiDate.trim();
+  if (trimmed) {
+    const t = Date.parse(trimmed);
+    if (!Number.isNaN(t)) return new Date(t).toISOString();
+  }
+  const m = filename.match(/^(\d+)_/);
+  if (m) {
+    const ms = parseInt(m[1], 10);
+    if (!Number.isNaN(ms) && ms > 0) return new Date(ms).toISOString();
+  }
+  return new Date().toISOString();
+}
+
 interface DocumentsContextValue {
   documents: DocumentItem[];
   isLoading: boolean;
@@ -61,13 +76,23 @@ export function DocumentsProvider({ children }: { children: React.ReactNode }) {
       // local cache supplies thumbnail / progress metadata
       const merged: DocumentItem[] = backendFiles.map((f, idx) => {
         const cached = localByFilename.get(f.filename);
-        return cached ?? {
+        const lastOpened = inferUploadedAtIso(f.filename, f.uploadedAt);
+        if (cached) {
+          return {
+            ...cached,
+            filename: f.filename,
+            title: cached.title || f.name,
+            lastOpened,
+            type: 'pdf',
+          };
+        }
+        return {
           id: Date.now() + idx,
           filename: f.filename,
           title: f.name,
           subtitle: '',
           type: 'pdf' as const,
-          lastOpened: f.uploadedAt,
+          lastOpened,
           coverImage: null,
           firstPageThumbnail: null,
           progress: EMPTY_PROGRESS,

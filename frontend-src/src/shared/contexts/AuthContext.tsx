@@ -6,6 +6,7 @@ const TOKEN_KEY = 'docvia-token';
 interface AuthUser {
   id: string;
   email: string;
+  username?: string | null;
 }
 
 interface AuthContextValue {
@@ -16,6 +17,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  verifyOAuthSession: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -34,7 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     authService.getProfile(token).then((result) => {
       if (result.success && result.data) {
-        setUser({ id: result.data.user.id, email: result.data.user.email });
+        const u = result.data.user;
+        setUser({
+          id: u.id,
+          email: u.email,
+          username: u.username ?? (u.email ? u.email.split('@')[0] : null),
+        });
       } else {
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
@@ -48,7 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (result.success && result.data) {
       localStorage.setItem(TOKEN_KEY, result.data.token);
       setToken(result.data.token);
-      setUser({ id: result.data.user.id, email: result.data.user.email });
+      const u = result.data.user;
+      setUser({
+        id: u.id,
+        email: u.email,
+        username: u.username ?? (u.email ? u.email.split('@')[0] : null),
+      });
       return { success: true };
     }
     return { success: false, error: result.error ?? 'Login failed.' };
@@ -64,15 +76,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [token]);
 
   const loginWithGoogle = useCallback(async () => {
-    const result = await authService.getGoogleAuthUrl();
-    if (result.success && result.url) {
-      window.location.href = result.url;
+    await authService.loginWithGoogle();
+  }, []);
+
+  const verifyOAuthSession = useCallback(async () => {
+    const result = await authService.verifyGoogleSession();
+    if (result.success && result.data) {
+      localStorage.setItem(TOKEN_KEY, result.data.token);
+      setToken(result.data.token);
+      const u = result.data.user;
+      setUser({
+        id: u.id,
+        email: u.email,
+        username:
+          u.username ??
+          (u.email ? u.email.split('@')[0] : null),
+      });
+      return { success: true };
     }
+    return { success: false, error: result.error ?? 'OAuth verification failed.' };
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isAuthenticated: !!token && !!user, isLoading, login, logout, loginWithGoogle }}
+      value={{ user, token, isAuthenticated: !!token && !!user, isLoading, login, logout, loginWithGoogle, verifyOAuthSession }}
     >
       {children}
     </AuthContext.Provider>

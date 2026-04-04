@@ -48,7 +48,8 @@ export default function ReaderPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { token, user } = useAuth();
-  const { markLessonComplete, lessonProgress } = useProgressContext();
+  const { markLessonComplete, setCurrentLesson, lessonProgress } =
+    useProgressContext();
 
   const isDark = theme === "dark";
 
@@ -63,19 +64,25 @@ export default function ReaderPage() {
   useEffect(() => {
     if (!documentId || !user?.id) return;
     setLessonLoadState("loading");
+
     const resolveLessonSet = async () => {
       const cached = await pdfService.getLessons(
         documentId,
         user.id,
+        token ?? undefined,
       );
       if (cached.success && cached.data) return cached.data;
+
       const generated = await pdfService.generateLessons(
         documentId,
         user.id,
+        token ?? undefined,
       );
       if (generated.success && generated.data) return generated.data;
+
       return null;
     };
+
     resolveLessonSet()
       .then((set) => {
         if (!set) {
@@ -158,8 +165,21 @@ export default function ReaderPage() {
   // ── Progress ──────────────────────────────────────────────────────────────
   const progressKey = `${documentId}:${lessonId}`;
   const isCompleted = lessonProgress[progressKey]?.isCompleted ?? false;
-  const totalLessons = lessonSet?.totalLessons ?? 10;
+  const totalLessons =
+    lessonSet && lessonSet.lessons.length > 0
+      ? lessonSet.totalLessons || lessonSet.lessons.length
+      : 0;
 
+  // Track open lesson + total count for Progress page (no fake default like 10)
+  useEffect(() => {
+    if (!documentId || !lessonId || lessonLoadState !== "ready" || !lessonSet)
+      return;
+    const tl = lessonSet.totalLessons || lessonSet.lessons.length;
+    if (tl < 1) return;
+    setCurrentLesson(documentId, lessonId, tl);
+  }, [documentId, lessonId, lessonLoadState, lessonSet, setCurrentLesson]);
+
+  // ── Page title ────────────────────────────────────────────────────────────
   useEffect(() => {
     document.title = lesson ? `${lesson.title} — Docvia` : "Docvia Reader";
     return () => {
@@ -179,7 +199,7 @@ export default function ReaderPage() {
   const handleNextLesson = () => goToLesson(lessonIndex + 1);
 
   const handleMarkComplete = () => {
-    if (isCompleted) return;
+    if (isCompleted || totalLessons < 1) return;
     markLessonComplete(documentId, lessonId, totalLessons);
     setConfettiOrigin({ x: window.innerWidth / 2, y: window.innerHeight / 3 });
     setShowConfetti(true);
@@ -190,17 +210,6 @@ export default function ReaderPage() {
   };
 
   const handleGoDeeper = () => setShowDeepDive((v) => !v);
-
-  const completedCount = lessonSet
-    ? lessonSet.lessons.filter((l) => {
-        const key = `${documentId}:${l.id}`;
-        return lessonProgress[key]?.isCompleted ?? false;
-      }).length
-    : Object.values(lessonProgress).filter(
-        (lp) => lp.documentId === documentId && lp.isCompleted,
-      ).length;
-
-  const totalLessonsCount = lessonSet?.lessons.length ?? totalLessons;
 
   useEffect(() => {
     if (!showDeepDive) return;
@@ -267,14 +276,21 @@ export default function ReaderPage() {
         onTogglePanel={() => setIsPanelOpen((v) => !v)}
         isDark={isDark}
         toggleTheme={toggleTheme}
-        // Add these two lines:
-        completedCount={completedCount}
-        totalLessons={totalLessonsCount}
+        // FIX: Use the actual logic for these values
+        completedCount={
+          Object.values(lessonProgress).filter(
+            (p) => p.documentId === documentId && p.isCompleted,
+          ).length
+        }
+        totalLessons={totalLessons}
       />
 
       {/* Content row */}
       <div className="pt-14 flex-1 flex min-h-0 overflow-hidden">
-        {/* Main pane */}
+        {/* ── Main pane ──
+            When the side panel is open on small screens, we hide this column only for the
+            Lesson view so chat/notes can use the full width. PDF must stay visible — otherwise
+            "PDF" tab looks blank (segment reader + PDF). */}
         <div
           id="lessonContentArea"
           className={cn(
@@ -296,6 +312,7 @@ export default function ReaderPage() {
                 key={v}
                 onClick={() => {
                   setMainView(v);
+                  // Give PDF the full width on phones (panel would otherwise squeeze or cover).
                   if (
                     v === "pdf" &&
                     typeof window !== "undefined" &&
@@ -318,6 +335,7 @@ export default function ReaderPage() {
             ))}
           </div>
 
+          {/* PDF view — fills full pane (min-h-0 so nested scroll works) */}
           {mainView === "pdf" && (
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
               <PDFViewer
@@ -329,13 +347,9 @@ export default function ReaderPage() {
             </div>
           )}
 
+          {/* Lesson view */}
           {mainView === "lesson" && (
-            <div
-              className={cn(
-                "flex-1 overflow-y-auto",
-                isDark ? "bg-[#0f172a]" : "bg-[#F4F4F8]",
-              )}
-            >
+            <div className="flex-1 overflow-y-auto">
               {lessonLoadState === "loading" && (
                 <LessonSkeleton isDark={isDark} />
               )}
@@ -356,6 +370,7 @@ export default function ReaderPage() {
                     keyPoints={lesson.key_points ?? []}
                   />
 
+                  {/* Deep Dive — inline below lesson, above quiz */}
                   {showDeepDive && (
                     <div className="px-6 md:px-12 pb-6">
                       <DeepDivePanel
@@ -409,7 +424,7 @@ export default function ReaderPage() {
                     boxShadow: "0 3px 10px rgba(245,158,11,0.3)",
                   }}
                 >
-                  📝 {quizInProgress ? "Continue Quiz" : "Take Short Quiz"}
+                  📝 {quizInProgress ? "Continue Quiz" : "Take Quiz"}
                 </button>
                 {quizInProgress && (
                   <button
@@ -417,12 +432,7 @@ export default function ReaderPage() {
                       setQuizRestartSignal((v) => v + 1);
                       setShowQuiz(true);
                     }}
-                    className={cn(
-                      "px-3 py-2 rounded-lg text-xs font-semibold border transition-colors",
-                      isDark
-                        ? "border-[#f59e0b]/40 text-[#fbbf24] hover:bg-[#f59e0b]/10"
-                        : "border-[#f59e0b]/40 text-[#b45309] hover:bg-[#f59e0b]/10",
-                    )}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-[#f59e0b]/40 text-[#b45309] dark:text-[#fbbf24] hover:bg-[#f59e0b]/10 transition-colors"
                     title="Start a fresh quiz session"
                   >
                     Start New
@@ -554,11 +564,11 @@ export default function ReaderPage() {
         )}
       </div>
 
-      {/* Quiz modal */}
+      {/* Quiz modal (state persists when closed) */}
       {mainView === "lesson" && lessonLoadState === "ready" && lesson && (
         <div
           className={cn(
-            "fixed inset-0 z-70 flex items-center justify-center p-4",
+            "fixed inset-0 z-[70] flex items-center justify-center p-4",
             showQuiz
               ? "pointer-events-auto opacity-100"
               : "pointer-events-none opacity-0",
@@ -572,17 +582,18 @@ export default function ReaderPage() {
           <div
             className={cn(
               "w-full max-w-3xl max-h-[82vh] overflow-hidden rounded-2xl border shadow-2xl",
-              isDark
-                ? "bg-[#1e293b] border-white/10"
-                : "bg-white border-black/10",
+              "bg-white dark:bg-[#1e293b] border-black/10 dark:border-white/10",
             )}
             onClick={(e) => e.stopPropagation()}
           >
             <QuizPanel
-              key={quizRestartSignal}
               documentTitle={docTitle}
               lessonTitle={lesson.title}
               lessonContent={lesson.explanation}
+              isDark={isDark}
+              token={token ?? undefined}
+              restartSignal={quizRestartSignal}
+              onSessionChange={setQuizInProgress}
               onClose={() => setShowQuiz(false)}
             />
           </div>
@@ -597,7 +608,7 @@ export default function ReaderPage() {
   );
 }
 
-// ─── Lesson content helpers ───────────────────────────────────────────────────
+// ─── Three-row lesson body (segment-grounded) ────────────────────────────────
 interface LessonRow {
   label: string;
   subtitle: string;
@@ -667,12 +678,14 @@ function buildLessonRows(
         keyPoints[0] ?? "Use the key takeaways above to expand on this idea.";
       rows[2].body =
         keyPoints.slice(1).join(" ") ||
-        "Ask yourself how this segment supports the document's overall argument.";
+        "Ask yourself how this segment supports the document’s overall argument.";
     }
   }
+
   return rows;
 }
 
+// ─── Lesson content ───────────────────────────────────────────────────────────
 interface LessonContentProps {
   lesson: BackendLesson;
   lessonIndex: number;
@@ -779,7 +792,7 @@ function LessonContent({
         </div>
       )}
 
-      {/* Lesson content */}
+      {/* Lesson content — three rows (segment-grounded) */}
       <div className="flex items-center gap-3 mb-5">
         <span
           className="text-xs font-bold uppercase tracking-widest"
@@ -801,16 +814,16 @@ function LessonContent({
               "rounded-2xl border p-5 md:p-6 transition-shadow",
               isDark
                 ? "border-white/10 bg-[#1e293b]/80 shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
-                : "border-black/6 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)]",
+                : "border-black/[0.06] bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)]",
             )}
           >
             <div className="flex items-start gap-3 mb-3">
               <div
                 className={cn(
                   "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white",
-                  i === 0 && "bg-linear-to-br from-[#3B82F6] to-[#1D4ED8]",
-                  i === 1 && "bg-linear-to-br from-[#8B5CF6] to-[#6D28D9]",
-                  i === 2 && "bg-linear-to-br from-[#059669] to-[#0D9488]",
+                  i === 0 && "bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8]",
+                  i === 1 && "bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9]",
+                  i === 2 && "bg-gradient-to-br from-[#059669] to-[#0D9488]",
                 )}
               >
                 {i + 1}

@@ -1,8 +1,8 @@
 // src/features/reader/components/AIChatPanel.tsx
-import { useState, useEffect, useRef } from "react";
-import { Send } from "lucide-react";
-import { cn } from "../../../shared/utils/cn";
-import { sendChat } from "../services/readerService";
+import { useState, useEffect, useRef } from 'react';
+import { Send } from 'lucide-react';
+import { cn } from '../../../shared/utils/cn';
+import { sendChat } from '../services/readerService';
 
 interface ChatMessage {
   id: string;
@@ -30,11 +30,11 @@ const STARTER_CHIPS = [
 ];
 
 const DEFAULT_ERROR_RESPONSE =
-  "I could not reach the AI tutor right now. Please try again in a moment.";
+  'I could not reach the AI tutor right now. Please try again in a moment.';
 
 export default function AIChatPanel({
   documentId,
-  lessonId,
+  lessonId: _lessonId,
   lessonTitle,
   lessonContent,
   isDark,
@@ -82,19 +82,10 @@ export default function AIChatPanel({
     setIsTyping(true);
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const data = await sendChat(
-        documentId,
-        lessonTitle,
-        lessonContent,
-        trimmed,
-        history,
-      );
+      const history = messages.map((m) => ({ role: m.role, content: m.content }));
+      const data = await sendChat(documentId, lessonTitle, lessonContent, trimmed, history, token);
       if (!data.success || !data.reply) {
-        throw new Error(data.error ?? data.message ?? "Chat request failed.");
+        throw new Error(data.error ?? data.message ?? 'Chat request failed.');
       }
       const replyText = data.reply;
 
@@ -112,7 +103,7 @@ export default function AIChatPanel({
         ...prev,
         {
           id: `a-${Date.now()}`,
-          role: "assistant",
+          role: 'assistant',
           content: DEFAULT_ERROR_RESPONSE,
           timestamp: new Date(),
         },
@@ -120,7 +111,7 @@ export default function AIChatPanel({
     } finally {
       setIsTyping(false);
     }
-    // message history and lesson context are required for contextual tutoring replies
+  // message history and lesson context are required for contextual tutoring replies
   };
 
   // Auto-send injected messages (from TextSelectionTooltip)

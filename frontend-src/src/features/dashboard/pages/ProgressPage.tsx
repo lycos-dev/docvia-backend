@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
 import { useDocuments } from '../../../shared/contexts/DocumentsContext';
 import { cn } from '../../../shared/utils/cn';
@@ -20,44 +21,55 @@ function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps
 
   const { completedLessons, totalLessons, percentage, documentId } = docProgress;
   const completed = completedLessons.length;
+  const safeTotal = totalLessons > 0 ? totalLessons : 0;
+  const displayPct =
+    safeTotal > 0 ? Math.min(100, Math.round((completed / safeTotal) * 100)) : Math.min(100, percentage);
 
   function handleContinue() {
-    navigate(`/roadmap/${documentId}`);
+    navigate(`/roadmap/${encodeURIComponent(documentId)}`);
   }
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ y: -2, transition: { type: 'spring', stiffness: 400, damping: 28 } }}
       className={cn(
         'bg-white dark:bg-[#1e293b] rounded-2xl p-4',
         'border border-black/5 dark:border-white/10',
-        'flex flex-col gap-3'
+        'flex flex-col gap-3',
+        'shadow-sm dark:shadow-none'
       )}
     >
-      {/* Title row */}
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-semibold text-[#111827] dark:text-[#F1F5F9] leading-snug line-clamp-2 flex-1">
           {docTitle}
         </p>
-        <span className="text-xs font-bold text-[#3B82F6] dark:text-[#60A5FA] shrink-0">
-          {percentage}%
+        <span className="text-xs font-bold text-[#3B82F6] dark:text-[#60A5FA] shrink-0 tabular-nums">
+          {displayPct}%
         </span>
       </div>
 
-      {/* Progress bar */}
-      <div className="h-1.5 w-full rounded-full bg-[#E5E7EB] dark:bg-white/10 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-[#3B82F6] transition-all duration-500"
-          style={{ width: `${percentage}%` }}
+      <div className="h-2 w-full rounded-full bg-[#E5E7EB] dark:bg-white/10 overflow-hidden ring-1 ring-black/[0.04] dark:ring-white/[0.06]">
+        <motion.div
+          className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] to-[#6366F1]"
+          initial={false}
+          animate={{ width: `${displayPct}%` }}
+          transition={{ type: 'spring', stiffness: 200, damping: 26 }}
         />
       </div>
 
-      {/* Meta row */}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-[#6B7280] dark:text-[#94A3B8]">
-          {completed}/{totalLessons} lessons
+        <span className="text-xs text-[#6B7280] dark:text-[#94A3B8] tabular-nums">
+          {safeTotal > 0 ? `${completed}/${safeTotal} lessons` : `${completed} lesson${completed === 1 ? '' : 's'} done`}
         </span>
-        <button
+        <motion.button
+          type="button"
           onClick={handleContinue}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
           className={cn(
             'text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
             'bg-[#89ADE2]/15 hover:bg-[#89ADE2]/30 text-[#3B82F6] dark:text-[#60A5FA]',
@@ -65,9 +77,9 @@ function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps
           )}
         >
           Continue →
-        </button>
+        </motion.button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -79,10 +91,13 @@ function DocumentProgressList() {
   const { documentProgress } = useProgressContext();
   const { documents } = useDocuments();
 
-  const entries = Object.values(documentProgress).sort(
-    (a, b) =>
-      new Date(b.lastAccessedAt).getTime() - new Date(a.lastAccessedAt).getTime()
-  );
+  const entries = Object.values(documentProgress).sort((a, b) => {
+    const aMs = Date.parse(a.lastAccessedAt);
+    const bMs = Date.parse(b.lastAccessedAt);
+    const aT = Number.isNaN(aMs) ? 0 : aMs;
+    const bT = Number.isNaN(bMs) ? 0 : bMs;
+    return bT - aT;
+  });
 
   if (entries.length === 0) {
     return (
@@ -176,16 +191,25 @@ function LongestStreakBanner() {
   const { streak } = useProgressContext();
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ scale: 1.01 }}
       className={cn(
         'bg-white dark:bg-[#1e293b] rounded-2xl p-5',
         'border border-black/5 dark:border-white/10',
-        'flex items-center gap-4'
+        'flex items-center gap-4',
+        'shadow-sm dark:shadow-none'
       )}
     >
-      <div className="h-12 w-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl shrink-0">
+      <motion.div
+        animate={{ rotate: [0, -6, 6, 0] }}
+        transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 5, ease: 'easeInOut' }}
+        className="h-12 w-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl shrink-0"
+      >
         🏆
-      </div>
+      </motion.div>
       <div>
         <p className="text-xs font-medium text-[#6B7280] dark:text-[#94A3B8]">
           Longest Streak
@@ -209,6 +233,6 @@ function LongestStreakBanner() {
           </span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

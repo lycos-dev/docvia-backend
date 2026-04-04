@@ -43,7 +43,8 @@ interface ProgressContextValue {
   lessonProgress: Record<string, LessonProgress>;
   streak: StreakData;
   markLessonComplete: (documentId: string, lessonId: string, totalLessons: number) => void;
-  setCurrentLesson: (documentId: string, lessonId: string) => void;
+  /** Updates current lesson + last access; pass totalLessons when known so % stays accurate */
+  setCurrentLesson: (documentId: string, lessonId: string, totalLessons?: number) => void;
   getDocumentProgress: (documentId: string) => DocumentProgress | null;
 }
 
@@ -70,6 +71,15 @@ function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[
   return result;
 }
 
+/** Latest calendar day (YYYY-MM-DD) with at least one completion, or null */
+function lastActiveDayISO(daily: Record<string, number>): string | null {
+  let best: string | null = null;
+  for (const [day, count] of Object.entries(daily)) {
+    if (count > 0 && (best === null || day > best)) best = day;
+  }
+  return best;
+}
+
 function computeStreak(
   dailyCompletions: Record<string, number>,
   prevStreak: StreakData
@@ -91,11 +101,12 @@ function computeStreak(
   }
 
   const longestStreak = Math.max(prevStreak.longestStreak, currentStreak);
+  const lastActive = lastActiveDayISO(dailyCompletions);
 
   return {
     currentStreak,
     longestStreak,
-    lastActiveDate: today,
+    lastActiveDate: lastActive ?? prevStreak.lastActiveDate,
     streakStartDate: prevStreak.streakStartDate,
     weekActivity,
     todayCompleted,
@@ -163,15 +174,17 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         const completedLessons = Array.from(
           new Set([...(existingDoc?.completedLessons ?? []), lessonId])
         );
-        const percentage = totalLessons > 0
-          ? Math.round((completedLessons.length / totalLessons) * 100)
-          : 0;
+        const mergedTotal = Math.max(existingDoc?.totalLessons ?? 0, totalLessons);
+        const percentage =
+          mergedTotal > 0
+            ? Math.min(100, Math.round((completedLessons.length / mergedTotal) * 100))
+            : 0;
 
         const docProg: DocumentProgress = {
           documentId,
           completedLessons,
           currentLessonId: existingDoc?.currentLessonId ?? null,
-          totalLessons,
+          totalLessons: mergedTotal,
           percentage,
           startedAt: existingDoc?.startedAt ?? new Date().toISOString(),
           lastAccessedAt: new Date().toISOString(),
@@ -199,27 +212,39 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const setCurrentLesson = useCallback((documentId: string, lessonId: string) => {
-    setStore((prev) => {
-      const existing = prev.documentProgress[documentId];
-      const docProg: DocumentProgress = {
-        documentId,
-        completedLessons: existing?.completedLessons ?? [],
-        currentLessonId: lessonId,
-        totalLessons: existing?.totalLessons ?? 0,
-        percentage: existing?.percentage ?? 0,
-        startedAt: existing?.startedAt ?? new Date().toISOString(),
-        lastAccessedAt: new Date().toISOString(),
-        streakDays: existing?.streakDays ?? 0,
-      };
-      const next = {
-        ...prev,
-        documentProgress: { ...prev.documentProgress, [documentId]: docProg },
-      };
-      saveStore(next);
-      return next;
-    });
-  }, []);
+  const setCurrentLesson = useCallback(
+    (documentId: string, lessonId: string, totalLessonsHint?: number) => {
+      setStore((prev) => {
+        const existing = prev.documentProgress[documentId];
+        const completed = existing?.completedLessons ?? [];
+        const total =
+          typeof totalLessonsHint === 'number' && totalLessonsHint > 0
+            ? totalLessonsHint
+            : (existing?.totalLessons ?? 0);
+        const percentage =
+          total > 0
+            ? Math.min(100, Math.round((completed.length / total) * 100))
+            : (existing?.percentage ?? 0);
+        const docProg: DocumentProgress = {
+          documentId,
+          completedLessons: completed,
+          currentLessonId: lessonId,
+          totalLessons: total,
+          percentage,
+          startedAt: existing?.startedAt ?? new Date().toISOString(),
+          lastAccessedAt: new Date().toISOString(),
+          streakDays: existing?.streakDays ?? 0,
+        };
+        const next = {
+          ...prev,
+          documentProgress: { ...prev.documentProgress, [documentId]: docProg },
+        };
+        saveStore(next);
+        return next;
+      });
+    },
+    []
+  );
 
   const getDocumentProgress = useCallback(
     (documentId: string): DocumentProgress | null =>

@@ -22,7 +22,9 @@ export interface ChatResponse {
   ;
   success: boolean;
   reply?: string;
+  answer?: string;
   error?: string;
+  message?: string;
 }
 
 export interface MicrotaskQuestion {
@@ -42,8 +44,11 @@ export interface MicrotaskGenerateResult {
 
 export interface MicrotaskEvaluateResult {
   success: boolean;
+  correct?: boolean;
   isCorrect?: boolean;
+  score?: number;
   feedback?: string;
+  explanation?: string;
   correctAnswer?: string;
   error?: string;
 }
@@ -68,14 +73,24 @@ export async function sendChat(
   lessonTitle: string,
   lessonContent: string,
   question: string,
-  history: ChatMessage[]
+  history: ChatMessage[],
+  token?: string
 ): Promise<ChatResponse> {
   const res = await fetch(`${BASE}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ pdfId, segmentTitle: lessonTitle, segmentContent: lessonContent, question, history }),
   });
-  return safeJson<ChatResponse>(res, { success: false, error: 'Server did not return a response.' });
+  const raw = await safeJson<ChatResponse>(res, { success: false, error: 'Server did not return a response.' });
+  const normalizedReply = raw.reply ?? raw.answer;
+  return {
+    ...raw,
+    reply: normalizedReply,
+    success: Boolean(raw.success && normalizedReply),
+  };
 }
 
 export async function generateQuiz(
@@ -84,28 +99,40 @@ export async function generateQuiz(
   documentTitle: string,
   taskType: string,
   count: number,
-  previousQuestions: string[]
+  previousQuestions: string[],
+  token?: string
 ): Promise<MicrotaskGenerateResult> {
   const res = await fetch(`${BASE}/microtask/generate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ segmentTitle, segmentContent, documentTitle, taskType, count, previousQuestions }),
   });
   return safeJson<MicrotaskGenerateResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function evaluateAnswer(
-  question: string,
-  userAnswer: string,
-  correctAnswer: string,
-  questionType: string
+  task: MicrotaskQuestion,
+  userAnswer: string | number,
+  segmentTitle: string,
+  segmentContent: string,
+  token?: string
 ): Promise<MicrotaskEvaluateResult> {
   const res = await fetch(`${BASE}/microtask/evaluate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, userAnswer, correctAnswer, questionType }),
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ task, userAnswer, segmentTitle, segmentContent }),
   });
-  return safeJson<MicrotaskEvaluateResult>(res, { success: false, error: 'Server did not return a response.' });
+  const raw = await safeJson<MicrotaskEvaluateResult>(res, { success: false, error: 'Server did not return a response.' });
+  return {
+    ...raw,
+    isCorrect: raw.isCorrect ?? raw.correct,
+  };
 }
 
 export async function deepExplain(

@@ -5,28 +5,41 @@ const jwt = require('jsonwebtoken');
 
 /**
  * Generate JWT token for authenticated user
+ * @param {string | null | undefined} username — display name from user_metadata (optional)
  */
-const generateToken = (userId, email) => {
-  return jwt.sign(
-    { userId, email },
-    process.env.JWT_SECRET,
-    { expiresIn: '24h' } // Token expires in 24 hours
-  );
+const generateToken = (userId, email, username) => {
+  const payload = { userId, email };
+  if (username && String(username).trim()) {
+    payload.username = String(username).trim();
+  }
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
 };
 
 /**
  * Register a new user
  * POST /api/auth/register
  */
+const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
+
 const register = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, username: rawUsername } = req.body;
+    const username =
+      typeof rawUsername === 'string' ? rawUsername.trim() : '';
 
     // Validation
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         error: 'Email and password are required.'
+      });
+    }
+
+    if (!username || !USERNAME_RE.test(username)) {
+      return res.status(400).json({
+        success: false,
+        error:
+          'Username is required (3–30 characters: letters, numbers, and underscores only).'
       });
     }
 
@@ -53,6 +66,7 @@ const register = async (req, res) => {
       password,
       options: {
         data: {
+          username,
           created_at: new Date().toISOString()
         }
       }
@@ -92,8 +106,11 @@ const register = async (req, res) => {
     // Assign a Groq key to the new user
     await assignKeyToUser(data.user.id);
 
+    const resolvedUsername =
+      data.user.user_metadata?.username || username;
+
     // Generate JWT token
-    const token = generateToken(data.user.id, data.user.email);
+    const token = generateToken(data.user.id, data.user.email, resolvedUsername);
 
     return res.status(201).json({
       success: true,
@@ -102,6 +119,7 @@ const register = async (req, res) => {
         user: {
           id: data.user.id,
           email: data.user.email,
+          username: resolvedUsername,
           created_at: data.user.created_at
         },
         token
@@ -161,8 +179,16 @@ const login = async (req, res) => {
       });
     }
 
+    const resolvedUsername =
+      data.user.user_metadata?.username?.trim() ||
+      (data.user.email ? data.user.email.split('@')[0] : null);
+
     // Generate our own JWT token
-    const token = generateToken(data.user.id, data.user.email);
+    const token = generateToken(
+      data.user.id,
+      data.user.email,
+      resolvedUsername
+    );
 
     return res.status(200).json({
       success: true,
@@ -171,6 +197,7 @@ const login = async (req, res) => {
         user: {
           id: data.user.id,
           email: data.user.email,
+          username: resolvedUsername,
           created_at: data.user.created_at,
           last_sign_in: data.user.last_sign_in_at
         },
@@ -211,9 +238,16 @@ const forgotPassword = async (req, res) => {
       });
     }
 
+    // Construct the frontend URL for password reset
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetRedirectUrl = `${frontendUrl}/create-new-password`;
+    
+    console.log('📧 Sending password reset email...');
+    console.log(`   Redirect URL: ${resetRedirectUrl}`);
+
     // Send password reset email via Supabase
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/create-new-password`,
+      redirectTo: resetRedirectUrl,
     });
 
     if (error) {
@@ -327,7 +361,7 @@ const googleSignIn = async (req, res) => {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:3001'}`,
+        redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
@@ -385,8 +419,14 @@ const googleVerify = async (req, res) => {
       });
     }
 
+    const fullName = user.user_metadata?.full_name || '';
+    const googleUsername =
+      user.user_metadata?.username?.trim() ||
+      (fullName ? fullName.split(/\s+/)[0] : '') ||
+      (user.email ? user.email.split('@')[0] : null);
+
     // Generate our own JWT token
-    const token = generateToken(user.id, user.email);
+    const token = generateToken(user.id, user.email, googleUsername);
 
     return res.status(200).json({
       success: true,
@@ -395,6 +435,7 @@ const googleVerify = async (req, res) => {
         user: {
           id: user.id,
           email: user.email,
+          username: googleUsername,
           name: user.user_metadata?.full_name || user.email,
           avatar: user.user_metadata?.avatar_url || null,
           created_at: user.created_at,
@@ -421,17 +462,15 @@ const getProfile = async (req, res) => {
     // req.user is set by authenticateToken middleware
     const userId = req.user.id;
     const userEmail = req.user.email;
+    const username = req.user.username ?? null;
 
-    // For a more complete profile, query Supabase auth users
-    // Using the supabase client to list users (requires admin privileges)
-    // For now, we'll return the basic info from JWT
-    
     return res.status(200).json({
       success: true,
       data: {
         user: {
           id: userId,
           email: userEmail,
+          username,
           created_at: new Date().toISOString(),
           last_sign_in: new Date().toISOString(),
           email_confirmed: false

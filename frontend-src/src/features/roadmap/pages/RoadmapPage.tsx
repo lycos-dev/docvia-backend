@@ -8,6 +8,10 @@ import type { BackendLesson } from '../../../shared/services/pdfService';
 import { X, Moon, Sun, Play, Check, ChevronRight, Maximize2 } from 'lucide-react';
 import { useTheme } from '../../../shared/contexts/ThemeContext';
 
+// ─── Embedded image assets ──────────────────────────────────────────────────
+const CAR_IMG = "/assets/images/mobilecar.png";
+const SCHOOL_IMG = "/assets/images/school.png";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Lesson {
   id: string;
@@ -32,7 +36,7 @@ interface Module {
   pinEmoji: string;
 }
 
-// ─── Lesson → Segment mapping ────────────────────────────────────────────────
+// ─── Lesson → Segment mapping (1 lesson per segment) ────────────────────────
 const PIN_COLORS_LIST = ['#EF4444', '#F97316', '#22C55E', '#3B82F6', '#8B5CF6'];
 const PIN_EMOJIS_LIST = ['🎯', '📦', '⚡', '🔍', '🏆'];
 
@@ -125,12 +129,14 @@ const MODULES: Module[] = [
   },
 ];
 
-// ─── SVG Road geometry ────────────────────────────────────────────────────────
-const C_H = 340;
+// ─── SVG Road geometry (dynamic — scales with module count) ──────────────────
+const C_H           = 380;
 const ROAD_Y_CENTER = 160;
-const WAVE_AMP = 90;
-const PIN_SPACING = 235;
-const MARGIN_X = 80;
+const WAVE_AMP      = 90;
+const PIN_SPACING   = 260;
+const MARGIN_X      = 80;
+/** Push road + pins down so elevated nodes / car / school stay inside the viewBox */
+const SVG_ROAD_Y_PAD = 175;
 
 const Y_WAVE = [
   ROAD_Y_CENTER + WAVE_AMP,
@@ -162,108 +168,266 @@ function buildRoadPath(pins: Array<{ x: number; y: number }>): string {
   return d;
 }
 
-// ─── Number Node SVG (image 1 style: circle with number) ────────────────────
-function NumberNode({
-  x, y, segment, isCompleted, isCurrent, isLocked, isFinal, color, onClick,
-}: {
-  x: number; y: number; segment: number; isCompleted: boolean;
-  isCurrent: boolean; isLocked: boolean; isFinal: boolean; color: string;
-  onClick: () => void;
-}) {
-  const r = 24;
-  const nodeY = y - 60; // sit above the road
+// ─── Node above road + title card to the left; dashed line road → node center ─
+const NODE_R = 26;
+/** Vertical distance from road anchor (x, roadY) up to node center */
+const NODE_ELEVATION_ABOVE_ROAD = 118;
+const CARD_NODE_GAP = 16;
+const PILL_PAD_X = 14;
+const MIN_PILL_W = 120;
+const MAX_PILL_W = 320;
+const CHAR_EST_PX = 5.6;
 
-  const bgColor = isCompleted ? '#22C55E' : isLocked ? '#9CA3AF' : isCurrent ? color : '#E5E7EB';
-  const textColor = (isCompleted || isCurrent || isLocked) ? '#fff' : '#374151';
-  const strokeColor = isCurrent ? color : isCompleted ? '#16A34A' : '#D1D5DB';
+const CURRENT_GOLD = '#F59E0B';
+const CURRENT_GOLD_DARK = '#D97706';
+const CURRENT_GOLD_DEEP = '#B45309';
+
+function wrapTitleForCard(title: string, maxCharsPerLine: number): string[] {
+  const words = title.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (next.length > maxCharsPerLine && cur) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+
+function computePillWidth(title: string, segment: number): number {
+  const lines = wrapTitleForCard(title, 28);
+  const segLabel = `Segment ${segment}`;
+  let maxLen = segLabel.length;
+  for (const ln of lines) maxLen = Math.max(maxLen, Math.min(ln.length, 36));
+  const w = PILL_PAD_X * 2 + maxLen * CHAR_EST_PX;
+  return Math.min(MAX_PILL_W, Math.max(MIN_PILL_W, Math.round(w)));
+}
+
+function pillHeightForTitle(title: string): number {
+  const lines = wrapTitleForCard(title, 28);
+  const titleLines = Math.min(2, Math.max(1, lines.length));
+  return 20 + titleLines * 12 + 18;
+}
+
+function getCardLayout(
+  x: number,
+  roadY: number,
+  title: string,
+  segment: number
+): { roadY: number; nodeY: number; PILL_W: number; PILL_H: number; PILL_X: number; PILL_Y: number } {
+  const nodeY = roadY - NODE_ELEVATION_ABOVE_ROAD;
+  const PILL_W = computePillWidth(title, segment);
+  const PILL_H = pillHeightForTitle(title);
+  const PILL_X = x - NODE_R - CARD_NODE_GAP - PILL_W;
+  const PILL_Y = nodeY - PILL_H / 2;
+  return { roadY, nodeY, PILL_W, PILL_H, PILL_X, PILL_Y };
+}
+
+// ─── Number node (elevated) + title card left + road → node dashed connector ───
+function NumberNode({
+  x, y, segment, title, isCompleted, isCurrent, isLocked, isFinal, color, isDark, onClick,
+}: {
+  x: number; y: number; segment: number; title: string; isCompleted: boolean;
+  isCurrent: boolean; isLocked: boolean; isFinal: boolean; color: string;
+  isDark: boolean; onClick: () => void;
+}) {
+  const r = NODE_R;
+  const { roadY, nodeY, PILL_W, PILL_H, PILL_X, PILL_Y } = getCardLayout(x, y, title, segment);
+
+  const accentCol = isCompleted ? '#22C55E'
+    : isCurrent ? CURRENT_GOLD
+    : isLocked ? '#94A3B8'
+    : color;
+
+  const bgColor  = isCompleted ? '#22C55E'
+                 : isCurrent   ? CURRENT_GOLD
+                 : isLocked    ? '#9CA3AF'
+                 : isDark      ? '#334155' : '#FFFFFF';
+  const txtColor = (isCompleted || isCurrent || isLocked) ? '#fff'
+                 : isDark ? '#F1F5F9' : '#374151';
+  const stroke   = isCompleted ? '#16A34A'
+                 : isCurrent   ? CURRENT_GOLD_DARK
+                 : isLocked    ? '#6B7280'
+                 : isDark      ? '#475569' : '#D1D5DB';
+
+  const pillBg   = isDark ? '#1e293b' : '#FFFFFF';
+  const pillBord = isCurrent ? CURRENT_GOLD_DARK
+                 : isCompleted ? '#22C55E'
+                 : isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const titleClr = isCompleted ? '#16A34A'
+                 : isCurrent   ? CURRENT_GOLD_DEEP
+                 : isLocked    ? '#9CA3AF'
+                 : isDark      ? '#F1F5F9'  : '#111827';
+
+  const CAR_W = 64; const CAR_H = 48;
+  const carX  = x - CAR_W / 2;
+  const carY  = nodeY - r - CAR_H - 6;
+
+  const SCH_W = 64 * 1.5;
+  const SCH_H = 64 * 1.5;
+  const schCx = x;
+  const schCy = nodeY - r - SCH_H / 2 - 4;
+  const schX  = x - SCH_W / 2;
+  const schY  = nodeY - r - SCH_H - 4;
 
   return (
     <g onClick={onClick} style={{ cursor: 'pointer' }}>
-      {/* Pulse for current */}
+      {/* Road → node (vertical dashed; ends at node center) */}
+      <line
+        x1={x} y1={roadY}
+        x2={x} y2={nodeY}
+        stroke={accentCol}
+        strokeWidth="2"
+        strokeDasharray="4 4"
+        opacity={isLocked ? 0.45 : 0.85}
+        style={{ pointerEvents: 'none' }}
+      />
+
       {isCurrent && (
-        <circle cx={x} cy={nodeY} r={r + 8} fill={color} opacity="0.2">
-          <animate attributeName="r" values={`${r + 4};${r + 16};${r + 4}`} dur="2s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.3;0;0.3" dur="2s" repeatCount="indefinite" />
-        </circle>
+        <>
+          <circle cx={x} cy={nodeY} r={r + 12} fill={CURRENT_GOLD} opacity="0.18">
+            <animate attributeName="r"       values={`${r+6};${r+18};${r+6}`} dur="2.2s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.22;0;0.22"              dur="2.2s" repeatCount="indefinite" />
+          </circle>
+          <circle cx={x} cy={nodeY} r={r + 6} fill={CURRENT_GOLD} opacity="0.14">
+            <animate attributeName="r"       values={`${r+3};${r+12};${r+3}`} dur="2.2s" repeatCount="indefinite" begin="0.3s" />
+            <animate attributeName="opacity" values="0.14;0;0.14"              dur="2.2s" repeatCount="indefinite" begin="0.3s" />
+          </circle>
+        </>
       )}
 
-      {/* Shadow */}
-      <circle cx={x + 2} cy={nodeY + 3} r={r} fill="rgba(0,0,0,0.15)" />
+      <circle cx={x+2} cy={nodeY+4} r={r} fill="rgba(0,0,0,0.18)" />
+      <circle cx={x} cy={nodeY} r={r} fill={bgColor} stroke={stroke} strokeWidth="3" />
 
-      {/* Main circle */}
-      <circle cx={x} cy={nodeY} r={r} fill={bgColor} stroke={strokeColor} strokeWidth="2.5" />
-
-      {/* Car emoji on current */}
-      {isCurrent && (
-        <text x={x} y={nodeY - r - 10} textAnchor="middle" fontSize="20" style={{ userSelect: 'none' }}>🚗</text>
-      )}
-
-      {/* Final destination icon */}
-      {isFinal && !isCurrent && (
-        <text x={x} y={nodeY - r - 10} textAnchor="middle" fontSize="18" style={{ userSelect: 'none' }}>🏫</text>
-      )}
-
-      {/* Content: checkmark, lock, or number */}
       {isCompleted ? (
-        <text x={x} y={nodeY + 5} textAnchor="middle" fontSize="16" fill="#fff" fontWeight="700" style={{ userSelect: 'none' }}>✓</text>
+        <text x={x} y={nodeY + 6} textAnchor="middle" fontSize="17" fill="#fff" fontWeight="800"
+          fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>✓</text>
       ) : isLocked ? (
-        <text x={x} y={nodeY + 5} textAnchor="middle" fontSize="14" fill="#fff" style={{ userSelect: 'none' }}>🔒</text>
+        <text x={x} y={nodeY + 6} textAnchor="middle" fontSize="15" fill="#fff"
+          style={{ userSelect: 'none' }}>🔒</text>
       ) : (
-        <text x={x} y={nodeY + 5} textAnchor="middle" fontSize="14" fill={textColor} fontWeight="700" fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
+        <text x={x} y={nodeY + 6} textAnchor="middle" fontSize="15" fill={txtColor}
+          fontWeight="800" fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
           {segment}
         </text>
       )}
 
-      {/* Connector line from node to road */}
-      <line x1={x} y1={nodeY + r} x2={x} y2={y - 4} stroke={isCompleted ? '#22C55E' : '#CBD5E1'} strokeWidth="2" strokeDasharray="4 3" />
+      {isCurrent && (
+        <image
+          href={CAR_IMG}
+          x={carX} y={carY}
+          width={CAR_W} height={CAR_H}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          <animateTransform
+            attributeName="transform" type="translate"
+            values={`0,0; 0,-6; 0,0`}
+            dur="1.4s" repeatCount="indefinite"
+            calcMode="spline"
+            keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
+          />
+        </image>
+      )}
+
+      {isFinal && !isCurrent && (
+        <>
+          <circle cx={schCx} cy={schCy} r={SCH_H * 0.55} fill="#f7f5bc" opacity="0.22" filter="url(#goalGlow)" />
+          <circle cx={schCx} cy={schCy} r={SCH_H * 0.42} fill="#e47200" opacity="0.12" />
+          <image
+            href={SCHOOL_IMG}
+            x={schX} y={schY}
+            width={SCH_W} height={SCH_H}
+            preserveAspectRatio="xMidYMid meet"
+            style={{ filter: 'drop-shadow(0 4px 40px rgba(37,99,235,0.45))' }}
+          />
+        </>
+      )}
+
+      <rect
+        x={PILL_X} y={PILL_Y}
+        width={PILL_W} height={PILL_H}
+        rx="10"
+        fill={pillBg}
+        stroke={pillBord}
+        strokeWidth="1.5"
+        opacity={isLocked ? 0.65 : 1}
+        style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.10))' }}
+      />
+
+      <text
+        x={PILL_X + PILL_PAD_X} y={PILL_Y + PILL_H - 20}
+        fontSize="10" fontWeight="600"
+        fill={titleClr}
+        fontFamily="Inter, system-ui, sans-serif"
+        style={{ userSelect: 'none' }}
+      >
+        Segment {segment}
+      </text>
+      <text
+        x={PILL_X + PILL_PAD_X} y={PILL_Y + PILL_H - 6}
+        fontSize="9"
+        fill={isCompleted ? '#16A34A' : isCurrent ? CURRENT_GOLD_DEEP : isLocked ? '#9CA3AF' : isDark ? '#94A3B8' : '#6B7280'}
+        fontFamily="Inter, system-ui, sans-serif"
+        style={{ userSelect: 'none' }}
+      >
+        {isCompleted ? '✓ Completed' : isCurrent ? '▶ In Progress' : isLocked ? 'Locked' : 'Not started'}
+      </text>
     </g>
   );
 }
 
-// ─── Lesson title label below pin ────────────────────────────────────────────
+// ─── Title on info card (matches getCardLayout + responsive width) ────────────
 function LessonLabel({
-  x, y, title, isCompleted, isCurrent, isLocked, isDark,
+  x, y, title, segment, isCompleted, isCurrent, isLocked, isDark,
 }: {
-  x: number; y: number; title: string; isCompleted: boolean;
-  isCurrent: boolean; isLocked: boolean; isDark: boolean;
+  x: number; y: number; title: string; segment: number;
+  isCompleted: boolean; isCurrent: boolean; isLocked: boolean; isDark: boolean;
 }) {
-  const CARD_Y = y + 20;
-  const cw = 180;
-  const cx0 = x - cw / 2;
-  const labelColor = isCompleted ? '#16A34A' : isCurrent ? '#2563EB' : isLocked ? '#9CA3AF' : (isDark ? '#94A3B8' : '#6B7280');
-  const bgFill = isDark ? '#1e293b' : '#FFFFFF';
-  const border = isCurrent ? '#3B82F6' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)');
+  const { PILL_X, PILL_Y } = getCardLayout(x, y, title, segment);
 
-  const truncated = title.length > 22 ? title.slice(0, 21) + '…' : title;
+  const titleClr = isCompleted ? '#16A34A'
+                 : isCurrent   ? CURRENT_GOLD_DEEP
+                 : isLocked    ? '#9CA3AF'
+                 : isDark      ? '#F1F5F9'  : '#111827';
+
+  const lines = wrapTitleForCard(title, 28);
+  const line1 = (lines[0] ?? '').slice(0, 40);
+  const line2 = lines.slice(1).join(' ').slice(0, 40);
+
+  const titleTop = PILL_Y + 14;
 
   return (
-    <g>
-      <rect x={cx0} y={CARD_Y} width={cw} height={40} rx="10"
-        fill={bgFill} stroke={border} strokeWidth="1.5" opacity={isLocked ? 0.6 : 1} />
-      <text x={x} y={CARD_Y + 16} textAnchor="middle" fontSize="11" fontWeight={isCurrent ? '700' : '500'}
-        fill={labelColor} fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
-        {truncated}
+    <g style={{ pointerEvents: 'none' }}>
+      <text
+        x={PILL_X + PILL_PAD_X} y={titleTop}
+        fontSize="10" fontWeight="700"
+        fill={titleClr}
+        fontFamily="Inter, system-ui, sans-serif"
+        style={{ userSelect: 'none' }}
+      >
+        {line1}
       </text>
-      {isCompleted && (
-        <text x={x} y={CARD_Y + 30} textAnchor="middle" fontSize="9" fill="#16A34A" fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
-          ✓ Completed
+      {line2 ? (
+        <text
+          x={PILL_X + PILL_PAD_X} y={titleTop + 12}
+          fontSize="9" fontWeight="500"
+          fill={titleClr}
+          fontFamily="Inter, system-ui, sans-serif"
+          style={{ userSelect: 'none' }}
+        >
+          {line2}
         </text>
-      )}
-      {isCurrent && !isCompleted && (
-        <text x={x} y={CARD_Y + 30} textAnchor="middle" fontSize="9" fill="#2563EB" fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
-          ▶ In Progress
-        </text>
-      )}
-      {isLocked && (
-        <text x={x} y={CARD_Y + 30} textAnchor="middle" fontSize="9" fill="#9CA3AF" fontFamily="Poppins,sans-serif" style={{ userSelect: 'none' }}>
-          Locked
-        </text>
-      )}
+      ) : null}
     </g>
   );
 }
 
-// ─── Lesson Modal (image 1 style: simple with Continue button) ───────────────
+// ─── Lesson Modal ─────────────────────────────────────────────────────────────
 function LessonModal({
   mod, isDark, onClose, onStart, onSkip, totalCompleted, total,
 }: {
@@ -274,6 +438,7 @@ function LessonModal({
   const surfaceBg = isDark ? '#1e293b' : '#FFFFFF';
   const textPri = isDark ? '#F1F5F9' : '#111827';
   const textMuted = isDark ? '#94A3B8' : '#6B7280';
+  const subBg = isDark ? '#0f172a' : '#F8FAFC';
 
   const lesson = mod.lessons[0];
   const progressPct = total > 0 ? Math.round((totalCompleted / total) * 100) : 0;
@@ -306,9 +471,8 @@ function LessonModal({
           }}
         >×</button>
 
-        {/* Progress ring + segment info (image 1 style) */}
+        {/* Progress ring + segment info */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-          {/* Circular progress */}
           <div style={{ position: 'relative', width: 60, height: 60, flexShrink: 0 }}>
             <svg width="60" height="60" viewBox="0 0 60 60">
               <circle cx="30" cy="30" r="24" fill="none" stroke={isDark ? '#334155' : '#E5E7EB'} strokeWidth="5" />
@@ -329,7 +493,6 @@ function LessonModal({
               </text>
             </svg>
           </div>
-
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontSize: 11, color: textMuted, margin: '0 0 3px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Segment {mod.segment}
@@ -340,27 +503,82 @@ function LessonModal({
           </div>
         </div>
 
-        {/* Status badges */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-          {mod.isCompleted && (
-            <span style={{
-              background: '#DCFCE7', color: '#16A34A', borderRadius: 20,
-              padding: '3px 10px', fontSize: 11, fontWeight: 600,
-            }}>✓ Completed</span>
-          )}
-          {mod.isLocked && (
-            <span style={{
-              background: isDark ? '#374151' : '#F3F4F6', color: textMuted,
-              borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600,
-            }}>🔒 Locked</span>
-          )}
-          {mod.isCurrent && !mod.isCompleted && (
-            <span style={{
-              background: '#DBEAFE', color: '#2563EB',
-              borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600,
-            }}>▶ In Progress</span>
-          )}
-        </div>
+        {/* Progress bar */}
+        {!mod.isLocked && (
+          <div className="mb-4">
+            <div className="w-full rounded-full overflow-hidden"
+              style={{ height: 5, background: isDark ? '#334155' : '#E5E7EB' }}>
+              <div className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${mod.percentage}%`,
+                  background: mod.isCompleted
+                    ? 'linear-gradient(90deg,#16A34A,#22C55E)'
+                    : 'linear-gradient(90deg,#2563EB,#6366F1)',
+                }} />
+            </div>
+          </div>
+        )}
+
+        {/* Lessons list */}
+        {!mod.isLocked ? (
+          <div className="space-y-1.5 mb-4">
+            {mod.lessons.map(l => (
+              <div key={l.id}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2"
+                style={{
+                  background: l.isCurrent ? (isDark ? '#1e3a5f' : '#EFF6FF') : subBg,
+                  border: `1px solid ${l.isCurrent ? (isDark ? '#2563EB50' : '#BFDBFE') : 'transparent'}`,
+                }}>
+                <div
+                  className="h-6 w-6 rounded-full flex items-center justify-center shrink-0"
+                  style={{
+                    background: l.isCompleted ? '#16A34A'
+                      : l.isCurrent ? '#2563EB'
+                      : isDark ? '#334155' : '#E5E7EB',
+                  }}
+                >
+                  {l.isCompleted && <Check size={11} className="text-white" />}
+                  {l.isCurrent && !l.isCompleted && <Play size={9} className="text-white" fill="white" />}
+                  {!l.isCompleted && !l.isCurrent && (
+                    <div className="h-1.5 w-1.5 rounded-full"
+                      style={{ background: isDark ? '#475569' : '#9CA3AF' }} />
+                  )}
+                </div>
+                <span className="flex-1 text-[12px]"
+                  style={{
+                    color: l.isCompleted ? (isDark ? '#4ADE80' : '#16A34A')
+                      : l.isCurrent ? (isDark ? '#93C5FD' : '#2563EB')
+                      : textMuted,
+                    fontWeight: l.isCurrent ? 600 : 400,
+                  }}>
+                  {l.title}
+                  {l.isOptional && (
+                    <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full"
+                      style={{ background: '#7C3AED22', color: '#7C3AED' }}>
+                      optional
+                    </span>
+                  )}
+                </span>
+                <span className="text-[10px] shrink-0" style={{ color: isDark ? '#475569' : '#9CA3AF' }}>
+                  {l.durationMin}m
+                </span>
+                {l.isCurrent && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
+                    style={{ background: '#2563EB', color: 'white' }}>
+                    NOW
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mb-4 rounded-xl px-4 py-3 text-center"
+            style={{ background: subBg }}>
+            <p className="text-[12px]" style={{ color: textMuted }}>
+              Complete previous segments to unlock this lesson
+            </p>
+          </div>
+        )}
 
         {/* Locked notice with Skip option */}
         {mod.isLocked && (
@@ -385,13 +603,15 @@ function LessonModal({
           </div>
         )}
 
-        {/* Continue / Start button (image 1 style: blue pill with play icon) */}
-        {!mod.isLocked && (
+        {/* CTA button */}
+        {!mod.isLocked ? (
           <button
             onClick={() => lesson && onStart(lesson.id)}
             style={{
               width: '100%',
-              background: 'linear-gradient(135deg, #4F8EF7, #3B82F6)',
+              background: mod.isCompleted
+                ? 'linear-gradient(135deg,#16A34A,#15803D)'
+                : 'linear-gradient(135deg,#2563EB,#4F46E5)',
               border: 'none',
               borderRadius: 50,
               padding: '14px 24px',
@@ -403,7 +623,6 @@ function LessonModal({
               boxShadow: '0 6px 20px rgba(59,130,246,0.4)',
             }}
           >
-            {/* Play icon circle */}
             <div style={{
               width: 32, height: 32, borderRadius: '50%',
               background: 'rgba(255,255,255,0.25)',
@@ -412,13 +631,10 @@ function LessonModal({
               <Play size={14} fill="white" className="text-white" style={{ marginLeft: 2 }} />
             </div>
             <span style={{ color: '#fff', fontWeight: 700, fontSize: 15, fontFamily: 'Poppins,sans-serif' }}>
-              {mod.isCompleted ? 'Review Lesson' : 'Continue'}
+              {mod.isCompleted ? 'Review Lesson' : 'Continue Learning'}
             </span>
           </button>
-        )}
-
-        {/* Locked but skip option - still show CTA */}
-        {mod.isLocked && (
+        ) : (
           <button
             onClick={() => lesson && onSkip(lesson.id)}
             style={{
@@ -476,19 +692,38 @@ function MobileRoadmap({
               onClick={() => setSelected(mod)}
               className="h-11 w-11 rounded-full flex items-center justify-center shrink-0 text-lg transition-transform hover:scale-110 relative"
               style={{
-                background: mod.isCompleted ? '#22C55E' : mod.isCurrent ? mod.pinColor : mod.isLocked ? (isDark ? '#334155' : '#E5E7EB') : (isDark ? '#1e293b' : '#F9FAFB'),
-                border: `2.5px solid ${mod.isCompleted ? '#16A34A' : mod.isCurrent ? mod.pinColor : (isDark ? '#475569' : '#D1D5DB')}`,
-                boxShadow: !mod.isLocked && mod.isCurrent ? `0 0 0 4px ${mod.pinColor}30` : 'none',
+                background: mod.isCompleted ? '#22C55E' : mod.isCurrent ? '#F59E0B' : mod.isLocked ? (isDark ? '#334155' : '#E5E7EB') : (isDark ? '#1e293b' : '#F9FAFB'),
+                border: `2.5px solid ${mod.isCompleted ? '#16A34A' : mod.isCurrent ? '#D97706' : (isDark ? '#475569' : '#D1D5DB')}`,
+                boxShadow: !mod.isLocked && mod.isCurrent ? '0 0 0 4px rgba(245,158,11,0.35)' : 'none',
                 color: (mod.isCompleted || mod.isCurrent) ? '#fff' : (isDark ? '#94A3B8' : '#6B7280'),
                 fontSize: 13, fontWeight: 700, fontFamily: 'Poppins,sans-serif',
               }}
             >
               {mod.isCompleted ? '✓' : mod.isLocked ? '🔒' : mod.segment}
               {mod.isCurrent && (
-                <span style={{ position: 'absolute', top: -16, fontSize: 14 }}>🚗</span>
+                <img
+                  src={CAR_IMG}
+                  alt="car"
+                  style={{
+                    position: 'absolute', top: -28, left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: 36, height: 28,
+                    objectFit: 'contain',
+                    animation: 'carBounce 1.4s ease-in-out infinite',
+                  }}
+                />
               )}
               {i === modules.length - 1 && !mod.isCurrent && (
-                <span style={{ position: 'absolute', top: -16, fontSize: 14 }}>🏫</span>
+                <img
+                  src={SCHOOL_IMG}
+                  alt="destination"
+                  style={{
+                    position: 'absolute', top: -36, left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: 36, height: 36,
+                    objectFit: 'contain',
+                  }}
+                />
               )}
             </button>
             {i < modules.length - 1 && (
@@ -508,9 +743,9 @@ function MobileRoadmap({
               className="w-full text-left rounded-2xl px-4 py-3 transition-all hover:scale-[1.01]"
               style={{
                 background: surfaceBg,
-                border: `1.5px solid ${mod.isCurrent ? mod.pinColor : borderCol}`,
+                border: `1.5px solid ${mod.isCurrent ? '#F59E0B' : borderCol}`,
                 boxShadow: mod.isCurrent
-                  ? `0 0 0 3px ${mod.pinColor}15, 0 4px 16px rgba(0,0,0,0.1)`
+                  ? '0 0 0 3px rgba(245,158,11,0.2), 0 4px 16px rgba(0,0,0,0.1)'
                   : `0 2px 8px rgba(0,0,0,${isDark ? '0.25' : '0.06'})`,
                 opacity: mod.isLocked ? 0.7 : 1,
               }}
@@ -591,9 +826,10 @@ function DesktopRoadmap({
     return () => el.removeEventListener('wheel', fn);
   }, []);
 
-  const pins = buildPins(modules.length);
+  const pins = buildPins(modules.length).map((p) => ({ x: p.x, y: p.y + SVG_ROAD_Y_PAD }));
   const cW = svgCanvasWidth(modules.length);
   const roadPath = buildRoadPath(pins);
+  const svgH = C_H + 280 + SVG_ROAD_Y_PAD;
 
   // Current lesson for "UP NEXT" banner
   const curMod = modules.find(m => m.isCurrent) ?? modules.find(m => !m.isCompleted && !m.isLocked);
@@ -615,15 +851,15 @@ function DesktopRoadmap({
         }}>
           <svg
             width={cW}
-            height={C_H + 280}
-            viewBox={`0 0 ${cW} ${C_H + 280}`}
+            height={svgH}
+            viewBox={`0 0 ${cW} ${svgH}`}
             style={{ display: 'block', overflow: 'visible' }}
           >
             <defs>
               <linearGradient id="roadGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3B4F72" />
-                <stop offset="40%" stopColor="#253550" />
-                <stop offset="100%" stopColor="#1a2840" />
+                <stop offset="0%" stopColor="#0a3566" />
+                <stop offset="45%" stopColor="#022658" />
+                <stop offset="100%" stopColor="#011a3d" />
               </linearGradient>
               <linearGradient id="doneGrad" x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0%" stopColor="#15803D" />
@@ -632,14 +868,21 @@ function DesktopRoadmap({
               <filter id="roadShadow" x="-5%" y="-20%" width="110%" height="160%">
                 <feDropShadow dx="0" dy="10" stdDeviation="12" floodColor={isDark ? '#00000060' : '#00000030'} />
               </filter>
+              <filter id="goalGlow" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b" />
+                <feMerge>
+                  <feMergeNode in="b" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
             </defs>
 
-            {/* Road */}
+            {/* Road layers */}
             <path d={roadPath} fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="56" strokeLinecap="round" transform="translate(0,8)" filter="url(#roadShadow)" />
             <path d={roadPath} fill="none" stroke="#141f30" strokeWidth="58" strokeLinecap="round" />
             <path d={roadPath} fill="none" stroke="url(#roadGrad)" strokeWidth="50" strokeLinecap="round" />
 
-            {/* Completed overlay */}
+            {/* Completed section overlay */}
             {totalCompleted > 0 && (
               <path d={roadPath} fill="none" stroke="url(#doneGrad)" strokeWidth="50" strokeLinecap="round"
                 opacity="0.65"
@@ -659,22 +902,25 @@ function DesktopRoadmap({
                 x={pins[i].x}
                 y={pins[i].y}
                 segment={mod.segment}
+                title={mod.title}
                 isCompleted={mod.isCompleted}
                 isCurrent={mod.isCurrent}
                 isLocked={mod.isLocked}
                 isFinal={i === modules.length - 1}
                 color={mod.pinColor}
+                isDark={isDark}
                 onClick={() => setSelected(mod)}
               />
             ))}
 
-            {/* Lesson title labels */}
+            {/* Lesson title on each info card */}
             {modules.map((mod, i) => (
               <LessonLabel
                 key={`label-${mod.id}`}
                 x={pins[i].x}
                 y={pins[i].y}
                 title={mod.title}
+                segment={mod.segment}
                 isCompleted={mod.isCompleted}
                 isCurrent={mod.isCurrent}
                 isLocked={mod.isLocked}
@@ -711,7 +957,7 @@ function DesktopRoadmap({
         ))}
       </div>
 
-      {/* UP NEXT banner (image 2 style: dark pill) */}
+      {/* UP NEXT banner */}
       {curMod && nextLesson && (
         <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20">
           <button
@@ -737,7 +983,7 @@ function DesktopRoadmap({
         </div>
       )}
 
-      {/* Modal */}
+      {/* Module modal */}
       {selected && (
         <LessonModal
           mod={selected}
@@ -866,6 +1112,10 @@ export default function RoadmapPage() {
           70%  { transform: scale(1.02); opacity: 1; }
           100% { transform: scale(1) translateY(0); }
         }
+        @keyframes carBounce {
+          0%, 100% { transform: translateX(-50%) translateY(0px); }
+          50%       { transform: translateX(-50%) translateY(-6px); }
+        }
       `}</style>
 
       <div className="fixed inset-0 z-50 flex flex-col" style={{ background: pageBg, fontFamily: 'Poppins, sans-serif' }}>
@@ -879,7 +1129,7 @@ export default function RoadmapPage() {
             <X size={15} style={{ color: textMuted }} />
           </button>
 
-          {/* Progress pill */}
+          {/* Progress pill — centre-aligned in header */}
           <div className="absolute left-1/2 -translate-x-1/2" style={{ width: 420 }}>
             <div className="rounded-2xl px-5 py-2.5" style={{
               background: isDark ? '#0f172a' : '#F9FAFB',
@@ -926,7 +1176,7 @@ export default function RoadmapPage() {
           </div>
         )}
 
-        {/* Desktop */}
+        {/* Desktop roadmap */}
         <div className="hidden md:flex flex-1 overflow-hidden">
           <DesktopRoadmap
             isDark={isDark} modules={modules}
@@ -935,7 +1185,7 @@ export default function RoadmapPage() {
           />
         </div>
 
-        {/* Mobile */}
+        {/* Mobile roadmap */}
         <div className="flex md:hidden flex-1 overflow-y-auto">
           <div className="w-full">
             <MobileRoadmap
