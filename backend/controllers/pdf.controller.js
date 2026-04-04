@@ -1,5 +1,10 @@
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const path = require('path');
+
+// Use service role client for all storage operations so that both email/password
+// and Google OAuth users can upload/delete/rename files without RLS interference.
+// Falls back to the anon client if the service role key is not configured.
+const storage = () => (supabaseAdmin || supabase).storage.from('academic-pdfs');
 
 /**
  * Validate PDF file
@@ -102,9 +107,7 @@ const uploadPDF = async (req, res) => {
     const filename = `${timestamp}_${randomString}_${req.file.originalname.replace(/\s+/g, '_')}`;
     const storagePath = `${userPrefix(userId)}/${filename}`;
 
-    const { error: uploadError } = await supabase
-      .storage
-      .from('academic-pdfs')
+    const { error: uploadError } = await storage()
       .upload(storagePath, req.file.buffer, { contentType: 'application/pdf', upsert: false });
 
     if (uploadError) {
@@ -112,7 +115,8 @@ const uploadPDF = async (req, res) => {
       return res.status(500).json({ success: false, error: 'Failed to upload PDF', message: uploadError.message });
     }
 
-    const { data: publicUrlData } = supabase.storage.from('academic-pdfs').getPublicUrl(storagePath);
+    const { data: publicUrlData } = (supabaseAdmin || supabase)
+      .storage.from('academic-pdfs').getPublicUrl(storagePath);
 
     res.status(200).json({
       success: true,
@@ -145,9 +149,7 @@ const listPDFs = async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
-    const { data, error } = await supabase
-      .storage
-      .from('academic-pdfs')
+    const { data, error } = await storage()
       .list(userPrefix(userId), { limit: 100, offset: 0, sortBy: { column: 'name', order: 'desc' } });
 
     if (error) {
@@ -178,7 +180,7 @@ const deletePDF = async (req, res) => {
 
     const storagePath = resolveUserPath(userId, filename);
 
-    const { error } = await supabase.storage.from('academic-pdfs').remove([storagePath]);
+    const { error } = await storage().remove([storagePath]);
     if (error) {
       console.error('Supabase delete error:', error);
       return res.status(500).json({ success: false, error: 'Failed to delete PDF', message: error.message });
@@ -220,16 +222,15 @@ const renamePDF = async (req, res) => {
 
     console.log(`[Rename] ${oldPath} → ${newPath}`);
 
-    const { data: fileData, error: dlErr } = await supabase.storage.from('academic-pdfs').download(oldPath);
+    const { data: fileData, error: dlErr } = await storage().download(oldPath);
     if (dlErr) return res.status(404).json({ success: false, error: 'Original file not found', message: dlErr.message });
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
-    const { error: upErr } = await supabase.storage
-      .from('academic-pdfs')
+    const { error: upErr } = await storage()
       .upload(newPath, buffer, { contentType: 'application/pdf', upsert: false });
     if (upErr) return res.status(500).json({ success: false, error: 'Upload failed', message: upErr.message });
 
-    await supabase.storage.from('academic-pdfs').remove([oldPath]);
+    await storage().remove([oldPath]);
 
     // Update DB refs (non-fatal)
     await supabase.from('document_segments')
@@ -240,7 +241,8 @@ const renamePDF = async (req, res) => {
       .update({ pdf_id: newFilename })
       .eq('pdf_id', oldFilename).eq('user_id', userId).catch(() => {});
 
-    const { data: urlData } = supabase.storage.from('academic-pdfs').getPublicUrl(newPath);
+    const { data: urlData } = (supabaseAdmin || supabase)
+      .storage.from('academic-pdfs').getPublicUrl(newPath);
 
     res.status(200).json({ success: true, message: 'PDF renamed successfully', oldFilename, newFilename, publicUrl: urlData?.publicUrl });
   } catch (error) {
@@ -265,7 +267,7 @@ const getFile = async (req, res) => {
 
     const storagePath = resolveUserPath(userId, filename);
 
-    const { data, error } = await supabase.storage.from('academic-pdfs').download(storagePath);
+    const { data, error } = await storage().download(storagePath);
     if (error) return res.status(404).json({ success: false, error: 'File not found', message: error.message });
 
     const buffer = Buffer.from(await data.arrayBuffer());
