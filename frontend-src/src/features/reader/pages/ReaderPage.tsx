@@ -28,7 +28,7 @@ export default function ReaderPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { token, user } = useAuth();
-  const { markLessonComplete, lessonProgress } = useProgressContext();
+  const { markLessonComplete, setCurrentLesson, lessonProgress } = useProgressContext();
 
   const isDark = theme === 'dark';
 
@@ -116,7 +116,18 @@ export default function ReaderPage() {
   // ── Progress ──────────────────────────────────────────────────────────────
   const progressKey = `${documentId}:${lessonId}`;
   const isCompleted = lessonProgress[progressKey]?.isCompleted ?? false;
-  const totalLessons = lessonSet?.totalLessons ?? 10;
+  const totalLessons =
+    lessonSet && lessonSet.lessons.length > 0
+      ? lessonSet.totalLessons || lessonSet.lessons.length
+      : 0;
+
+  // Track open lesson + total count for Progress page (no fake default like 10)
+  useEffect(() => {
+    if (!documentId || !lessonId || lessonLoadState !== 'ready' || !lessonSet) return;
+    const tl = lessonSet.totalLessons || lessonSet.lessons.length;
+    if (tl < 1) return;
+    setCurrentLesson(documentId, lessonId, tl);
+  }, [documentId, lessonId, lessonLoadState, lessonSet, setCurrentLesson]);
 
   // ── Page title ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -138,7 +149,7 @@ export default function ReaderPage() {
   const handleNextLesson = () => goToLesson(lessonIndex + 1);
 
   const handleMarkComplete = () => {
-    if (isCompleted) return;
+    if (isCompleted || totalLessons < 1) return;
     markLessonComplete(documentId, lessonId, totalLessons);
     setConfettiOrigin({ x: window.innerWidth / 2, y: window.innerHeight / 3 });
     setShowConfetti(true);
