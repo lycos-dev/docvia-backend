@@ -67,15 +67,60 @@ function toDisplayName(filename: string): string {
     .replace(/\.pdf$/i, '');
 }
 
-export async function uploadPDF(file: File, token: string): Promise<UploadResult> {
-  const form = new FormData();
-  form.append('pdf', file);
-  const res = await fetch(`${BASE}/upload`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
+export async function uploadPDF(
+  file: File,
+  token: string,
+  onProgress?: (progress: number) => void
+): Promise<UploadResult> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+
+    // Track upload progress
+    if (onProgress) {
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = (event.loaded / event.total) * 100;
+          onProgress(percentComplete);
+        }
+      });
+    }
+
+    xhr.addEventListener('load', async () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const result = safeJson<UploadResult>(
+          new Response(xhr.responseText),
+          { success: false, error: 'Server did not return a response.' }
+        );
+        resolve(result);
+      } else {
+        resolve({
+          success: false,
+          error: `Upload failed with status ${xhr.status}`,
+        });
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      resolve({
+        success: false,
+        error: 'Network error during upload. Please try again.',
+      });
+    });
+
+    xhr.addEventListener('abort', () => {
+      resolve({
+        success: false,
+        error: 'Upload was cancelled.',
+      });
+    });
+
+    const form = new FormData();
+    form.append('pdf', file);
+
+    xhr.open('POST', `${BASE}/upload`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.send(form);
   });
-  return safeJson<UploadResult>(res, { success: false, error: 'Server did not return a response.' });
 }
 
 export async function listPDFs(token?: string): Promise<PDFFile[]> {
