@@ -16,6 +16,9 @@ interface ReaderToolbarProps {
   onTogglePanel: () => void;
   isDark: boolean;
   toggleTheme: () => void;
+  // New props added for progress tracking
+  completedCount: number;
+  totalLessons: number;
 }
 
 export default function ReaderToolbar({
@@ -32,15 +35,18 @@ export default function ReaderToolbar({
   onTogglePanel,
   isDark,
   toggleTheme,
+  completedCount,
+  totalLessons,
 }: ReaderToolbarProps) {
+  const pct = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
   return (
     <div
       className={cn(
-        'fixed top-0 left-0 right-0 z-40 h-14 flex items-center px-4 gap-3',
+        'fixed top-0 left-0 right-0 z-40 h-15 flex items-center px-4 gap-3',
         'bg-white dark:bg-[#1e293b]',
         'border-b border-black/10 dark:border-white/10',
       )}
-      style={{ fontFamily: 'Poppins, sans-serif' }}
+      style={{ fontFamily: 'Inter, sans-serif' }}
     >
       {/* Back button */}
       <button
@@ -64,63 +70,41 @@ export default function ReaderToolbar({
         </p>
       </div>
 
-      {/* Right side controls */}
-      <div className="shrink-0 flex items-center gap-1.5">
-        {/* Prev lesson */}
-        <button
-          onClick={onPrevLesson}
-          disabled={!hasPrev}
-          className={cn(
-            'p-1.5 rounded-lg transition-colors',
-            hasPrev
-              ? 'text-[#6B7280] dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-white/10'
-              : 'text-gray-300 dark:text-white/20 cursor-not-allowed',
-          )}
-          aria-label="Previous lesson"
-        >
-          <ChevronLeft size={18} />
-        </button>
-
-        {/* Next lesson */}
-        <button
-          onClick={onNextLesson}
-          disabled={!hasNext}
-          className={cn(
-            'p-1.5 rounded-lg transition-colors',
-            hasNext
-              ? 'text-[#6B7280] dark:text-[#94A3B8] hover:bg-gray-100 dark:hover:bg-white/10'
-              : 'text-gray-300 dark:text-white/20 cursor-not-allowed',
-          )}
-          aria-label="Next lesson"
-        >
-          <ChevronRight size={18} />
-        </button>
-
-        {/* Divider */}
-        <div className="w-px h-5 bg-black/10 dark:bg-white/10 mx-0.5" />
-
-        {/* Mark Complete */}
-        {isCompleted ? (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-sm font-medium">
-            <CheckCircle size={15} />
-            <span className="hidden sm:inline">Completed</span>
-          </div>
-        ) : (
-          <button
-            onClick={onMarkComplete}
+      {/* Center Area: Progress Bar */}
+      <div className="flex-1 max-w-md mx-4 hidden md:block">
+        <div className="flex items-center gap-3 mb-1">
+          <div
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-              'bg-[#3B82F6] hover:bg-[#2563EB] text-white',
+              'flex-1 h-2 rounded-full overflow-hidden',
+              isDark ? 'bg-white/10' : 'bg-[#E5E7EB]',
             )}
           >
-            <CheckCircle size={15} />
-            <span className="hidden sm:inline">Mark Complete</span>
-          </button>
-        )}
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{ 
+                width: `${pct}%`,
+                backgroundColor: isDark ? '#60A5FA' : '#022658' 
+              }}
+            />
+          </div>
+          <span
+            className="text-sm font-bold tabular-nums shrink-0"
+            style={{ color: '#22C55E' }}
+          >
+            {pct}%
+          </span>
+        </div>
+        <p
+          className="text-[11px] font-medium leading-none text-left"
+          style={{ color: isDark ? '#94A3B8' : '#022658' }}
+        >
+          {completedCount}/{totalLessons} lessons completed
+        </p>
+      </div>
 
-        {/* Divider */}
-        <div className="w-px h-5 bg-black/10 dark:bg-white/10 mx-0.5" />
-
+      {/* Right side controls */}
+      <div className="shrink-0 flex items-center gap-1.5">
+      
         {/* Panel toggle */}
         <button
           onClick={onTogglePanel}
