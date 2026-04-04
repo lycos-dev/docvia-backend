@@ -25,6 +25,7 @@ const authenticateToken = async (req, res, next) => {
     req.user = {
       id: decoded.userId,
       email: decoded.email,
+      username: decoded.username ?? null,
       token: token
     };
 

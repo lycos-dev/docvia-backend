@@ -81,7 +81,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
         title: result.data!.originalFilename.replace(/\.pdf$/i, '').replace(/_/g, ' '),
         subtitle: 'Newly uploaded document',
         type: 'pdf',
-        lastOpened: new Date().toISOString().split('T')[0],
+        lastOpened: result.data!.uploadedAt ?? new Date().toISOString(),
         coverImage: extracted,
         firstPageThumbnail: extracted,
         progress: {

@@ -1,5 +1,6 @@
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -32,8 +33,16 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
   const [editedTitle, setEditedTitle] = useState(document.title);
   const [titleError, setTitleError] = useState<string | null>(null);
 
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
+  const [menuFixedStyle, setMenuFixedStyle] = useState<React.CSSProperties | null>(null);
+
   // Thumbnail: use cached coverImage if available, otherwise fetch first PDF page via pdfjs
   const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(document.coverImage ?? null);
+
+  useEffect(() => {
+    setEditedTitle(document.title);
+  }, [document.title]);
 
   useEffect(() => {
     if (document.coverImage) {
@@ -63,6 +72,65 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
     })();
     return () => { cancelled = true; };
   }, [document.filename, document.coverImage, token]);
+
+  const updateMenuPosition = useCallback(() => {
+    const btn = menuButtonRef.current;
+    const panel = menuPanelRef.current;
+    if (!btn || !panel) return;
+    const br = btn.getBoundingClientRect();
+    const pad = 8;
+    const gap = 6;
+    const mh = panel.offsetHeight;
+    const mw = panel.offsetWidth;
+    const spaceBelow = window.innerHeight - br.bottom - gap;
+    const spaceAbove = br.top - gap;
+    const placeBelow = spaceBelow >= mh || spaceBelow >= spaceAbove;
+
+    let top: number;
+    if (placeBelow) {
+      top = br.bottom + gap;
+      if (top + mh > window.innerHeight - pad) {
+        top = Math.max(pad, window.innerHeight - pad - mh);
+      }
+    } else {
+      top = br.top - gap - mh;
+      if (top < pad) top = pad;
+    }
+
+    let left = br.right - mw;
+    if (left < pad) left = pad;
+    if (left + mw > window.innerWidth - pad) {
+      left = Math.max(pad, window.innerWidth - pad - mw);
+    }
+
+    setMenuFixedStyle({
+      position: "fixed",
+      top,
+      left,
+      zIndex: 100,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setMenuFixedStyle(null);
+      return;
+    }
+    updateMenuPosition();
+    let innerRaf = 0;
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(updateMenuPosition);
+    });
+    const onResize = () => updateMenuPosition();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    return () => {
+      cancelAnimationFrame(outerRaf);
+      cancelAnimationFrame(innerRaf);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+    };
+  }, [menuOpen, updateMenuPosition]);
 
   const { progress } = document;
 
@@ -117,31 +185,31 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
     setMenuOpen(false);
   };
 
-  /** Renders the progress status line below the title */
+  /** Renders the progress status line below the title — fixed block height keeps cards aligned */
   function ProgressStatus() {
     if (!progress || progress.totalLessons === 0) {
       return (
-        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">
-          {document.subtitle}
+        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2.5rem] leading-snug">
+          {document.subtitle.trim() ? document.subtitle : 'Open the roadmap to start learning'}
         </p>
       );
     }
     if (progress.percentage === 100) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium mt-1">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium min-h-[2.5rem] self-start">
           ✓ Completed
         </span>
       );
     }
     if (progress.percentage === 0) {
       return (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+        <p className="text-xs text-gray-500 dark:text-gray-400 min-h-[2.5rem] leading-snug flex items-center">
           Not started
         </p>
       );
     }
     return (
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+      <p className="text-xs text-gray-500 dark:text-gray-400 min-h-[2.5rem] leading-snug flex items-center">
         {progress.completedLessons} of {progress.totalLessons} lessons · {progress.percentage}%
       </p>
     );
@@ -173,24 +241,26 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
   // Grid View
   if (viewMode === "grid") {
     return (
-      <div className="relative">
-        <div
+      <div className="relative h-full flex flex-col">
+        <motion.div
           onClick={handleCardClick}
-          className="overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_14px_40px_rgba(0,0,0,0.18)] dark:hover:shadow-[0_14px_40px_rgba(0,0,0,0.4)] cursor-pointer"
+          whileHover={{ y: -4, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
+          whileTap={{ scale: 0.99 }}
+          className="overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 hover:shadow-[0_14px_40px_rgba(0,0,0,0.14)] dark:hover:shadow-[0_14px_40px_rgba(0,0,0,0.35)] cursor-pointer h-full flex flex-col"
         >
-          {/* Image Container */}
-          <div className="relative w-full h-40 bg-linear-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 overflow-hidden">
+          {/* Image — fixed aspect so every card lines up */}
+          <div className="relative w-full aspect-[16/10] shrink-0 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 overflow-hidden">
             {thumbnailSrc ? (
               <img
                 src={thumbnailSrc}
-                alt={document.title}
-                className="w-full h-full object-cover"
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover object-center"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-center">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center px-2">
                   <svg
-                    className="w-16 h-16 mx-auto text-gray-400 dark:text-gray-600 mb-2"
+                    className="w-14 h-14 mx-auto text-gray-400 dark:text-gray-600 mb-1"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -209,9 +279,9 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
             <ProgressBar />
           </div>
 
-          {/* Content */}
-          <div className="p-4 flex justify-between items-start">
-            <div className="flex-1 min-w-0 pr-2">
+          {/* Content — separated from thumbnail so titles stay readable on white PDFs */}
+          <div className="p-4 flex justify-between items-stretch gap-2 flex-1 min-h-0 border-t border-gray-200/90 dark:border-gray-600 bg-slate-50 dark:bg-slate-900/90 shadow-[0_-6px_16px_rgba(15,23,42,0.08)] dark:shadow-[0_-6px_20px_rgba(0,0,0,0.35)]">
+            <div className="flex-1 min-w-0 flex flex-col">
               {isEditingTitle ? (
                 <div onClick={(e) => e.stopPropagation()}>
                   <input
@@ -250,11 +320,13 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                 </div>
               ) : (
                 <>
-                  <h4 className="font-semibold text-gray-700 dark:text-gray-200 truncate">
+                  <h4 className="font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 min-h-[2.75rem] leading-snug">
                     {document.title}
                   </h4>
-                  <ProgressStatus />
-                  <LastAccessed />
+                  <div className="mt-1 flex-1 flex flex-col gap-0.5">
+                    <ProgressStatus />
+                    <LastAccessed />
+                  </div>
                 </>
               )}
             </div>
@@ -262,52 +334,61 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
             {/* Menu Button */}
             {!isEditingTitle && (
               <button
+                ref={menuButtonRef}
+                type="button"
                 onClick={handleMenuClick}
-                className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative z-10 cursor-pointer"
+                className="p-1.5 h-9 w-9 shrink-0 rounded-lg hover:bg-white/80 dark:hover:bg-slate-800 transition-colors relative z-10 cursor-pointer self-start"
               >
                 <MoreVertical
                   size={18}
-                  className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                  className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                 />
               </button>
             )}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Dropdown Menu - Outside card to prevent clipping */}
+        {/* Fixed menu: stays in viewport; opens upward when needed */}
         {menuOpen && !isEditingTitle && (
           <>
-            <div className="absolute right-4 top-50 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+            <div
+              ref={menuPanelRef}
+              style={menuFixedStyle ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }}
+              className="z-[100] w-48 max-h-[min(70vh,calc(100dvh-16px))] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 py-1 shadow-xl"
+            >
               <button
+                type="button"
                 onClick={handleCardClick}
                 className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
                 Open
               </button>
               <button
+                type="button"
                 onClick={handleEditTitle}
                 className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
               >
-                <Pencil size={16} />
+                <Pencil size={16} className="shrink-0" />
                 Edit Title
               </button>
               <div className="my-1 h-px bg-gray-200 dark:bg-gray-700" />
               <button
+                type="button"
                 onClick={handleDelete}
                 className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 cursor-pointer"
               >
-                <Trash2 size={16} />
+                <Trash2 size={16} className="shrink-0" />
                 Delete
               </button>
             </div>
 
-            {/* Backdrop */}
             <div
-              className="fixed inset-0 z-40"
+              className="fixed inset-0 z-[90]"
+              aria-hidden
               onClick={() => setMenuOpen(false)}
             />
           </>
@@ -319,20 +400,22 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
   // List View
   return (
     <div className="relative">
-      <div
+      <motion.div
         onClick={handleCardClick}
-        className="overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-all duration-300 hover:shadow-[0_14px_40px_rgba(0,0,0,0.18)] dark:hover:shadow-[0_14px_40px_rgba(0,0,0,0.4)] cursor-pointer flex items-center"
+        whileHover={{ x: 2, transition: { type: 'spring', stiffness: 400, damping: 30 } }}
+        whileTap={{ scale: 0.995 }}
+        className="overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 hover:shadow-[0_10px_32px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_10px_32px_rgba(0,0,0,0.35)] cursor-pointer flex items-stretch min-h-[6.5rem]"
       >
-        {/* Image Container - List View */}
-        <div className="relative w-32 h-24 bg-linear-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 shrink-0 overflow-hidden">
-          {document.coverImage ? (
+        {/* Thumbnail — same source as grid (cover or pdf.js) */}
+        <div className="relative w-32 sm:w-36 shrink-0 self-stretch min-h-[6.5rem] bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 overflow-hidden">
+          {thumbnailSrc ? (
             <img
-              src={document.coverImage}
-              alt={document.title}
-              className="w-full h-full object-cover"
+              src={thumbnailSrc}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover object-center"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center">
               <svg
                 className="w-10 h-10 text-gray-400 dark:text-gray-600"
                 fill="none"
@@ -351,9 +434,9 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
           <ProgressBar />
         </div>
 
-        {/* Content */}
-        <div className="flex-1 p-4 flex justify-between items-center">
-          <div className="flex-1 min-w-0 pr-4">
+        {/* Content — contrast strip beside thumbnail */}
+        <div className="flex-1 p-4 flex justify-between items-start gap-3 min-w-0 border-l border-gray-200/90 dark:border-gray-600 bg-slate-50 dark:bg-slate-900/90">
+          <div className="flex-1 min-w-0 flex flex-col justify-center">
             {isEditingTitle ? (
               <div onClick={(e) => e.stopPropagation()}>
                 <input
@@ -392,11 +475,13 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
               </div>
             ) : (
               <>
-                <h4 className="font-semibold text-gray-700 dark:text-gray-200 truncate">
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-snug">
                   {document.title}
                 </h4>
-                <ProgressStatus />
-                <LastAccessed />
+                <div className="mt-1">
+                  <ProgressStatus />
+                  <LastAccessed />
+                </div>
               </>
             )}
           </div>
@@ -404,52 +489,60 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
           {/* Menu Button */}
           {!isEditingTitle && (
             <button
+              ref={menuButtonRef}
+              type="button"
               onClick={handleMenuClick}
-              className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative z-10 cursor-pointer"
+              className="p-1.5 h-9 w-9 shrink-0 rounded-lg hover:bg-white/80 dark:hover:bg-slate-800 transition-colors relative z-10 cursor-pointer"
             >
               <MoreVertical
                 size={18}
-                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               />
             </button>
           )}
         </div>
-      </div>
+      </motion.div>
 
-      {/* Dropdown Menu - Outside card */}
       {menuOpen && !isEditingTitle && (
         <>
-          <div className="absolute right-4 top-1/2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+          <div
+            ref={menuPanelRef}
+            style={menuFixedStyle ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }}
+            className="z-[100] w-48 max-h-[min(70vh,calc(100dvh-16px))] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 py-1 shadow-xl"
+          >
             <button
+              type="button"
               onClick={handleCardClick}
               className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
               Open
             </button>
             <button
+              type="button"
               onClick={handleEditTitle}
               className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <Pencil size={16} />
+              <Pencil size={16} className="shrink-0" />
               Edit Title
             </button>
             <div className="my-1 h-px bg-gray-200 dark:bg-gray-700" />
             <button
+              type="button"
               onClick={handleDelete}
               className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2 cursor-pointer"
             >
-              <Trash2 size={16} />
+              <Trash2 size={16} className="shrink-0" />
               Delete
             </button>
           </div>
 
-          {/* Backdrop */}
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[90]"
+            aria-hidden
             onClick={() => setMenuOpen(false)}
           />
         </>

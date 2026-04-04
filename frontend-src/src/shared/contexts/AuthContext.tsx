@@ -6,6 +6,7 @@ const TOKEN_KEY = 'docvia-token';
 interface AuthUser {
   id: string;
   email: string;
+  username?: string | null;
 }
 
 interface AuthContextValue {
@@ -35,7 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     authService.getProfile(token).then((result) => {
       if (result.success && result.data) {
-        setUser({ id: result.data.user.id, email: result.data.user.email });
+        const u = result.data.user;
+        setUser({
+          id: u.id,
+          email: u.email,
+          username: u.username ?? (u.email ? u.email.split('@')[0] : null),
+        });
       } else {
         localStorage.removeItem(TOKEN_KEY);
         setToken(null);
@@ -49,7 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (result.success && result.data) {
       localStorage.setItem(TOKEN_KEY, result.data.token);
       setToken(result.data.token);
-      setUser({ id: result.data.user.id, email: result.data.user.email });
+      const u = result.data.user;
+      setUser({
+        id: u.id,
+        email: u.email,
+        username: u.username ?? (u.email ? u.email.split('@')[0] : null),
+      });
       return { success: true };
     }
     return { success: false, error: result.error ?? 'Login failed.' };
@@ -73,7 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (result.success && result.data) {
       localStorage.setItem(TOKEN_KEY, result.data.token);
       setToken(result.data.token);
-      setUser({ id: result.data.user.id, email: result.data.user.email });
+      const u = result.data.user;
+      setUser({
+        id: u.id,
+        email: u.email,
+        username:
+          u.username ??
+          (u.email ? u.email.split('@')[0] : null),
+      });
       return { success: true };
     }
     return { success: false, error: result.error ?? 'OAuth verification failed.' };

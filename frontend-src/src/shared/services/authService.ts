@@ -5,6 +5,7 @@ import { supabase } from '../utils/supabaseClient';
 export interface AuthUser {
   id: string;
   email: string;
+  username?: string | null;
   created_at: string;
   last_sign_in?: string;
 }
