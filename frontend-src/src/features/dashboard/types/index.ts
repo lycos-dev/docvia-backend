@@ -19,4 +19,3 @@ export interface DocumentItem {
 }
 
 export type SortMode = 'recent' | 'oldest' | 'a-z' | 'z-a';
-export type TypeFilter = 'all' | 'book' | 'report' | 'pdf';
