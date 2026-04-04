@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
 import { cn } from '../../../shared/utils/cn';
@@ -29,74 +29,99 @@ function getLast7Days(): Array<{ iso: string; short: string; full: string; isTod
 }
 
 function formatTime(s: number): string {
-  if (s <= 0)   return '—';
-  if (s < 60)   return `${s}s`;
+  if (s <= 0)  return '—';
+  if (s < 60)  return `${s}s`;
   const m = Math.floor(s / 60);
-  if (m < 60)   return `${m}m`;
+  if (m < 60)  return `${m}m`;
   const h = Math.floor(m / 60);
   const rm = m % 60;
   return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
 }
 
 function getMilestoneMessage(streak: number): string {
-  if (streak >= 30) return "Monthly champion! 🏆";
+  if (streak >= 30) return 'Monthly champion! 🏆';
   if (streak >= 14) return "Two weeks unstoppable! 🔥";
-  if (streak >= 7)  return "One week strong! 💪";
+  if (streak >= 7)  return 'One week strong! 💪';
   if (streak >= 3)  return "You're on a roll! 🚀";
-  return "Keep it up!";
+  return 'Keep it up!';
 }
 
-// ─── Day pill component ───────────────────────────────────────────────────────
+// ─── Day pill ─────────────────────────────────────────────────────────────────
 
 interface DayPillProps {
-  day:       { iso: string; short: string; full: string; isToday: boolean };
-  active:    boolean;
-  lessons:   number;
-  seconds:   number;
+  day:     { iso: string; short: string; full: string; isToday: boolean };
+  active:  boolean;
+  lessons: number;
+  seconds: number;
 }
 
 function DayPill({ day, active, lessons, seconds }: DayPillProps) {
   const [hovered, setHovered] = useState(false);
+  const dotRef = useRef<HTMLDivElement>(null);
 
-  // Intensity ring based on time studied (0 = none, 1 = <15m, 2 = <30m, 3 = 30m+)
+  // Snapshot of the dot's position taken exactly at mouse-enter
+  const [dotRect, setDotRect] = useState<{ top: number; centerX: number } | null>(null);
+
+  const CARD_W  = 176; // w-44
+  const GAP     = 8;   // px between card bottom and dot top
+
+  const handleMouseEnter = () => {
+    if (dotRef.current) {
+      const r = dotRef.current.getBoundingClientRect();
+      setDotRect({ top: r.top, centerX: r.left + r.width / 2 });
+    }
+    setHovered(true);
+  };
+
+  // Clamped left so card never exits viewport
+  const cardLeft = dotRect
+    ? Math.min(
+        window.innerWidth - CARD_W - 16,
+        Math.max(16, dotRect.centerX - CARD_W / 2)
+      )
+    : 0;
+
+  // Arrow sits at dot center relative to card
+  const arrowLeft = dotRect ? dotRect.centerX - cardLeft : CARD_W / 2;
+
   const intensity =
-    seconds <= 0       ? 0 :
-    seconds < 15 * 60  ? 1 :
-    seconds < 30 * 60  ? 2 : 3;
+    seconds <= 0      ? 0 :
+    seconds < 15 * 60 ? 1 :
+    seconds < 30 * 60 ? 2 : 3;
 
   const ringColors = [
-    '',                                               // 0 – inactive
-    'ring-2 ring-green-300 dark:ring-green-600',      // 1 – light
-    'ring-2 ring-green-400 dark:ring-green-500',      // 2 – medium
-    'ring-2 ring-green-500 dark:ring-green-400',      // 3 – heavy
+    '',
+    'ring-2 ring-green-300 dark:ring-green-600',
+    'ring-2 ring-green-400 dark:ring-green-500',
+    'ring-2 ring-green-500 dark:ring-green-400',
   ];
 
   return (
     <div
       className="relative flex flex-col items-center gap-1.5"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => { setHovered(false); setDotRect(null); }}
     >
-      {/* Day label */}
+      {/* Label */}
       <span className={cn(
         'text-[10px] font-semibold transition-colors',
-        day.isToday
-          ? 'text-orange-500 dark:text-orange-400'
-          : 'text-gray-400 dark:text-gray-500'
+        day.isToday ? 'text-orange-500 dark:text-orange-400' : 'text-gray-400 dark:text-gray-500'
       )}>
         {day.short}
       </span>
 
       {/* Dot */}
-      <div className={cn(
-        'w-8 h-8 rounded-full transition-all duration-300 flex items-center justify-center',
-        active
-          ? 'bg-green-400 dark:bg-green-500 shadow-lg shadow-green-400/30'
-          : 'bg-gray-200 dark:bg-gray-700',
-        day.isToday && 'ring-2 ring-orange-400 ring-offset-2 dark:ring-offset-gray-800',
-        // intensity ring only when active and not today (today already has orange ring)
-        active && !day.isToday && ringColors[intensity],
-      )}>
+      <div
+        ref={dotRef}
+        className={cn(
+          'w-8 h-8 rounded-full transition-all duration-300 flex items-center justify-center',
+          active
+            ? 'bg-green-400 dark:bg-green-500 shadow-lg shadow-green-400/30'
+            : 'bg-gray-200 dark:bg-gray-700',
+          day.isToday && 'ring-2 ring-orange-400 ring-offset-2 dark:ring-offset-gray-800',
+          active && !day.isToday && ringColors[intensity],
+        )}
+      >
         {active && (
           <span className="text-white text-[10px] font-bold">
             {lessons > 0 ? lessons : '✓'}
@@ -104,23 +129,25 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
         )}
       </div>
 
-      {/* Hover detail card */}
+      {/* Tooltip — fixed so no parent overflow can clip it */}
       <AnimatePresence>
-        {hovered && (
+        {hovered && dotRect && (
           <motion.div
-            initial={{ opacity: 0, y: 6, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0,  scale: 1    }}
-            exit={{    opacity: 0, y: 4,  scale: 0.95 }}
-            transition={{ duration: 0.15 }}
+            initial={{ opacity: 0, y: 4, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{    opacity: 0, y: 2, scale: 0.96 }}
+            transition={{ duration: 0.13 }}
             className={cn(
-              'absolute bottom-[calc(100%+10px)] z-50 w-44',
+              'fixed z-[9999] w-44 pointer-events-none',
               'bg-[#1e293b] dark:bg-[#0f172a] rounded-xl p-3',
-              'shadow-2xl border border-white/10 pointer-events-none',
-              // keep cards inside view — first 3 align left, last 4 align right
+              'shadow-2xl border border-white/10',
             )}
-            style={{ left: '50%', transform: 'translateX(-50%)' }}
+            style={{
+              left: cardLeft,
+              // Place card so its bottom edge is GAP above the dot's top edge
+              bottom: `calc(100vh - ${dotRect.top - GAP}px)`,
+            }}
           >
-            {/* Day name */}
             <p className="text-[11px] font-bold text-white mb-2">{day.full}</p>
 
             {active ? (
@@ -137,11 +164,10 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
                     {formatTime(seconds)}
                   </span>
                 </div>
-                {/* Mini intensity bar */}
                 <div className="mt-2">
                   <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all"
+                      className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-500"
                       style={{ width: `${Math.min(100, (seconds / (30 * 60)) * 100)}%` }}
                     />
                   </div>
@@ -154,10 +180,12 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
               <p className="text-[10px] text-slate-500 italic">No activity</p>
             )}
 
-            {/* Arrow */}
+            {/* Arrow pointing down at the dot */}
             <div
-              className="absolute left-1/2 top-full -translate-x-1/2 w-0 h-0"
+              className="absolute top-full w-0 h-0"
               style={{
+                left: Math.max(8, Math.min(CARD_W - 16, arrowLeft)),
+                transform: 'translateX(-50%)',
                 borderLeft:  '5px solid transparent',
                 borderRight: '5px solid transparent',
                 borderTop:   '5px solid #1e293b',
@@ -176,7 +204,7 @@ export default function StreakCard() {
   const { streak, dailyCompletions, dailyTimeSeconds } = useProgressContext();
   const days = getLast7Days();
 
-  const flameScale    = Math.min(1 + streak.currentStreak * 0.02, 1.5);
+  const flameScale     = Math.min(1 + streak.currentStreak * 0.02, 1.5);
   const isStreakBroken = streak.currentStreak === 0 && streak.longestStreak > 0;
 
   return (
@@ -185,25 +213,23 @@ export default function StreakCard() {
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
-          <span
-            className="text-2xl transition-transform duration-500"
-            style={{ transform: `scale(${flameScale})` }}
-          >
+          <span className="text-2xl transition-transform duration-500" style={{ transform: `scale(${flameScale})` }}>
             🔥
           </span>
         </div>
         <div>
           <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Your Streak</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {getMilestoneMessage(streak.currentStreak)}
-          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{getMilestoneMessage(streak.currentStreak)}</p>
         </div>
       </div>
 
       {/* Streak stats */}
       <div className="space-y-3 mb-5">
         <div className="flex items-center justify-between p-4 bg-orange-50 dark:bg-orange-900/20 rounded-2xl">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Streak</span>
+          <div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Streak</span>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Complete 2 lessons/day to maintain</p>
+          </div>
           <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
             {streak.currentStreak} days
           </span>
@@ -216,15 +242,11 @@ export default function StreakCard() {
         </div>
       </div>
 
-      {/* ── 7-day interactive activity grid ── */}
+      {/* 7-day activity */}
       <div className="mb-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-            This week
-          </p>
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">
-            Hover a day for details
-          </p>
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">This week</p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">Hover a day for details</p>
         </div>
 
         <div className="flex items-end justify-between gap-1 px-1">
@@ -262,20 +284,14 @@ export default function StreakCard() {
           <p className="text-sm font-medium text-amber-700 dark:text-amber-400 text-center mb-2">
             Streak lost — start again today!
           </p>
-          <button className="w-full py-1.5 px-3 rounded-lg bg-amber-400 dark:bg-amber-500 text-white text-sm font-semibold hover:bg-amber-500 dark:hover:bg-amber-400 transition-colors cursor-pointer">
+          <button className="w-full py-1.5 px-3 rounded-lg bg-amber-400 dark:bg-amber-500 text-white text-sm font-semibold hover:bg-amber-500 transition-colors cursor-pointer">
             Restart Streak
           </button>
         </div>
       ) : (
-        <div className={cn(
-          'p-4 rounded-2xl',
-          streak.todayCompleted ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-700/50'
-        )}>
-          <p className={cn(
-            'text-sm font-medium text-center',
-            streak.todayCompleted ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'
-          )}>
-            {streak.todayCompleted ? '✅ Today completed!' : "⏳ Complete today's reading"}
+        <div className={cn('p-4 rounded-2xl', streak.todayCompleted ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-700/50')}>
+          <p className={cn('text-sm font-medium text-center', streak.todayCompleted ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400')}>
+            {streak.todayCompleted ? '✅ Today completed!' : "⏳ Complete 2 lessons to count today"}
           </p>
         </div>
       )}

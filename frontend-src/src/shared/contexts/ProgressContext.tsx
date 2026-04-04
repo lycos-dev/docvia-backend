@@ -76,7 +76,7 @@ function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    result.push((dailyCompletions[localDateISO(d)] ?? 0) > 0);
+    result.push((dailyCompletions[localDateISO(d)] ?? 0) >= 2);
   }
   return result;
 }
@@ -95,14 +95,14 @@ function computeStreak(
   prevStreak: StreakData
 ): StreakData {
   const today = todayISO();
-  const todayCompleted = (dailyCompletions[today] ?? 0) > 0;
+  const todayCompleted = (dailyCompletions[today] ?? 0) >= 2;
   const weekActivity = computeWeekActivity(dailyCompletions);
 
   let currentStreak = 0;
   const d = new Date();
   while (true) {
     const key = localDateISO(d); // local date, not UTC
-    if ((dailyCompletions[key] ?? 0) > 0) {
+    if ((dailyCompletions[key] ?? 0) >= 2) {
       currentStreak++;
       d.setDate(d.getDate() - 1);
     } else {
