@@ -1,47 +1,13 @@
 import { useNavigate } from "react-router-dom";
+import { Moon, Sun } from "lucide-react";
 import { motion } from "framer-motion";
+import { useTheme } from "../../../shared/contexts/ThemeContext";
 import { useProgressContext } from "../../../shared/contexts/ProgressContext";
 import { useDocuments } from "../../../shared/contexts/DocumentsContext";
 import { cn } from "../../../shared/utils/cn";
 import ProgressStats from "../components/ProgressStats";
 import LessonProgressChart from "../components/LessonProgressChart";
 import type { DocumentProgress } from "../../../shared/contexts/ProgressContext";
-
-// ────────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────────
-
-/**
- * Mirror of pdfService.toDisplayName — must stay in sync.
- * Strips the backend "timestamp_randomhex_" prefix, replaces underscores
- * with spaces, and removes the .pdf extension.
- */
-function toDisplayName(filename: string): string {
-  return filename
-    .replace(/^\d+_[a-z0-9]+_/i, '')
-    .replace(/_/g, ' ')
-    .replace(/\.pdf$/i, '');
-}
-
-/**
- * Resolve a human-readable title for a documentId (raw filename).
- * Priority:
- *   1. Title stored in DocumentsContext (set at upload time)
- *   2. toDisplayName() derived from the raw filename
- */
-function resolveDocTitle(
-  documentId: string,
-  documents: ReturnType<typeof useDocuments>['documents']
-): string {
-  if (!documentId) return 'Untitled Document';
-
-  // 1. Exact filename match → use stored title
-  const match = documents.find((d) => d.filename === documentId);
-  if (match?.title) return match.title;
-
-  // 2. Derive from filename using the same logic as the backend service
-  return toDisplayName(documentId) || documentId;
-}
 
 // ────────────────────────────────────────────────────────────────────
 // Sub-component: individual per-document progress row
@@ -207,15 +173,38 @@ function DocumentProgressList() {
 // ────────────────────────────────────────────────────────────────────
 
 export default function ProgressPage() {
+  const { theme, toggleTheme } = useTheme();
+
   return (
-    <div className="min-h-screen bg-[#F4F4F4] dark:bg-[#0f172a] px-0 py-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[#111827] dark:text-[#F1F5F9]">
-          Progress
-        </h1>
-        <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
-          Track your learning activity and document progress.
-        </p>
+    <div className="flex flex-col">
+      {/* Header with Title and Theme Toggle */}
+      <div className="flex items-end justify-between gap-4 pb-6 mb-6 border-b border-black/5 dark:border-white/5">
+        <div>
+          <h1 className="text-2xl font-bold text-[#111827] dark:text-[#F1F5F9]">
+            Progress
+          </h1>
+          <p className="text-sm text-[#6B7280] dark:text-[#94A3B8] mt-0.5">
+            Track your learning activity and document progress.
+          </p>
+        </div>
+
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors shrink-0"
+        >
+          {theme === 'light' ? (
+            <>
+              <Moon size={18} className="text-gray-700" />
+              <span className="text-sm font-medium text-gray-700">Light Mode</span>
+            </>
+          ) : (
+            <>
+              <Sun size={18} className="text-yellow-400" />
+              <span className="text-sm font-medium text-gray-300">Dark Mode</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Column headers — sits above the grid so all cards start at same top */}

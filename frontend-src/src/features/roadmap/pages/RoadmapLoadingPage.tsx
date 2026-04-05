@@ -7,6 +7,8 @@ interface RoadmapLoadingPageProps {
   onClose: () => void;
   apiResolved: boolean;
   onReady: () => void;
+  isTimeout?: boolean;
+  onRetry?: () => void;
 }
 
 const MESSAGES = [
@@ -21,6 +23,8 @@ export default function RoadmapLoadingPage({
   onClose,
   apiResolved,
   onReady,
+  isTimeout,
+  onRetry,
 }: RoadmapLoadingPageProps) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === 'dark';
@@ -149,18 +153,44 @@ export default function RoadmapLoadingPage({
           </text>
         </svg>
 
-        {/* Cycling message */}
-        <p
-          className="text-xl font-semibold text-center"
-          style={{
-            color: isDark ? '#F1F5F9' : '#111827',
-            opacity: msgVisible ? 1 : 0,
-            transition: 'opacity 0.3s ease',
-            minHeight: '2rem',
-          }}
-        >
-          {MESSAGES[msgIndex]}
-        </p>
+        {/* Cycling message or timeout message */}
+        {isTimeout ? (
+          <div className="flex flex-col items-center gap-4">
+            <p
+              className="text-lg font-semibold text-center"
+              style={{ color: isDark ? '#F1F5F9' : '#111827' }}
+            >
+              This is taking a bit longer…
+            </p>
+            <p
+              className="text-sm text-center max-w-xs"
+              style={{ color: textMuted }}
+            >
+              AI lesson generation can take some time. Try again or simplify your document.
+            </p>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="px-6 py-3 rounded-2xl font-semibold text-white transition hover:opacity-90 cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #6366F1, #4F46E5)' }}
+              >
+                Try Again
+              </button>
+            )}
+          </div>
+        ) : (
+          <p
+            className="text-xl font-semibold text-center"
+            style={{
+              color: isDark ? '#F1F5F9' : '#111827',
+              opacity: msgVisible ? 1 : 0,
+              transition: 'opacity 0.3s ease',
+              minHeight: '2rem',
+            }}
+          >
+            {MESSAGES[msgIndex]}
+          </p>
+        )}
 
         {/* Fake progress bar */}
         <div className="w-64 h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">

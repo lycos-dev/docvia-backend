@@ -48,6 +48,8 @@ interface ProgressContextValue {
   lessonProgress: Record<string, LessonProgress>;
   streak: StreakData;
   markLessonComplete: (documentId: string, lessonId: string, totalLessons: number) => void;
+  /** Unmark a lesson as complete, removing it from completion records */
+  unmarkLessonComplete: (documentId: string, lessonId: string) => void;
   /** Updates current lesson + last access; pass totalLessons when known so % stays accurate */
   setCurrentLesson: (documentId: string, lessonId: string, totalLessons?: number) => void;
   getDocumentProgress: (documentId: string) => DocumentProgress | null;
@@ -63,6 +65,8 @@ interface ProgressContextValue {
   dailyCompletions: Record<string, number>;
   /** Call this after the user dismisses the streak-lost modal so it doesn't reappear */
   acknowledgeStreakLost: () => void;
+  /** Remove all progress (document + lessons) for a deleted document */
+  removeDocumentProgress: (documentId: string) => void;
 }
 
 const ProgressContext = createContext<ProgressContextValue | null>(null);
@@ -268,6 +272,67 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const unmarkLessonComplete = useCallback(
+    (documentId: string, lessonId: string) => {
+      setStore((prev) => {
+        const key = `${documentId}:${lessonId}`;
+        if (!prev.lessonProgress[key]?.isCompleted) return prev;
+
+        // Remove from lessonProgress
+        const newLessonProgress = { ...prev.lessonProgress };
+        delete newLessonProgress[key];
+
+        // Remove from documentProgress completedLessons
+        const existingDoc = prev.documentProgress[documentId];
+        if (!existingDoc) return prev;
+
+        const completedLessons = existingDoc.completedLessons.filter(
+          (id) => id !== lessonId
+        );
+        const percentage =
+          existingDoc.totalLessons > 0
+            ? Math.min(
+                100,
+                Math.round(
+                  (completedLessons.length / existingDoc.totalLessons) * 100
+                )
+              )
+            : 0;
+
+        const docProg: DocumentProgress = {
+          documentId,
+          completedLessons,
+          currentLessonId: existingDoc.currentLessonId,
+          totalLessons: existingDoc.totalLessons,
+          percentage,
+          startedAt: existingDoc.startedAt,
+          lastAccessedAt: new Date().toISOString(),
+          streakDays: existingDoc.streakDays,
+        };
+
+        // Decrement daily completions if it was completed today
+        const today = todayISO();
+        const dailyCompletions = { ...prev.dailyCompletions };
+        if (dailyCompletions[today] > 0) {
+          dailyCompletions[today]--;
+        }
+
+        const streak = computeStreak(dailyCompletions, prev.streak);
+
+        const next: ProgressStore = {
+          documentProgress: { ...prev.documentProgress, [documentId]: docProg },
+          lessonProgress: newLessonProgress,
+          streak,
+          dailyCompletions,
+          dailyTimeSeconds: prev.dailyTimeSeconds,
+        };
+        saveStore(next);
+        return next;
+      });
+    },
+    []
+  );
+
   const setCurrentLesson = useCallback(
     (documentId: string, lessonId: string, totalLessonsHint?: number) => {
       setStore((prev) => {
@@ -350,6 +415,23 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const removeDocumentProgress = useCallback((documentId: string) => {
+    setStore((prev) => {
+      // Remove document-level progress entry only
+      // Preserve lesson completions for historical data
+      const newDocProgress = { ...prev.documentProgress };
+      delete newDocProgress[documentId];
+
+      const next: ProgressStore = {
+        ...prev,
+        documentProgress: newDocProgress,
+        // lessonProgress remains unchanged - preserve completion history
+      };
+      saveStore(next);
+      return next;
+    });
+  }, []);
+
   return (
     <ProgressContext.Provider
       value={{
@@ -357,12 +439,14 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         lessonProgress: store.lessonProgress,
         streak: store.streak,
         markLessonComplete,
+        unmarkLessonComplete,
         setCurrentLesson,
         getDocumentProgress,
         addTimeSpent,
         dailyTimeSeconds: store.dailyTimeSeconds ?? {},
         dailyCompletions: store.dailyCompletions ?? {},
         acknowledgeStreakLost,
+        removeDocumentProgress,
       }}
     >
       {children}

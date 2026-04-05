@@ -2006,7 +2006,7 @@ export default function RoadmapPage() {
 
   const [modules, setModules] = useState<Module[]>([]);
   const [docTitle, setDocTitle] = useState("");
-  const [loadingState, setLoadingState] = useState<"loading" | "ready">("loading");
+  const [loadingState, setLoadingState] = useState<"loading" | "ready" | "timeout">("loading");
   const [apiResolved, setApiResolved] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -2024,38 +2024,55 @@ export default function RoadmapPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: NodeJS.Timeout | null = null;
+    
     const fetchLessons = async () => {
       if (!pdfId) {
         await new Promise<void>((r) => setTimeout(r, 3500));
         if (!cancelled) { setApiResolved(true); setLoadingState("ready"); }
         return;
       }
-      const result = await pdfService.generateLessons(pdfId, user?.id ?? "", token ?? undefined);
-      if (cancelled) return;
-      if (result.success && result.data && result.data.lessons?.length > 0) {
-        setDocTitle(result.data.title);
-        setModules(mapLessonsToModules(result.data.lessons, completedLessonIds, result.data.title, pdfId ? getVisitedLessonIds(pdfId) : new Set<string>()));
-        setErrorMessage(null);
-      } else {
-        await pdfService.deleteLessons(pdfId, user?.id ?? "", token ?? undefined).catch(() => {});
-        const msg = (result as { error?: string; message?: string }).message || (result as { error?: string }).error || "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
-        setErrorMessage(msg);
-        setModules([]);
-      }
-      setApiResolved(true);
-      setLoadingState("ready");
-    };
-    fetchLessons().catch((err: unknown) => {
-      if (!cancelled) {
-        if (pdfId && user?.id) { pdfService.deleteLessons(pdfId, user.id, token ?? undefined).catch(() => {}); }
+      
+      // Set 8-second timeout
+      timeoutId = setTimeout(() => {
+        if (!cancelled) {
+          setLoadingState("timeout");
+          cancelled = true; // Stop processing after timeout
+        }
+      }, 8000);
+      
+      try {
+        const result = await pdfService.generateLessons(pdfId, user?.id ?? "", token ?? undefined);
+        if (cancelled) return;
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        if (result.success && result.data && result.data.lessons?.length > 0) {
+          setDocTitle(result.data.title);
+          setModules(mapLessonsToModules(result.data.lessons, completedLessonIds, result.data.title, pdfId ? getVisitedLessonIds(pdfId) : new Set<string>()));
+          setErrorMessage(null);
+        } else {
+          const msg = (result as { error?: string; message?: string }).message || (result as { error?: string }).error || "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
+          setErrorMessage(msg);
+          setModules([]);
+        }
+        setApiResolved(true);
+        setLoadingState("ready");
+      } catch (err: unknown) {
+        if (cancelled) return;
+        if (timeoutId) clearTimeout(timeoutId);
         const msg = err instanceof Error ? err.message : "An unexpected error occurred while generating lessons.";
         setErrorMessage(msg);
         setModules([]);
         setApiResolved(true);
         setLoadingState("ready");
       }
-    });
-    return () => { cancelled = true; };
+    };
+    
+    fetchLessons();
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [pdfId, user?.id, token, retryKey]);
 
   useEffect(() => {
@@ -2099,8 +2116,19 @@ export default function RoadmapPage() {
 
   useTimeTracker({ documentId: pdfId, lessonId: roadmapTimerLessonId });
 
-  if (loadingState === "loading") {
-    return <RoadmapLoadingPage onClose={() => navigate("/dashboard")} apiResolved={apiResolved} onReady={() => setLoadingState("ready")} />;
+  if (loadingState === "loading" || loadingState === "timeout") {
+    return (
+      <RoadmapLoadingPage
+        onClose={() => navigate("/dashboard")}
+        apiResolved={apiResolved}
+        onReady={() => setLoadingState("ready")}
+        isTimeout={loadingState === "timeout"}
+        onRetry={() => {
+          setLoadingState("loading");
+          setRetryKey((k) => k + 1);
+        }}
+      />
+    );
   }
 
   // Error state
@@ -2264,7 +2292,7 @@ export default function RoadmapPage() {
           >
             {isDark ? <Sun size={15} className="text-yellow-400" /> : <Moon size={15} style={{ color: textMuted }} />}
             <span className="text-[12px] font-medium" style={{ color: textMuted }}>
-              {isDark ? "Dark" : "Light"}
+              {isDark ? "Dark Mode" : "Light Mode"}
             </span>
           </button>
         </header>

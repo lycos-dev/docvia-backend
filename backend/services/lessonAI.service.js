@@ -2,20 +2,11 @@
  * LESSON AI SERVICE — Powered by GROQ (Llama-3.3-70b)
  * FIXED: Now creates highly granular segments.
  * Each lesson/segment = EXACTLY ONE concept/skill (no more multi-concept lessons).
+ * IMPROVED: Uses makeGroqCall() for automatic key rotation on token limits.
  */
 
 const Groq = require('groq-sdk');
-
-let groq = null;
-function getGroq() {
-  if (!groq) {
-    const keys = (process.env.GROQ_API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
-    if (keys.length === 0) throw new Error('No GROQ_API_KEY provided');
-    const key = keys[Math.floor(Math.random() * keys.length)];
-    groq = new Groq({ apiKey: key });
-  }
-  return groq;
-}
+const { makeGroqCall } = require('./groqkeymanager.service');
 
 const CHUNK_SIZE = 10_000;
 const MAX_CHUNKS = 20;
@@ -42,22 +33,24 @@ function chunkText(text, chunkSize = CHUNK_SIZE) {
 }
 
 // ─── DOCUMENT META ────────────────────────────────────────────────────────────
-async function extractDocumentMeta(preview, fileName) {
-  const response = await getGroq().chat.completions.create({
-    model: GROQ_MODEL,
-    max_tokens: 300,
-    temperature: 0.3,
-    messages: [{
-      role: 'user',
-      content: `You are an expert academic document analyst.
+async function extractDocumentMeta(preview, fileName, userId) {
+  const response = await makeGroqCall(userId, key =>
+    new Groq({ apiKey: key }).chat.completions.create({
+      model: GROQ_MODEL,
+      max_tokens: 300,
+      temperature: 0.3,
+      messages: [{
+        role: 'user',
+        content: `You are an expert academic document analyst.
 Return ONLY valid JSON:
 {
   "title": "Clear, descriptive academic title",
   "overview": "2-3 sentence overview of what the document teaches"
 }
 EXCERPT:\n${preview.slice(0, 3500)}`
-    }],
-  });
+      }],
+    })
+  );
 
   let raw = response.choices[0].message.content
     .replace(/```json\n?/g, '')
@@ -75,18 +68,19 @@ EXCERPT:\n${preview.slice(0, 3500)}`
 }
 
 // ─── LESSON GENERATION PER CHUNK (NOW HIGHLY GRANULAR) ───────────────────────
-async function generateLessonsForChunk(chunk, chunkIdx, totalChunks, docTitle = '') {
+async function generateLessonsForChunk(chunk, chunkIdx, totalChunks, docTitle = '', userId = '') {
   const continuityNote = totalChunks > 1
     ? `\nThis is chunk ${chunkIdx + 1} of ${totalChunks}. Maintain continuity with previous chunks but do NOT repeat content.`
     : '';
 
-  const response = await getGroq().chat.completions.create({
-    model: GROQ_MODEL,
-    max_tokens: GROQ_TOKENS,
-    temperature: 0.42,
-    messages: [{
-      role: 'user',
-      content: `You are an expert educator who creates granular, highly specific learning segments. Every explanation must read like a mini-lecture: concrete, exam-ready, and faithful to the source.
+  const response = await makeGroqCall(userId, key =>
+    new Groq({ apiKey: key }).chat.completions.create({
+      model: GROQ_MODEL,
+      max_tokens: GROQ_TOKENS,
+      temperature: 0.42,
+      messages: [{
+        role: 'user',
+        content: `You are an expert educator who creates granular, highly specific learning segments. Every explanation must read like a mini-lecture: concrete, exam-ready, and faithful to the source.
 
 Document: "${docTitle || 'Uploaded Academic PDF'}"
 ${continuityNote}
@@ -131,8 +125,9 @@ Return ONLY valid JSON:
 
 TEXT TO PROCESS:
 ${chunk}`
-    }],
-  });
+      }],
+    })
+  );
 
   let raw = response.choices[0].message.content
     .replace(/```json\n?/g, '')
@@ -166,15 +161,15 @@ function mergeLessons(allRawLessons) {
 }
 
 // ─── MAIN PIPELINE ────────────────────────────────────────────────────────────
-async function generateLessonsFromText(fullText, fileName) {
+async function generateLessonsFromText(fullText, pdfId, userId) {
   if (!fullText || fullText.trim().length < 100) {
     throw new Error('Insufficient text extracted from PDF.');
   }
 
   console.log('[LessonAI] Extracting document meta...');
-  let meta = { title: fileName.replace(/\.pdf$/i, '').replace(/_/g, ' '), overview: '' };
+  let meta = { title: pdfId.replace(/\.pdf$/i, '').replace(/_/g, ' '), overview: '' };
   try {
-    meta = await extractDocumentMeta(fullText, fileName);
+    meta = await extractDocumentMeta(fullText, pdfId, userId);
   } catch (e) {
     console.warn('[LessonAI] Meta extraction failed:', e.message);
   }
@@ -189,7 +184,7 @@ async function generateLessonsFromText(fullText, fileName) {
     const batch = chunks.slice(i, i + CONCURRENCY);
     const results = await Promise.all(
       batch.map((chunk, bIdx) =>
-        generateLessonsForChunk(chunk, i + bIdx, chunks.length, meta.title)
+        generateLessonsForChunk(chunk, i + bIdx, chunks.length, meta.title, userId)
           .catch(err => {
             console.warn(`[LessonAI] Chunk ${i + bIdx} failed:`, err.message);
             return [];
@@ -216,14 +211,15 @@ async function generateLessonsFromText(fullText, fileName) {
 }
 
 // ─── DEEP EXPLAIN — multi-section, segment-grounded tutor content ───────────────
-async function deepExplainLesson({ title, explanation, key_points, documentTitle }) {
-  const response = await getGroq().chat.completions.create({
-    model: GROQ_MODEL,
-    max_tokens: 3072,
-    temperature: 0.55,
-    messages: [{
-      role: 'user',
-      content: `You are a friendly expert tutor. Ground EVERYTHING in this lesson segment only — do not invent facts not supported by the text below.
+async function deepExplainLesson({ title, explanation, key_points, documentTitle, userId = '' }) {
+  const response = await makeGroqCall(userId, key =>
+    new Groq({ apiKey: key }).chat.completions.create({
+      model: GROQ_MODEL,
+      max_tokens: 3072,
+      temperature: 0.55,
+      messages: [{
+        role: 'user',
+        content: `You are a friendly expert tutor. Ground EVERYTHING in this lesson segment only — do not invent facts not supported by the text below.
 
 Document: "${documentTitle || 'Uploaded PDF'}"
 Lesson segment title: "${title}"
@@ -246,8 +242,9 @@ Return ONLY valid JSON (no markdown fences). Each string field must be substanti
   "common_misconceptions": ["Misconception vs correction 1.", "Misconception vs correction 2.", "Optional third."],
   "study_tips": ["Practical tip 1.", "Practical tip 2.", "Practical tip 3."]
 }`
-    }],
-  });
+      }],
+    })
+  );
 
   let raw = response.choices[0].message.content
     .replace(/```json\n?/g, '')

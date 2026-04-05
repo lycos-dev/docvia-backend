@@ -292,7 +292,7 @@ async function deepExplainEndpoint(req, res) {
   console.log(`[Lessons] Deep explain: "${title}"`);
 
   try {
-    const result = await deepExplainLesson({ title, explanation, key_points, documentTitle }, userId);
+    const result = await deepExplainLesson({ title, explanation, key_points, documentTitle, userId });
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
     console.error('[Lessons] Deep explain error:', err.message);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
+import { useDocuments } from '../../../shared/contexts/DocumentsContext';
 import { cn } from '../../../shared/utils/cn';
 import { formatStudyDurationSeconds } from '../../../shared/utils/formatStudyDuration';
 
@@ -56,17 +57,17 @@ function StatCard({ icon, label, value, accent, delay, tooltip }: StatCardProps)
               transition={{ duration: 0.15 }}
               className={cn(
                 'absolute left-0 right-0 bottom-[calc(100%+8px)] z-50',
-                'bg-[#1e293b] dark:bg-[#0f172a] text-white rounded-xl px-3 py-2.5',
-                'shadow-xl border border-white/10 pointer-events-none'
+                'bg-white dark:bg-[#1e293b] text-slate-900 dark:text-white rounded-xl px-3 py-2.5',
+                'shadow-xl border border-black/10 dark:border-white/10 pointer-events-none'
               )}
             >
               {tooltip}
               <div
-                className="absolute left-6 top-full w-0 h-0"
+                className="absolute left-6 top-full w-0 h-0 [content:'']"
                 style={{
                   borderLeft: '6px solid transparent',
                   borderRight: '6px solid transparent',
-                  borderTop: '6px solid #1e293b',
+                  borderTop: '6px solid currentColor',
                 }}
               />
             </motion.div>
@@ -79,9 +80,16 @@ function StatCard({ icon, label, value, accent, delay, tooltip }: StatCardProps)
 
 export default function ProgressStats() {
   const { lessonProgress, documentProgress, streak, dailyTimeSeconds } = useProgressContext();
+  const { documents } = useDocuments();
 
   const completedLessonsCount = Object.values(lessonProgress).filter(lp => lp.isCompleted).length;
-  const documentsTracked = Object.keys(documentProgress).length;
+  
+  // Only count documents that still exist (defensive filter)
+  const existingFilenames = new Set(documents.map((d) => d.filename));
+  const documentsTracked = Object.keys(documentProgress).filter(
+    (docId) => existingFilenames.has(docId)
+  ).length;
+  
   const today = todayISO();
   const todaySeconds = dailyTimeSeconds?.[today] ?? 0;
   const currentStreak = streak.currentStreak;
@@ -121,11 +129,11 @@ export default function ProgressStats() {
         delay={0.1}
         tooltip={
           <div className="space-y-1">
-            <p className="text-[12px] font-semibold text-white">Daily study time</p>
-            <p className="text-[11px] text-slate-300 leading-snug">
+            <p className="text-[12px] font-semibold text-slate-900 dark:text-white">Daily study time</p>
+            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
               Time actively spent studying in the Roadmap &amp; Reader today.
             </p>
-            <p className="text-[11px] font-medium text-purple-300 flex items-center gap-1 mt-1.5">
+            <p className="text-[11px] font-medium text-purple-600 dark:text-purple-300 flex items-center gap-1 mt-1.5">
               🔄 {resetLabel} at midnight
             </p>
           </div>

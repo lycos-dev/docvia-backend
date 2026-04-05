@@ -47,11 +47,13 @@ function CompletionModal({
   lessonTitle,
   onNext,
   onStay,
+  isLastLesson,
 }: {
   isDark: boolean;
   lessonTitle: string;
   onNext: () => void;
   onStay: () => void;
+  isLastLesson?: boolean;
 }) {
   return (
     <>
@@ -114,7 +116,7 @@ function CompletionModal({
                 boxShadow: "0 4px 12px rgba(96,148,224,0.35)",
               }}
             >
-              Proceed to Next Lesson →
+              {isLastLesson ? "Back to Roadmap" : "Proceed to Next Lesson"} {!isLastLesson && "→"}
             </button>
             <button
               onClick={onStay}
@@ -142,7 +144,7 @@ export default function ReaderPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { token, user } = useAuth();
-  const { markLessonComplete, setCurrentLesson, lessonProgress } =
+  const { markLessonComplete, unmarkLessonComplete, setCurrentLesson, lessonProgress } =
     useProgressContext();
 
   const isDark = theme === "dark";
@@ -300,37 +302,7 @@ export default function ReaderPage() {
 const handleMarkComplete = () => {
   if (isCompleted) {
     // ── Mark as INCOMPLETE ──
-    // Call markLessonComplete won't un-complete, so we need unmarkLessonComplete.
-    // Since ProgressContext uses localStorage, mutate it directly then reload:
-    const key = `${documentId}:${lessonId}`;
-    const stored = localStorage.getItem("docvia-progress");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        // Remove from lessonProgress
-        if (parsed.lessonProgress?.[key]) {
-          parsed.lessonProgress[key].isCompleted = false;
-          parsed.lessonProgress[key].completedAt = null;
-        }
-        // Remove from documentProgress completedLessons array
-        if (parsed.documentProgress?.[documentId]?.completedLessons) {
-          parsed.documentProgress[documentId].completedLessons =
-            parsed.documentProgress[documentId].completedLessons.filter(
-              (id: string) => id !== lessonId,
-            );
-          // Recalculate percentage
-          const cl = parsed.documentProgress[documentId].completedLessons.length;
-          const tl = parsed.documentProgress[documentId].totalLessons || totalLessons;
-          parsed.documentProgress[documentId].percentage =
-            tl > 0 ? Math.round((cl / tl) * 100) : 0;
-        }
-        localStorage.setItem("docvia-progress", JSON.stringify(parsed));
-        // Force a page reload to re-sync all context state
-        window.location.reload();
-      } catch {
-        window.location.reload();
-      }
-    }
+    unmarkLessonComplete(documentId, lessonId);
     return;
   }
 
@@ -782,9 +754,14 @@ const handleMarkComplete = () => {
         <CompletionModal
           isDark={isDark}
           lessonTitle={lesson?.title ?? "this lesson"}
+          isLastLesson={lessonSet ? lessonIndex >= lessonSet.lessons.length - 1 : false}
           onNext={() => {
             setShowCompletionModal(false);
-            handleNextLesson();
+            if (lessonSet && lessonIndex >= lessonSet.lessons.length - 1) {
+              handleBack();
+            } else {
+              handleNextLesson();
+            }
           }}
           onStay={() => setShowCompletionModal(false)}
         />

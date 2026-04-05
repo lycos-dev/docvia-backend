@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { useProgressContext } from './ProgressContext';
 import * as pdfService from '../services/pdfService';
 import type { DocumentItem } from '../../features/dashboard/types';
 
@@ -40,6 +41,7 @@ const DocumentsContext = createContext<DocumentsContextValue | null>(null);
 
 export function DocumentsProvider({ children }: { children: React.ReactNode }) {
   const { user, token } = useAuth();
+  const { removeDocumentProgress } = useProgressContext();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -143,8 +145,10 @@ export function DocumentsProvider({ children }: { children: React.ReactNode }) {
         persist(next);
         return next;
       });
+      // Clean up associated progress data
+      removeDocumentProgress(filename);
     },
-    [persist]
+    [persist, removeDocumentProgress]
   );
 
   const updateDocument = useCallback(
