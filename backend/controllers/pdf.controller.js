@@ -334,6 +334,11 @@ const getFile = async (req, res) => {
 
 /**
  * Check if a PDF with the same content hash and title already exists for the user
+ * 
+ * Uses storage() (service role + fallback) instead of raw supabase to ensure
+ * that both email/password and Google OAuth users can check duplicates without
+ * RLS permission errors.
+ * 
  * @route POST /api/pdf/check-duplicate
  */
 const checkForDuplicates = async (req, res) => {
@@ -350,10 +355,8 @@ const checkForDuplicates = async (req, res) => {
       });
     }
 
-    // Get all files for this user
-    const { data: files, error } = await supabase
-      .storage
-      .from('academic-pdfs')
+    // Get all files for this user — use storage() for service role support
+    const { data: files, error } = await storage()
       .list(userPrefix(userId), { limit: 1000, offset: 0 });
 
     if (error) {
@@ -365,13 +368,11 @@ const checkForDuplicates = async (req, res) => {
       return res.status(200).json({ success: true, isDuplicate: false, duplicates: [] });
     }
 
-    // Download and check content hash of existing files
+    // Download and check content hash of existing files — use storage() for service role support
     const duplicates = [];
     for (const file of files) {
       const storagePath = `${userPrefix(userId)}/${file.name}`;
-      const { data: fileData, error: dlErr } = await supabase
-        .storage
-        .from('academic-pdfs')
+      const { data: fileData, error: dlErr } = await storage()
         .download(storagePath);
 
       if (dlErr) {
