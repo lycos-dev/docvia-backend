@@ -121,13 +121,13 @@ export default function TextSelectionTooltip({ containerId, onExplain, onFollowU
       <div className="flex gap-2">
         <button
           onClick={handleExplain}
-          className="flex-1 py-1.5 px-2 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          className="flex-1 py-1.5 px-2 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer"
         >
           💡 Explain
         </button>
         <button
           onClick={handleFollowUp}
-          className="flex-1 py-1.5 px-2 text-xs font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+          className="flex-1 py-1.5 px-2 text-xs font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors cursor-pointer"
         >
           💬 Follow-up
         </button>

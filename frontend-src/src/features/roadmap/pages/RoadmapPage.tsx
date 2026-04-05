@@ -70,11 +70,11 @@ interface SegmentStatePalette {
 }
 
 const SEGMENT_NOT_STARTED_PALETTE: SegmentStatePalette = {
-  from: "#2563EB",
-  to: "#3B82F6",
-  glow: "rgba(37,99,235,0.45)",
-  border: "#1D4ED8",
-  textAccent: "#1E40AF",
+  from: "#4F7CDD",
+  to: "#80AAE8",
+  glow: "rgba(79,124,221,0.4)",
+  border: "#3B6ACC",
+  textAccent: "#3B6ACC",
 };
 
 const SEGMENT_IN_PROGRESS_PALETTE: SegmentStatePalette = {
@@ -86,10 +86,10 @@ const SEGMENT_IN_PROGRESS_PALETTE: SegmentStatePalette = {
 };
 
 const SEGMENT_COMPLETED_PALETTE: SegmentStatePalette = {
-  from: "#15803D",
-  to: "#166534",
+  from: "#22C55E",
+  to: "#15803D",
   glow: "rgba(21,128,61,0.45)",
-  border: "#14532D",
+  border: "#16A34A",
   textAccent: "#15803D",
 };
 
@@ -134,10 +134,7 @@ function markLessonSegmentModalSeen(docId: string, lessonId: string): void {
   if (!docId || !lessonId) return;
   const s = readSeenLessonIdsForDoc(docId);
   s.add(String(lessonId));
-  localStorage.setItem(
-    SEEN_SEGMENT_MODAL_KEY(docId),
-    JSON.stringify([...s]),
-  );
+  localStorage.setItem(SEEN_SEGMENT_MODAL_KEY(docId), JSON.stringify([...s]));
 }
 
 function formatLessonOverviewParagraph(overviewRaw: string): string {
@@ -178,8 +175,7 @@ function mapLessonsToModules(
   return lessons.map((lesson, idx) => {
     const lessonIdStr = String(lesson.id);
     const isCompleted = completedSet.has(lessonIdStr);
-    const hasVisitedContent =
-      visitedLessonIds.has(lessonIdStr) || isCompleted;
+    const hasVisitedContent = visitedLessonIds.has(lessonIdStr) || isCompleted;
 
     const firstIncompleteIdx = lessons.findIndex(
       (l) => !completedSet.has(String(l.id)),
@@ -414,7 +410,9 @@ function getPillTitleLayout(
     const tailParts = wrapped.slice(MAX_TITLE_LINES_IN_PILL - 1);
     const tailJoined = tailParts.join(" ");
     const lastLine =
-      tailJoined.length > room ? `${tailJoined.slice(0, room)}${ell}` : tailJoined;
+      tailJoined.length > room
+        ? `${tailJoined.slice(0, room)}${ell}`
+        : tailJoined;
     titleLines = [...head, lastLine];
   } else {
     titleLines = wrapped;
@@ -424,7 +422,7 @@ function getPillTitleLayout(
     MAX_TITLE_LINES_IN_PILL,
     Math.max(1, titleLines.length),
   );
-  const pillH = 22 + nTitleLines * 13 + 20;
+  const pillH = 28 + nTitleLines * 14 + 28;
 
   return { pillW, pillH, titleLines };
 }
@@ -489,13 +487,15 @@ function SegmentOutOfOrderPrompt({
   return (
     <>
       <div
-        className="fixed inset-0 z-[54]"
-        style={{ background: isDark ? "rgba(0,0,0,0.28)" : "rgba(15,23,42,0.12)" }}
+        className="fixed inset-0 z-54"
+        style={{
+          background: isDark ? "rgba(0,0,0,0.28)" : "rgba(15,23,42,0.12)",
+        }}
         aria-hidden
         onClick={onGoBack}
       />
       <div
-        className="fixed left-1/2 bottom-6 z-[55] w-[min(400px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl px-4 py-4 shadow-xl"
+        className="fixed left-1/2 bottom-6 z-55 w-[min(400px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl px-4 py-4 shadow-xl"
         style={{
           background: cardBg,
           border: `1px solid ${borderCol}`,
@@ -516,14 +516,28 @@ function SegmentOutOfOrderPrompt({
         >
           You haven&apos;t completed the previous segment. Continue anyway?
         </p>
-        <p className="text-[12px] leading-relaxed mt-2 mb-0" style={{ color: textSub, fontFamily: "Poppins,sans-serif" }}>
+        <p
+          className="text-[12px] leading-relaxed mt-2 mb-0"
+          style={{ color: textSub, fontFamily: "Poppins,sans-serif" }}
+        >
           You can return to earlier segments anytime.
         </p>
         <div className="flex flex-wrap justify-end gap-2 mt-4">
-          <Button type="button" variant="ghost" size="sm" className="dark:text-slate-200" onClick={onGoBack}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="dark:text-slate-200"
+            onClick={onGoBack}
+          >
             Go Back
           </Button>
-          <Button type="button" variant="primary" size="sm" onClick={onContinue}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={onContinue}
+          >
             Continue
           </Button>
         </div>
@@ -581,15 +595,16 @@ function NumberNode({
 
   const pillBord = palette.border;
 
-  const titleClr = isCompleted || isCurrent
-    ? palette.textAccent
-    : isLocked
-      ? isDark
-        ? "#94A3B8"
-        : "#6B7280"
-      : isDark
-        ? "#F1F5F9"
-        : "#111827";
+  const titleClr =
+    isCompleted || isCurrent
+      ? palette.textAccent
+      : isLocked
+        ? isDark
+          ? "#94A3B8"
+          : "#6B7280"
+        : isDark
+          ? "#F1F5F9"
+          : "#111827";
 
   const CAR_W = 68;
   const CAR_H = 52;
@@ -654,13 +669,47 @@ function NumberNode({
       {/* Current node pulse rings */}
       {isCurrent && (
         <>
-          <circle cx={x} cy={nodeY} r={r + 18} fill={SEGMENT_IN_PROGRESS_PALETTE.from} opacity="0.12">
-            <animate attributeName="r" values={`${r + 8};${r + 22};${r + 8}`} dur="2.4s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.18;0;0.18" dur="2.4s" repeatCount="indefinite" />
+          <circle
+            cx={x}
+            cy={nodeY}
+            r={r + 18}
+            fill={SEGMENT_IN_PROGRESS_PALETTE.from}
+            opacity="0.12"
+          >
+            <animate
+              attributeName="r"
+              values={`${r + 8};${r + 22};${r + 8}`}
+              dur="2.4s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.18;0;0.18"
+              dur="2.4s"
+              repeatCount="indefinite"
+            />
           </circle>
-          <circle cx={x} cy={nodeY} r={r + 9} fill={SEGMENT_IN_PROGRESS_PALETTE.from} opacity="0.18">
-            <animate attributeName="r" values={`${r + 4};${r + 14};${r + 4}`} dur="2.4s" repeatCount="indefinite" begin="0.4s" />
-            <animate attributeName="opacity" values="0.22;0;0.22" dur="2.4s" repeatCount="indefinite" begin="0.4s" />
+          <circle
+            cx={x}
+            cy={nodeY}
+            r={r + 9}
+            fill={SEGMENT_IN_PROGRESS_PALETTE.from}
+            opacity="0.18"
+          >
+            <animate
+              attributeName="r"
+              values={`${r + 4};${r + 14};${r + 4}`}
+              dur="2.4s"
+              repeatCount="indefinite"
+              begin="0.4s"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.22;0;0.22"
+              dur="2.4s"
+              repeatCount="indefinite"
+              begin="0.4s"
+            />
           </circle>
         </>
       )}
@@ -708,26 +757,64 @@ function NumberNode({
         }}
       />
 
-      {/* Inner highlight shine */}
-      <ellipse
-        cx={x - r * 0.22}
-        cy={nodeY - r * 0.28}
-        rx={r * 0.38}
-        ry={r * 0.22}
-        fill="rgba(255,255,255,0.35)"
-        style={{ pointerEvents: "none", opacity: isLocked ? 0.2 : 1 }}
-      />
-
       {/* Node icon/number */}
       {isCompleted ? (
-        <text x={x} y={nodeY + 6} textAnchor="middle" fontSize="18" fill="#fff" fontWeight="900" fontFamily="Poppins,sans-serif" style={{ userSelect: "none", pointerEvents: "none" }}>✓</text>
+        <text
+          x={x}
+          y={nodeY + 6}
+          textAnchor="middle"
+          fontSize="18"
+          fill="#fff"
+          fontWeight="900"
+          fontFamily="Poppins,sans-serif"
+          style={{ userSelect: "none", pointerEvents: "none" }}
+        >
+          ✓
+        </text>
       ) : isLocked ? (
         <g style={{ pointerEvents: "none", userSelect: "none" as const }}>
-          <text x={x} y={nodeY - 5} textAnchor="middle" fontSize="11" fill="#fff" opacity={0.88} style={{ textShadow: "0 1px 2px rgba(0,0,0,0.35)" }} aria-hidden>🔒</text>
-          <text x={x} y={nodeY + 10} textAnchor="middle" fontSize="13" fill="#fff" fontWeight="800" fontFamily="Poppins,sans-serif" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>{segment}</text>
+          <text
+            x={x}
+            y={nodeY - 5}
+            textAnchor="middle"
+            fontSize="11"
+            fill="#fff"
+            opacity={0.88}
+            style={{ textShadow: "0 1px 2px rgba(0,0,0,0.35)" }}
+            aria-hidden
+          >
+            🔒
+          </text>
+          <text
+            x={x}
+            y={nodeY + 10}
+            textAnchor="middle"
+            fontSize="13"
+            fill="#fff"
+            fontWeight="800"
+            fontFamily="Poppins,sans-serif"
+            style={{ textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}
+          >
+            {segment}
+          </text>
         </g>
       ) : (
-        <text x={x} y={nodeY + 6} textAnchor="middle" fontSize="15" fill="#fff" fontWeight="800" fontFamily="Poppins,sans-serif" style={{ userSelect: "none", pointerEvents: "none", textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>{segment}</text>
+        <text
+          x={x}
+          y={nodeY + 6}
+          textAnchor="middle"
+          fontSize="15"
+          fill="#fff"
+          fontWeight="800"
+          fontFamily="Poppins,sans-serif"
+          style={{
+            userSelect: "none",
+            pointerEvents: "none",
+            textShadow: "0 1px 3px rgba(0,0,0,0.4)",
+          }}
+        >
+          {segment}
+        </text>
       )}
 
       {/* Car image (current segment) */}
@@ -793,30 +880,40 @@ function NumberNode({
       {/* Colored left accent bar on pill */}
       <rect
         x={PILL_X}
-        y={PILL_Y + 4}
+        y={PILL_Y + 9}
         width={4}
-        height={PILL_H - 8}
+        height={PILL_H - 18}
         rx="2"
         fill={palette.from}
         opacity={0.92}
       />
 
+      {/* Segment label — subtle, top of pill */}
       <text
-        x={PILL_X + PILL_PAD_X + 2}
-        y={PILL_Y + PILL_H - 20}
-        fontSize="10.5"
-        fontWeight="700"
-        fill={titleClr}
+        x={PILL_X + PILL_PAD_X + 3}
+        y={PILL_Y + 18}
+        fontSize="9"
+        fontWeight="600"
+        fill={palette.from}
+        opacity={0.75}
         fontFamily="'Poppins', system-ui, sans-serif"
-        letterSpacing="0.02em"
-        style={{ userSelect: "none", pointerEvents: "none" }}
+        letterSpacing="0.08em"
+        textDecoration="none"
+        style={{
+          userSelect: "none",
+          pointerEvents: "none",
+          textTransform: "uppercase",
+        }}
       >
-        Segment {segment}
+        SEGMENT {segment}
       </text>
+
+      {/* Status — bottom of pill, colored */}
       <text
-        x={PILL_X + PILL_PAD_X + 2}
-        y={PILL_Y + PILL_H - 6}
+        x={PILL_X + PILL_PAD_X + 3}
+        y={PILL_Y + PILL_H - 18}
         fontSize="9.5"
+        fontWeight="450"
         fill={
           isCompleted || isCurrent
             ? palette.textAccent
@@ -869,22 +966,23 @@ function LessonLabel({
   );
   const palette = moduleStatePalette({ isCompleted, isCurrent, isLocked });
 
-  const titleClr = isCompleted || isCurrent
-    ? palette.textAccent
-    : isLocked
-      ? isDark
-        ? "#94A3B8"
-        : "#6B7280"
-      : isDark
-        ? "#F1F5F9"
-        : "#111827";
+  const titleClr =
+    isCompleted || isCurrent
+      ? palette.textAccent
+      : isLocked
+        ? isDark
+          ? "#94A3B8"
+          : "#6B7281"
+        : isDark
+          ? "#F1F5F9"
+          : "#374151";
 
-  const titleTop = PILL_Y + 16;
+  const titleTop = PILL_Y + 36;
   const clipPad = 2;
   const clipX = PILL_X + PILL_PAD_X;
-  const clipY = PILL_Y + 8;
+  const clipY = PILL_Y + 12;
   const clipW = Math.max(0, PILL_W - 2 * PILL_PAD_X - clipPad);
-  const clipH = Math.max(0, PILL_H - 36);
+  const clipH = Math.max(0, PILL_H - 46);
 
   return (
     <g style={{ pointerEvents: "none" }}>
@@ -897,12 +995,12 @@ function LessonLabel({
         {titleLines.map((line, i) => (
           <text
             key={i}
-            x={PILL_X + PILL_PAD_X + 2}
+            x={PILL_X + PILL_PAD_X + 3}
             y={titleTop + i * 13}
-            fontSize={i === 0 ? 10.5 : 9.5}
-            fontWeight={i === 0 ? 700 : 500}
+            fontSize={i === 0 ? 11.5 : 10}
+            fontWeight={i === 0 ? 800 : 800}
             fill={titleClr}
-            opacity={i === 0 ? 1 : 0.88}
+            opacity={i === 0 ? 1 : 1}
             fontFamily="'Poppins', system-ui, sans-serif"
             letterSpacing="0.01em"
             style={{ userSelect: "none" }}
@@ -966,7 +1064,7 @@ function LessonModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center"
+      className="fixed inset-0 z-60 flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
@@ -994,12 +1092,12 @@ function LessonModal({
             left: 0,
             right: 0,
             height: 4,
-            background: `linear-gradient(90deg, ${palette.from}, ${palette.to})`,
+            background: palette.from, // Solid color instead of linear-gradient
             borderRadius: "28px 28px 0 0",
           }}
         />
 
-        {/* Subtle background glow */}
+        {/* Subtle background glow 
         <div
           style={{
             position: "absolute",
@@ -1011,7 +1109,7 @@ function LessonModal({
             background: `radial-gradient(circle, ${palette.from}22 0%, transparent 70%)`,
             pointerEvents: "none",
           }}
-        />
+        />*/}
 
         {/* Close button */}
         <button
@@ -1035,23 +1133,35 @@ function LessonModal({
             transition: "background 0.2s",
           }}
           onMouseEnter={(e) =>
-            (e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.1)")
+            (e.currentTarget.style.background = isDark
+              ? "rgba(255,255,255,0.14)"
+              : "rgba(0,0,0,0.1)")
           }
           onMouseLeave={(e) =>
-            (e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")
+            (e.currentTarget.style.background = isDark
+              ? "rgba(255,255,255,0.08)"
+              : "rgba(0,0,0,0.06)")
           }
         >
           ×
         </button>
 
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 22, paddingTop: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            marginBottom: 22,
+            paddingTop: 8,
+          }}
+        >
           <div
             style={{
               width: 56,
               height: 56,
               borderRadius: 18,
-              background: `linear-gradient(135deg, ${palette.from}22, ${palette.to}11)`,
+              background: isDark ? "rgba(30,41,59,0.8)" : "#F1F5F9",
               border: `1.5px solid ${palette.from}44`,
               display: "flex",
               alignItems: "center",
@@ -1060,18 +1170,49 @@ function LessonModal({
             }}
           >
             {mod.isCompleted ? (
-              <Check size={26} style={{ color: SEGMENT_COMPLETED_PALETTE.from }} strokeWidth={2.5} />
+              <Check
+                size={26}
+                style={{ color: SEGMENT_COMPLETED_PALETTE.from }}
+                strokeWidth={2.5}
+              />
             ) : mod.hasVisitedContent ? (
-              <Loader2 size={26} style={{ color: palette.from, animationDuration: "2.2s" }} className="animate-spin" />
+              <Loader2
+                size={26}
+                style={{ color: palette.from, animationDuration: "2.2s" }}
+                className="animate-spin"
+              />
             ) : (
-              <Circle size={26} style={{ color: palette.from }} strokeWidth={2} />
+              <Circle
+                size={26}
+                style={{ color: palette.from }}
+                strokeWidth={2}
+              />
             )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: 10.5, color: palette.from, margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700, fontFamily: "Poppins,sans-serif" }}>
+            <p
+              style={{
+                fontSize: 10.5,
+                color: palette.from,
+                margin: "0 0 4px",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                fontWeight: 700,
+                fontFamily: "Poppins,sans-serif",
+              }}
+            >
               Segment {mod.segment}
             </p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: textPri, margin: 0, lineHeight: 1.35, fontFamily: "Poppins,sans-serif" }}>
+            <p
+              style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: textPri,
+                margin: 0,
+                lineHeight: 1.35,
+                fontFamily: "Poppins,sans-serif",
+              }}
+            >
               {mod.title}
             </p>
           </div>
@@ -1083,16 +1224,37 @@ function LessonModal({
             borderRadius: 16,
             padding: "16px 18px",
             marginBottom: 18,
-            background: isDark
-              ? `linear-gradient(145deg, ${palette.from}18 0%, rgba(15,24,42,0.95) 60%)`
-              : `linear-gradient(145deg, ${palette.from}0f 0%, #FFFFFF 65%)`,
+            background: isDark ? "rgba(15,23,42,0.6)" : "#F8FAFC",
             border: `1px solid ${palette.from}44`,
           }}
         >
-          <p style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: palette.from, margin: "0 0 10px", fontFamily: "Poppins,sans-serif" }}>
+          <p
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: palette.from,
+              margin: "0 0 10px",
+              fontFamily: "Poppins,sans-serif",
+            }}
+          >
             Lesson Overview
           </p>
-          <p style={{ fontSize: 13, lineHeight: 1.7, color: isDark ? "#CBD5E1" : "#374151", margin: 0, paddingLeft: 14, borderLeft: `3px solid ${palette.from}66`, fontFamily: "Poppins,sans-serif", fontWeight: 400, textAlign: "justify", textAlignLast: "left" }}>
+          <p
+            style={{
+              fontSize: 13,
+              lineHeight: 1.7,
+              color: isDark ? "#CBD5E1" : "#374151",
+              margin: 0,
+              paddingLeft: 14,
+              borderLeft: `3px solid ${palette.from}66`,
+              fontFamily: "Poppins,sans-serif",
+              fontWeight: 400,
+              textAlign: "justify",
+              textAlignLast: "left",
+            }}
+          >
             {overviewParagraph}
           </p>
         </div>
@@ -1107,9 +1269,7 @@ function LessonModal({
               marginBottom: 14,
               padding: "14px 16px",
               borderRadius: 16,
-              background: isDark
-                ? "linear-gradient(135deg, rgba(148,163,184,0.14) 0%, rgba(15,23,42,0.92) 100%)"
-                : "linear-gradient(135deg, rgba(248,250,252,0.98) 0%, #FFFFFF 100%)",
+              background: isDark ? "rgba(30,41,59,0.7)" : "#F1F5F5",
               border: `1px solid ${isDark ? "rgba(148,163,184,0.35)" : "rgba(203,213,225,0.9)"}`,
               boxShadow: isDark
                 ? "inset 0 1px 0 rgba(255,255,255,0.04)"
@@ -1149,7 +1309,8 @@ function LessonModal({
                   fontWeight: 400,
                 }}
               >
-                The path usually works best in order. You can still open this lesson when you&apos;re ready.
+                The path usually works best in order. You can still open this
+                lesson when you&apos;re ready.
               </p>
             </div>
           </div>
@@ -1164,8 +1325,8 @@ function LessonModal({
               width: "100%",
               marginTop: mod.isLocked ? 0 : 4,
               background: mod.isCompleted
-                ? `linear-gradient(135deg, ${SEGMENT_COMPLETED_PALETTE.to}, ${SEGMENT_COMPLETED_PALETTE.from})`
-                : `linear-gradient(135deg, ${palette.from}, ${palette.to})`,
+                ? SEGMENT_COMPLETED_PALETTE.from
+                : palette.from,
               border: "none",
               borderRadius: 50,
               padding: "15px 24px",
@@ -1190,7 +1351,9 @@ function LessonModal({
             }}
           >
             <span style={{ position: "relative", zIndex: 1 }}>
-              {mod.isLocked && !mod.isCompleted ? "Open this lesson" : primaryCtaLabel}
+              {mod.isLocked && !mod.isCompleted
+                ? "Open this lesson"
+                : primaryCtaLabel}
             </span>
           </button>
         )}
@@ -1215,7 +1378,8 @@ function MobileRoadmap({
 }) {
   const [selected, setSelected] = useState<Module | null>(null);
   const [lockPromptModule, setLockPromptModule] = useState<Module | null>(null);
-  const [lockContinueAcknowledged, setLockContinueAcknowledged] = useState(false);
+  const [lockContinueAcknowledged, setLockContinueAcknowledged] =
+    useState(false);
   const textPri = isDark ? "#F1F5F9" : "#111827";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
 
@@ -1254,12 +1418,25 @@ function MobileRoadmap({
         }}
       >
         {/* Ambient orbs */}
-        <div className="roadmap-motion-ambient pointer-events-none absolute -top-24 -right-16 h-48 w-48 rounded-full blur-[56px] opacity-60"
-          style={{ background: isDark ? "radial-gradient(circle, rgba(99,102,241,0.5) 0%, transparent 70%)" : "radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)", animation: "roadmap-orb-drift 20s ease-in-out infinite" }}
-          aria-hidden />
-        <div className="roadmap-motion-ambient pointer-events-none absolute bottom-32 -left-20 h-44 w-44 rounded-full blur-[52px] opacity-50"
-          style={{ background: "radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)", animation: "roadmap-orb-drift-alt 24s ease-in-out infinite" }}
-          aria-hidden />
+        <div
+          className="roadmap-motion-ambient pointer-events-none absolute -top-24 -right-16 h-48 w-48 rounded-full blur-[56px] opacity-60"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(99,102,241,0.5) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift 20s ease-in-out infinite",
+          }}
+          aria-hidden
+        />
+        <div
+          className="roadmap-motion-ambient pointer-events-none absolute bottom-32 -left-20 h-44 w-44 rounded-full blur-[52px] opacity-50"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift-alt 24s ease-in-out infinite",
+          }}
+          aria-hidden
+        />
 
         <div className="relative z-[1]">
           {modules.map((mod, i) => {
@@ -1278,7 +1455,7 @@ function MobileRoadmap({
                   <button
                     type="button"
                     onClick={() => openSegmentCard(mod)}
-                    className="relative h-12 w-12 rounded-full flex items-center justify-center shrink-0 text-lg transition-all duration-300 hover:scale-110 active:scale-95"
+                    className="relative h-12 w-12 rounded-full flex items-center justify-center shrink-0 text-lg transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer"
                     style={{
                       background: mod.isCompleted
                         ? `linear-gradient(135deg, ${SEGMENT_COMPLETED_PALETTE.from}, ${SEGMENT_COMPLETED_PALETTE.to})`
@@ -1306,9 +1483,14 @@ function MobileRoadmap({
                     {mod.isCompleted ? (
                       "✓"
                     ) : mod.isLocked ? (
-                      <span className="flex flex-col items-center justify-center leading-none gap-0.5" aria-hidden>
+                      <span
+                        className="flex flex-col items-center justify-center leading-none gap-0.5"
+                        aria-hidden
+                      >
                         <span className="text-[10px] opacity-90">🔒</span>
-                        <span className="text-[12px] font-extrabold">{mod.segment}</span>
+                        <span className="text-[12px] font-extrabold">
+                          {mod.segment}
+                        </span>
                       </span>
                     ) : (
                       mod.segment
@@ -1316,11 +1498,48 @@ function MobileRoadmap({
 
                     {/* Car on current */}
                     {mod.isCurrent && (
-                      <span style={{ position: "absolute", top: -30, left: "50%", transform: "translateX(-50%)", width: 38, height: 30, animation: "carBounce 1.5s ease-in-out infinite", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: -30,
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          width: 38,
+                          height: 30,
+                          animation: "carBounce 1.5s ease-in-out infinite",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
                         {isDark && (
-                          <span aria-hidden style={{ position: "absolute", width: 44, height: 32, background: "radial-gradient(circle, rgba(253,224,71,0.3) 0%, transparent 70%)", borderRadius: "50%", pointerEvents: "none" }} />
+                          <span
+                            aria-hidden
+                            style={{
+                              position: "absolute",
+                              width: 44,
+                              height: 32,
+                              background:
+                                "radial-gradient(circle, rgba(253,224,71,0.3) 0%, transparent 70%)",
+                              borderRadius: "50%",
+                              pointerEvents: "none",
+                            }}
+                          />
                         )}
-                        <img src={CAR_IMG} alt="" style={{ width: 38, height: 30, objectFit: "contain", display: "block", position: "relative", filter: isDark ? "drop-shadow(0 0 6px rgba(253,224,71,0.7))" : "drop-shadow(0 2px 4px rgba(0,0,0,0.25))" }} />
+                        <img
+                          src={CAR_IMG}
+                          alt=""
+                          style={{
+                            width: 38,
+                            height: 30,
+                            objectFit: "contain",
+                            display: "block",
+                            position: "relative",
+                            filter: isDark
+                              ? "drop-shadow(0 0 6px rgba(253,224,71,0.7))"
+                              : "drop-shadow(0 2px 4px rgba(0,0,0,0.25))",
+                          }}
+                        />
                       </span>
                     )}
                   </button>
@@ -1332,7 +1551,9 @@ function MobileRoadmap({
                       style={{
                         background: mod.isCompleted
                           ? `linear-gradient(180deg, ${SEGMENT_COMPLETED_PALETTE.from}, ${SEGMENT_COMPLETED_PALETTE.to})`
-                          : isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)",
+                          : isDark
+                            ? "rgba(255,255,255,0.08)"
+                            : "rgba(0,0,0,0.1)",
                         minHeight: 36,
                       }}
                     />
@@ -1344,7 +1565,7 @@ function MobileRoadmap({
                   <button
                     type="button"
                     onClick={() => openSegmentCard(mod)}
-                    className="w-full text-left rounded-2xl px-4 py-3.5 transition-all duration-300 hover:scale-[1.02] active:scale-[0.99] hover:-translate-y-0.5"
+                    className="w-full text-left rounded-2xl px-4 py-3.5 transition-all duration-300 hover:scale-[1.02] active:scale-[0.99] hover:-translate-y-0.5 cursor-pointer"
                     style={{
                       background: mod.isCurrent
                         ? isDark
@@ -1367,22 +1588,70 @@ function MobileRoadmap({
                     }}
                   >
                     {/* Left accent */}
-                    <div style={{ position: "absolute", left: 0, top: 6, bottom: 6, width: 3, borderRadius: "0 3px 3px 0", background: mod.isCompleted ? SEGMENT_COMPLETED_PALETTE.from : mod.isCurrent ? SEGMENT_IN_PROGRESS_PALETTE.from : mod.isLocked ? SEGMENT_LOCKED_PALETTE.from : palette.from }} />
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: 6,
+                        bottom: 6,
+                        width: 3,
+                        borderRadius: "0 3px 3px 0",
+                        background: mod.isCompleted
+                          ? SEGMENT_COMPLETED_PALETTE.from
+                          : mod.isCurrent
+                            ? SEGMENT_IN_PROGRESS_PALETTE.from
+                            : mod.isLocked
+                              ? SEGMENT_LOCKED_PALETTE.from
+                              : palette.from,
+                      }}
+                    />
 
                     <div className="flex items-center gap-2 mb-1 pl-1 min-w-0">
-                      <span className="text-[13px] font-bold truncate min-w-0 flex-1" style={{ color: textPri, fontFamily: "Poppins,sans-serif" }}>
+                      <span
+                        className="text-[13px] font-bold truncate min-w-0 flex-1"
+                        style={{
+                          color: textPri,
+                          fontFamily: "Poppins,sans-serif",
+                        }}
+                      >
                         {mod.title}
                       </span>
                       {mod.isLocked && !mod.isCompleted && (
-                        <span className="shrink-0 text-[11px] opacity-80" aria-hidden>🔒</span>
+                        <span
+                          className="shrink-0 text-[11px] opacity-80"
+                          aria-hidden
+                        >
+                          🔒
+                        </span>
                       )}
-                      {mod.isCurrent && <span title="You are here" style={{ fontSize: 14 }}>🚗</span>}
+                      {mod.isCurrent && (
+                        <span title="You are here" style={{ fontSize: 14 }}>
+                          🚗
+                        </span>
+                      )}
                       {mod.isCompleted && (
-                        <span className="ml-auto text-[10px] font-bold" style={{ color: "#4ADE80" }}>✓ Done</span>
+                        <span
+                          className="ml-auto text-[10px] font-bold"
+                          style={{ color: "#4ADE80" }}
+                        >
+                          ✓ Done
+                        </span>
                       )}
                     </div>
-                    <p className="text-[11px] pl-1" style={{ color: mod.isCurrent ? palette.from : textMuted, fontWeight: mod.isCurrent ? 600 : 400 }}>
-                      {mod.isCompleted ? "Completed" : mod.isCurrent && mod.hasVisitedContent ? "In Progress" : mod.isCurrent ? "Ready to start" : "Not started"}
+                    <p
+                      className="text-[11px] pl-1"
+                      style={{
+                        color: mod.isCurrent ? palette.from : textMuted,
+                        fontWeight: mod.isCurrent ? 600 : 400,
+                      }}
+                    >
+                      {mod.isCompleted
+                        ? "Completed"
+                        : mod.isCurrent && mod.hasVisitedContent
+                          ? "In Progress"
+                          : mod.isCurrent
+                            ? "Ready to start"
+                            : "Not started"}
                     </p>
                   </button>
                 </div>
@@ -1396,7 +1665,9 @@ function MobileRoadmap({
                   className="w-0.5 rounded-full"
                   style={{
                     minHeight: 44,
-                    background: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)",
+                    background: isDark
+                      ? "rgba(255,255,255,0.08)"
+                      : "rgba(0,0,0,0.1)",
                   }}
                 />
               </div>
@@ -1463,19 +1734,34 @@ function MobileRoadmap({
                 : "0 8px 28px rgba(15,23,42,0.15), 0 0 0 1px rgba(99,102,241,0.15)",
             }}
           >
-            <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "linear-gradient(135deg, #6366F1, #4F46E5)", boxShadow: "0 4px 14px rgba(99,102,241,0.5)" }}>
+            <div
+              className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
+              style={{
+                background: "linear-gradient(135deg, #6366F1, #4F46E5)",
+                boxShadow: "0 4px 14px rgba(99,102,241,0.5)",
+              }}
+            >
               <Play size={14} className="text-white" fill="white" />
             </div>
             <div className="text-left min-w-0 flex-1">
-              <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: isDark ? "#94A3B8" : "#64748B" }}>
+              <p
+                className="text-[9px] font-bold uppercase tracking-widest"
+                style={{ color: isDark ? "#94A3B8" : "#64748B" }}
+              >
                 {totalCompleted === 0 ? "Start reading" : "Up next"}
               </p>
-              <p className="text-[12.5px] font-bold truncate" style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}>
+              <p
+                className="text-[12.5px] font-bold truncate"
+                style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}
+              >
                 {nextLesson.title}
               </p>
             </div>
-            <ChevronRight size={15} className="shrink-0" style={{ color: isDark ? "#64748B" : "#94A3B8" }} />
+            <ChevronRight
+              size={15}
+              className="shrink-0"
+              style={{ color: isDark ? "#64748B" : "#94A3B8" }}
+            />
           </button>
         </div>
       )}
@@ -1499,7 +1785,8 @@ function DesktopRoadmap({
 }) {
   const [selected, setSelected] = useState<Module | null>(null);
   const [lockPromptModule, setLockPromptModule] = useState<Module | null>(null);
-  const [lockContinueAcknowledged, setLockContinueAcknowledged] = useState(false);
+  const [lockContinueAcknowledged, setLockContinueAcknowledged] =
+    useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [isRecentering, setIsRecentering] = useState(false);
@@ -1545,7 +1832,13 @@ function DesktopRoadmap({
   const onMD = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
-      panRef.current = { dragging: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y };
+      panRef.current = {
+        dragging: true,
+        sx: e.clientX,
+        sy: e.clientY,
+        px: pan.x,
+        py: pan.y,
+      };
       setGrab(true);
       e.preventDefault();
     },
@@ -1555,12 +1848,21 @@ function DesktopRoadmap({
   useEffect(() => {
     const onMM = (e: MouseEvent) => {
       if (!panRef.current.dragging) return;
-      setPan({ x: panRef.current.px + (e.clientX - panRef.current.sx), y: panRef.current.py + (e.clientY - panRef.current.sy) });
+      setPan({
+        x: panRef.current.px + (e.clientX - panRef.current.sx),
+        y: panRef.current.py + (e.clientY - panRef.current.sy),
+      });
     };
-    const onMU = () => { panRef.current.dragging = false; setGrab(false); };
+    const onMU = () => {
+      panRef.current.dragging = false;
+      setGrab(false);
+    };
     window.addEventListener("mousemove", onMM);
     window.addEventListener("mouseup", onMU);
-    return () => { window.removeEventListener("mousemove", onMM); window.removeEventListener("mouseup", onMU); };
+    return () => {
+      window.removeEventListener("mousemove", onMM);
+      window.removeEventListener("mouseup", onMU);
+    };
   }, []);
 
   useEffect(() => {
@@ -1568,14 +1870,23 @@ function DesktopRoadmap({
     if (!el) return;
     const fn = (e: WheelEvent) => {
       e.preventDefault();
-      setZoom((z) => Math.min(MAX_Z, Math.max(MIN_Z, +(z + (e.deltaY < 0 ? 0.08 : -0.08)).toFixed(2))));
+      setZoom((z) =>
+        Math.min(
+          MAX_Z,
+          Math.max(MIN_Z, +(z + (e.deltaY < 0 ? 0.08 : -0.08)).toFixed(2)),
+        ),
+      );
     };
     el.addEventListener("wheel", fn, { passive: false });
     return () => el.removeEventListener("wheel", fn);
   }, []);
 
   const pins = useMemo(
-    () => buildPins(modules.length).map((p) => ({ x: p.x, y: p.y + SVG_ROAD_Y_PAD })),
+    () =>
+      buildPins(modules.length).map((p) => ({
+        x: p.x,
+        y: p.y + SVG_ROAD_Y_PAD,
+      })),
     [modules.length],
   );
   const cW = svgCanvasWidth(modules.length);
@@ -1615,30 +1926,69 @@ function DesktopRoadmap({
   }, [roadPath, pins, contiguousDoneKey]);
 
   const allLessonsDone = modules.length > 0 && totalCompleted >= modules.length;
-  const curMod = modules.find((m) => m.isCurrent) ?? modules.find((m) => !m.isCompleted && !m.isLocked);
+  const curMod =
+    modules.find((m) => m.isCurrent) ??
+    modules.find((m) => !m.isCompleted && !m.isLocked);
   const nextLesson = curMod?.lessons[0];
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden relative">
       {/* Background */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
-        <div className="absolute inset-0" style={{
-          background: isDark
-            ? "radial-gradient(ellipse 90% 55% at 50% -10%, rgba(99,102,241,0.22) 0%, transparent 55%), radial-gradient(ellipse 70% 50% at 100% 100%, rgba(168,85,247,0.15) 0%, transparent 52%), radial-gradient(ellipse 55% 45% at 0% 90%, rgba(34,197,94,0.1) 0%, transparent 50%)"
-            : "radial-gradient(ellipse 90% 55% at 50% -12%, rgba(99,102,241,0.15) 0%, transparent 52%), radial-gradient(ellipse 70% 48% at 100% 100%, rgba(168,85,247,0.1) 0%, transparent 50%), radial-gradient(ellipse 55% 40% at 0% 88%, rgba(34,197,94,0.07) 0%, transparent 48%)",
-        }} />
-        <div className="roadmap-motion-ambient absolute -top-[20%] -left-[10%] h-[55%] w-[55%] rounded-full blur-[80px]"
-          style={{ background: isDark ? "radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 70%)" : "radial-gradient(circle, rgba(99,102,241,0.28) 0%, transparent 70%)", animation: "roadmap-orb-drift 18s ease-in-out infinite" }} />
-        <div className="roadmap-motion-ambient absolute -bottom-[15%] -right-[8%] h-[50%] w-[48%] rounded-full blur-[72px]"
-          style={{ background: isDark ? "radial-gradient(circle, rgba(168,85,247,0.3) 0%, transparent 70%)" : "radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%)", animation: "roadmap-orb-drift-alt 22s ease-in-out infinite" }} />
-        <div className="roadmap-motion-ambient absolute top-[30%] right-[5%] h-[35%] w-[40%] rounded-full blur-[64px] opacity-60"
-          style={{ background: "radial-gradient(circle, rgba(34,197,94,0.22) 0%, transparent 68%)", animation: "roadmap-orb-drift 26s ease-in-out infinite reverse" }} />
+      <div
+        className="absolute inset-0 pointer-events-none overflow-hidden"
+        aria-hidden
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            background: isDark
+              ? "radial-gradient(ellipse 90% 55% at 50% -10%, rgba(99,102,241,0.22) 0%, transparent 55%), radial-gradient(ellipse 70% 50% at 100% 100%, rgba(168,85,247,0.15) 0%, transparent 52%), radial-gradient(ellipse 55% 45% at 0% 90%, rgba(34,197,94,0.1) 0%, transparent 50%)"
+              : "radial-gradient(ellipse 90% 55% at 50% -12%, rgba(99,102,241,0.15) 0%, transparent 52%), radial-gradient(ellipse 70% 48% at 100% 100%, rgba(168,85,247,0.1) 0%, transparent 50%), radial-gradient(ellipse 55% 40% at 0% 88%, rgba(34,197,94,0.07) 0%, transparent 48%)",
+          }}
+        />
+        <div
+          className="roadmap-motion-ambient absolute -top-[20%] -left-[10%] h-[55%] w-[55%] rounded-full blur-[80px]"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(99,102,241,0.28) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift 18s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="roadmap-motion-ambient absolute -bottom-[15%] -right-[8%] h-[50%] w-[48%] rounded-full blur-[72px]"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(168,85,247,0.3) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift-alt 22s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="roadmap-motion-ambient absolute top-[30%] right-[5%] h-[35%] w-[40%] rounded-full blur-[64px] opacity-60"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(34,197,94,0.22) 0%, transparent 68%)",
+            animation: "roadmap-orb-drift 26s ease-in-out infinite reverse",
+          }}
+        />
         {/* Dot grid */}
-        <div className="absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
-          style={{ backgroundImage: `radial-gradient(${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.035)"} 1px, transparent 1px)`, backgroundSize: "28px 28px" }} />
+        <div
+          className="absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
+          style={{
+            backgroundImage: `radial-gradient(${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.035)"} 1px, transparent 1px)`,
+            backgroundSize: "28px 28px",
+          }}
+        />
         {/* Bottom fade */}
-        <div className="absolute inset-0 opacity-40"
-          style={{ background: isDark ? "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(10,15,26,0.7) 100%)" : "linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(226,232,240,0.8) 100%)" }} />
+        <div
+          className="absolute inset-0 opacity-40"
+          style={{
+            background: isDark
+              ? "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(10,15,26,0.7) 100%)"
+              : "linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(226,232,240,0.8) 100%)",
+          }}
+        />
       </div>
 
       {/* Pannable canvas */}
@@ -1672,7 +2022,10 @@ function DesktopRoadmap({
               <linearGradient id={roadGradId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={isDark ? "#1a2540" : "#2a3650"} />
                 <stop offset="40%" stopColor={isDark ? "#0d1626" : "#1a2540"} />
-                <stop offset="100%" stopColor={isDark ? "#080e1c" : "#111827"} />
+                <stop
+                  offset="100%"
+                  stopColor={isDark ? "#080e1c" : "#111827"}
+                />
               </linearGradient>
 
               {/* Road edge highlight */}
@@ -1688,36 +2041,111 @@ function DesktopRoadmap({
               </linearGradient>
 
               {/* Road shadow filter */}
-              <filter id="roadShadow" x="-5%" y="-20%" width="110%" height="160%">
-                <feDropShadow dx="0" dy="12" stdDeviation="14" floodColor={isDark ? "#00000070" : "#00000040"} />
+              <filter
+                id="roadShadow"
+                x="-5%"
+                y="-20%"
+                width="110%"
+                height="160%"
+              >
+                <feDropShadow
+                  dx="0"
+                  dy="12"
+                  stdDeviation="14"
+                  floodColor={isDark ? "#00000070" : "#00000040"}
+                />
               </filter>
 
               {/* Road surface mesh pattern */}
-              <pattern id={roadMeshPatternId} patternUnits="userSpaceOnUse" width={20} height={20}>
+              <pattern
+                id={roadMeshPatternId}
+                patternUnits="userSpaceOnUse"
+                width={20}
+                height={20}
+              >
                 <rect width={20} height={20} fill="none" />
                 {/* Primary grid */}
-                <path d="M0 0 H20 M0 0 V20 M0 10 H20 M10 0 V20"
-                  stroke={isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.1)"}
-                  strokeWidth={0.4} vectorEffect="non-scaling-stroke" fill="none" />
+                <path
+                  d="M0 0 H20 M0 0 V20 M0 10 H20 M10 0 V20"
+                  stroke={
+                    isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.1)"
+                  }
+                  strokeWidth={0.4}
+                  vectorEffect="non-scaling-stroke"
+                  fill="none"
+                />
                 {/* Diagonal weave */}
-                <path d="M0 0 L20 20 M20 0 L0 20"
-                  stroke={isDark ? "rgba(147,197,253,0.06)" : "rgba(186,230,253,0.08)"}
-                  strokeWidth={0.3} vectorEffect="non-scaling-stroke" fill="none" />
+                <path
+                  d="M0 0 L20 20 M20 0 L0 20"
+                  stroke={
+                    isDark ? "rgba(147,197,253,0.06)" : "rgba(186,230,253,0.08)"
+                  }
+                  strokeWidth={0.3}
+                  vectorEffect="non-scaling-stroke"
+                  fill="none"
+                />
                 {/* Intersection dots */}
-                <circle cx={10} cy={10} r={0.6} fill={isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.11)"} />
-                <circle cx={0} cy={0} r={0.5} fill={isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"} />
-                <circle cx={20} cy={0} r={0.5} fill={isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"} />
-                <circle cx={0} cy={20} r={0.5} fill={isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"} />
+                <circle
+                  cx={10}
+                  cy={10}
+                  r={0.6}
+                  fill={
+                    isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.11)"
+                  }
+                />
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={0.5}
+                  fill={
+                    isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"
+                  }
+                />
+                <circle
+                  cx={20}
+                  cy={0}
+                  r={0.5}
+                  fill={
+                    isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"
+                  }
+                />
+                <circle
+                  cx={0}
+                  cy={20}
+                  r={0.5}
+                  fill={
+                    isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"
+                  }
+                />
               </pattern>
 
               {/* Road mesh mask */}
-              <mask id={roadMeshMaskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={0} y={0} width={cW} height={svgH}>
+              <mask
+                id={roadMeshMaskId}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+                x={0}
+                y={0}
+                width={cW}
+                height={svgH}
+              >
                 <rect x={0} y={0} width={cW} height={svgH} fill="#000" />
-                <path d={roadPath} fill="none" stroke="#fff" strokeWidth={52} strokeLinecap="round" />
+                <path
+                  d={roadPath}
+                  fill="none"
+                  stroke="#fff"
+                  strokeWidth={52}
+                  strokeLinecap="round"
+                />
               </mask>
 
               {/* Curb/edge stripe pattern */}
-              <pattern id={curbPatternId} patternUnits="userSpaceOnUse" width={28} height={8}>
+              <pattern
+                id={curbPatternId}
+                patternUnits="userSpaceOnUse"
+                width={28}
+                height={8}
+              >
                 <rect width={14} height={8} fill="rgba(255,220,0,0.75)" />
                 <rect x={14} width={14} height={8} fill="rgba(30,30,30,0.6)" />
               </pattern>
@@ -1726,14 +2154,38 @@ function DesktopRoadmap({
             {/* Background sparkles */}
             <g style={{ pointerEvents: "none" }} opacity={isDark ? 0.5 : 0.6}>
               {[
-                [0.06, 0.1], [0.18, 0.07], [0.38, 0.14], [0.58, 0.09],
-                [0.78, 0.12], [0.92, 0.2], [0.12, 0.42], [0.48, 0.36],
-                [0.72, 0.44], [0.88, 0.38], [0.3, 0.25], [0.65, 0.18],
+                [0.06, 0.1],
+                [0.18, 0.07],
+                [0.38, 0.14],
+                [0.58, 0.09],
+                [0.78, 0.12],
+                [0.92, 0.2],
+                [0.12, 0.42],
+                [0.48, 0.36],
+                [0.72, 0.44],
+                [0.88, 0.38],
+                [0.3, 0.25],
+                [0.65, 0.18],
               ].map(([fx, fy], i) => (
-                <circle key={`sp-${i}`} cx={fx * cW} cy={fy * svgH} r={isDark ? 2.4 : 2.0}
-                  fill={["#818cf8", "#a78bfa", "#60a5fa", "#34d399"][i % 4]}>
-                  <animate attributeName="opacity" values="0.15;0.9;0.15" dur={`${2.0 + (i % 6) * 0.4}s`} repeatCount="indefinite" />
-                  <animate attributeName="r" values={`${isDark ? 1.5 : 1.2};${isDark ? 2.8 : 2.4};${isDark ? 1.5 : 1.2}`} dur={`${2.0 + (i % 6) * 0.4}s`} repeatCount="indefinite" />
+                <circle
+                  key={`sp-${i}`}
+                  cx={fx * cW}
+                  cy={fy * svgH}
+                  r={isDark ? 2.4 : 2.0}
+                  fill={["#818cf8", "#a78bfa", "#60a5fa", "#34d399"][i % 4]}
+                >
+                  <animate
+                    attributeName="opacity"
+                    values="0.15;0.9;0.15"
+                    dur={`${2.0 + (i % 6) * 0.4}s`}
+                    repeatCount="indefinite"
+                  />
+                  <animate
+                    attributeName="r"
+                    values={`${isDark ? 1.5 : 1.2};${isDark ? 2.8 : 2.4};${isDark ? 1.5 : 1.2}`}
+                    dur={`${2.0 + (i % 6) * 0.4}s`}
+                    repeatCount="indefinite"
+                  />
                 </circle>
               ))}
             </g>
@@ -1741,17 +2193,37 @@ function DesktopRoadmap({
             {/* === ROAD LAYERS (outermost → innermost) === */}
 
             {/* 1. Outer shadow */}
-            <path d={roadPath} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="64"
-              strokeLinecap="round" transform="translate(0,10)" filter="url(#roadShadow)" />
+            <path
+              d={roadPath}
+              fill="none"
+              stroke="rgba(0,0,0,0.5)"
+              strokeWidth="64"
+              strokeLinecap="round"
+              transform="translate(0,10)"
+              filter="url(#roadShadow)"
+            />
 
             {/* 2. Road border/curb outer glow */}
-            <path d={roadPath} fill="none" stroke={isDark ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.18)"}
-              strokeWidth="62" strokeLinecap="round" />
+            <path
+              d={roadPath}
+              fill="none"
+              stroke={
+                isDark ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.18)"
+              }
+              strokeWidth="62"
+              strokeLinecap="round"
+            />
 
             {/* 3. Curb edge stripes (yellow/black) - gives road a real border */}
-            <path d={roadPath} fill="none" stroke={`url(#${curbPatternId})`}
-              strokeWidth="58" strokeLinecap="round" opacity="0.65"
-              style={{ mixBlendMode: "overlay" }} />
+            <path
+              d={roadPath}
+              fill="none"
+              stroke={`url(#${curbPatternId})`}
+              strokeWidth="58"
+              strokeLinecap="round"
+              opacity="0.65"
+              style={{ mixBlendMode: "overlay" }}
+            />
 
             {/* 4. Road base asphalt */}
             <path
@@ -1764,17 +2236,26 @@ function DesktopRoadmap({
             />
 
             {/* 5. Surface texture mesh */}
-            <rect x={0} y={0} width={cW} height={svgH}
+            <rect
+              x={0}
+              y={0}
+              width={cW}
+              height={svgH}
               fill={`url(#${roadMeshPatternId})`}
               mask={`url(#${roadMeshMaskId})`}
               opacity={0.75}
-              style={{ pointerEvents: "none", mixBlendMode: "soft-light" }} />
+              style={{ pointerEvents: "none", mixBlendMode: "soft-light" }}
+            />
 
             {/* 6. Subtle inner shadow for depth */}
-            <path d={roadPath} fill="none"
+            <path
+              d={roadPath}
+              fill="none"
               stroke={isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.35)"}
-              strokeWidth="40" strokeLinecap="round"
-              style={{ mixBlendMode: "multiply" }} />
+              strokeWidth="40"
+              strokeLinecap="round"
+              style={{ mixBlendMode: "multiply" }}
+            />
 
             {/* 7. Completed section overlay (length matches path geometry to each completed node) */}
             {doneOverlayLength > 0 && pathTotalLength > 0 && (
@@ -1790,22 +2271,35 @@ function DesktopRoadmap({
             )}
 
             {/* 8. Road surface sheen / highlight along top edge */}
-            <path d={roadPath} fill="none"
+            <path
+              d={roadPath}
+              fill="none"
               stroke={`url(#${roadEdgeGradId})`}
-              strokeWidth="4" strokeLinecap="round" opacity="0.5" />
+              strokeWidth="4"
+              strokeLinecap="round"
+              opacity="0.5"
+            />
 
             {/* 9. Center dashed lane markings */}
-            <path d={roadPath} fill="none"
+            <path
+              d={roadPath}
+              fill="none"
               stroke="rgba(255,255,255,0.65)"
-              strokeWidth="2.5" strokeLinecap="round"
-              strokeDasharray="24 18" />
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeDasharray="24 18"
+            />
 
             {/* 10. Second lane dash (offset) */}
-            <path d={roadPath} fill="none"
+            <path
+              d={roadPath}
+              fill="none"
               stroke="rgba(255,255,255,0.2)"
-              strokeWidth="1.2" strokeLinecap="round"
+              strokeWidth="1.2"
+              strokeLinecap="round"
               strokeDasharray="24 18"
-              strokeDashoffset="21" />
+              strokeDashoffset="21"
+            />
 
             {/* === NODES === */}
             {modules.map((mod, i) => (
@@ -1943,23 +2437,38 @@ function DesktopRoadmap({
                 ? "linear-gradient(135deg, #1e293b 0%, #0f172a 55%, #1e1b4b 100%)"
                 : "linear-gradient(135deg, #fff 0%, #f1f5f9 100%)",
               boxShadow: isDark
-                ? "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.3), 0 0 40px rgba(99,102,241,0.12)"
-                : "0 8px 28px rgba(15,23,42,0.15), 0 0 0 1px rgba(99,102,241,0.18)",
+                ? "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(79,124,221,0.3), 0 0 40px rgba(79,124,221,0.12)"
+                : "0 8px 28px rgba(15,23,42,0.15), 0 0 0 1px rgba(79,124,221,0.18)",
             }}
           >
-            <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "linear-gradient(135deg, #6366F1, #4F46E5)", boxShadow: "0 4px 16px rgba(99,102,241,0.55)" }}>
+            <div
+              className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
+              style={{
+                background: "linear-gradient(135deg, #4F7CDD, #6094e0)",
+                boxShadow: "0 4px 16px rgba(79,124,221,0.5)",
+              }}
+            >
               <Play size={14} className="text-white" fill="white" />
             </div>
             <div className="text-left min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: isDark ? "#94A3B8" : "#64748B" }}>
-                {totalCompleted === 0 ? "Start reading" : "Up next"}
+              <p
+                className="text-[9px] font-bold uppercase tracking-widest"
+                style={{ color: isDark ? "#94A3B8" : "#64748B" }}
+              >
+                {totalCompleted === 0 ? "Start reading" : "Up next: Learn"}
               </p>
-              <p className="text-[12.5px] font-bold max-w-[220px] truncate" style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}>
+              <p
+                className="text-[12.5px] font-bold max-w-55 truncate"
+                style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}
+              >
                 {nextLesson.title}
               </p>
             </div>
-            <ChevronRight size={14} className="shrink-0" style={{ color: isDark ? "#64748B" : "#94A3B8" }} />
+            <ChevronRight
+              size={14}
+              className="shrink-0"
+              style={{ color: isDark ? "#64748B" : "#94A3B8" }}
+            />
           </button>
         </div>
       )}
@@ -2006,7 +2515,9 @@ export default function RoadmapPage() {
 
   const [modules, setModules] = useState<Module[]>([]);
   const [docTitle, setDocTitle] = useState("");
-  const [loadingState, setLoadingState] = useState<"loading" | "ready" | "timeout">("loading");
+  const [loadingState, setLoadingState] = useState<
+    "loading" | "ready" | "timeout"
+  >("loading");
   const [apiResolved, setApiResolved] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -2015,7 +2526,8 @@ export default function RoadmapPage() {
   useEffect(() => {
     const onVisit = () => setVisitBump((n) => n + 1);
     window.addEventListener("docvia-lesson-content-visited", onVisit);
-    return () => window.removeEventListener("docvia-lesson-content-visited", onVisit);
+    return () =>
+      window.removeEventListener("docvia-lesson-content-visited", onVisit);
   }, []);
 
   const docProgress = pdfId ? getDocumentProgress(pdfId) : null;
@@ -2025,14 +2537,17 @@ export default function RoadmapPage() {
   useEffect(() => {
     let cancelled = false;
     let timeoutId: NodeJS.Timeout | null = null;
-    
+
     const fetchLessons = async () => {
       if (!pdfId) {
         await new Promise<void>((r) => setTimeout(r, 3500));
-        if (!cancelled) { setApiResolved(true); setLoadingState("ready"); }
+        if (!cancelled) {
+          setApiResolved(true);
+          setLoadingState("ready");
+        }
         return;
       }
-      
+
       // Set 8-second timeout
       timeoutId = setTimeout(() => {
         if (!cancelled) {
@@ -2040,18 +2555,32 @@ export default function RoadmapPage() {
           cancelled = true; // Stop processing after timeout
         }
       }, 8000);
-      
+
       try {
-        const result = await pdfService.generateLessons(pdfId, user?.id ?? "", token ?? undefined);
+        const result = await pdfService.generateLessons(
+          pdfId,
+          user?.id ?? "",
+          token ?? undefined,
+        );
         if (cancelled) return;
         if (timeoutId) clearTimeout(timeoutId);
-        
+
         if (result.success && result.data && result.data.lessons?.length > 0) {
           setDocTitle(result.data.title);
-          setModules(mapLessonsToModules(result.data.lessons, completedLessonIds, result.data.title, pdfId ? getVisitedLessonIds(pdfId) : new Set<string>()));
+          setModules(
+            mapLessonsToModules(
+              result.data.lessons,
+              completedLessonIds,
+              result.data.title,
+              pdfId ? getVisitedLessonIds(pdfId) : new Set<string>(),
+            ),
+          );
           setErrorMessage(null);
         } else {
-          const msg = (result as { error?: string; message?: string }).message || (result as { error?: string }).error || "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
+          const msg =
+            (result as { error?: string; message?: string }).message ||
+            (result as { error?: string }).error ||
+            "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
           setErrorMessage(msg);
           setModules([]);
         }
@@ -2060,14 +2589,17 @@ export default function RoadmapPage() {
       } catch (err: unknown) {
         if (cancelled) return;
         if (timeoutId) clearTimeout(timeoutId);
-        const msg = err instanceof Error ? err.message : "An unexpected error occurred while generating lessons.";
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "An unexpected error occurred while generating lessons.";
         setErrorMessage(msg);
         setModules([]);
         setApiResolved(true);
         setLoadingState("ready");
       }
     };
-    
+
     fetchLessons();
     return () => {
       cancelled = true;
@@ -2085,11 +2617,17 @@ export default function RoadmapPage() {
         if (!lessonId) return mod;
         const isCompleted = done.has(String(lessonId));
         const hasVisitedContent = visited.has(String(lessonId)) || isCompleted;
-        const firstIncompleteIdx = prev.findIndex((m) => !done.has(String(m.lessons[0]?.id ?? "")));
-        const isCurrent = idx === (firstIncompleteIdx === -1 ? prev.length - 1 : firstIncompleteIdx);
+        const firstIncompleteIdx = prev.findIndex(
+          (m) => !done.has(String(m.lessons[0]?.id ?? "")),
+        );
+        const isCurrent =
+          idx ===
+          (firstIncompleteIdx === -1 ? prev.length - 1 : firstIncompleteIdx);
         const lastCompletedIdx = (() => {
           let last = -1;
-          prev.forEach((m, i) => { if (done.has(String(m.lessons[0]?.id ?? ""))) last = i; });
+          prev.forEach((m, i) => {
+            if (done.has(String(m.lessons[0]?.id ?? ""))) last = i;
+          });
           return last;
         })();
         const isLocked = idx > lastCompletedIdx + 1;
@@ -2101,7 +2639,11 @@ export default function RoadmapPage() {
           isLocked,
           percentage: isCompleted ? 100 : 0,
           lessonsCompleted: isCompleted ? 1 : 0,
-          lessons: mod.lessons.map((l) => ({ ...l, isCompleted: done.has(String(l.id)), isCurrent })),
+          lessons: mod.lessons.map((l) => ({
+            ...l,
+            isCompleted: done.has(String(l.id)),
+            isCurrent,
+          })),
         };
       });
     });
@@ -2137,31 +2679,70 @@ export default function RoadmapPage() {
     const borderColErr = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
     const textMutedErr = isDark ? "#94A3B8" : "#6B7280";
     return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
-        style={{ background: pageBgErr, fontFamily: "Poppins, sans-serif" }}>
-        <button onClick={() => navigate("/dashboard")}
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
+        style={{ background: pageBgErr, fontFamily: "Poppins, sans-serif" }}
+      >
+        <button
+          onClick={() => navigate("/dashboard")}
           className="absolute top-5 left-5 h-9 w-9 rounded-full flex items-center justify-center transition hover:scale-105 cursor-pointer"
-          style={{ background: pageBgErr, border: `1px solid ${borderColErr}` }}>
+          style={{ background: pageBgErr, border: `1px solid ${borderColErr}` }}
+        >
           <X size={15} style={{ color: textMutedErr }} />
         </button>
-        <div className="w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center gap-4"
-          style={{ background: isDark ? "#0d1626" : "#FFFFFF", border: `1px solid ${borderColErr}`, boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.6)" : "0 8px 32px rgba(0,0,0,0.08)" }}>
-          <div className="h-16 w-16 rounded-full flex items-center justify-center text-3xl"
-            style={{ background: isDark ? "rgba(127,29,29,0.3)" : "#FEF2F2" }}>📄</div>
+        <div
+          className="w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center gap-4"
+          style={{
+            background: isDark ? "#0d1626" : "#FFFFFF",
+            border: `1px solid ${borderColErr}`,
+            boxShadow: isDark
+              ? "0 8px 32px rgba(0,0,0,0.6)"
+              : "0 8px 32px rgba(0,0,0,0.08)",
+          }}
+        >
+          <div
+            className="h-16 w-16 rounded-full flex items-center justify-center text-3xl"
+            style={{ background: isDark ? "rgba(127,29,29,0.3)" : "#FEF2F2" }}
+          >
+            📄
+          </div>
           <div>
-            <h2 className="text-lg font-bold mb-1" style={{ color: isDark ? "#F1F5F9" : "#111827" }}>Couldn't Generate Lessons</h2>
-            <p className="text-sm leading-relaxed" style={{ color: textMutedErr }}>{errorMessage}</p>
+            <h2
+              className="text-lg font-bold mb-1"
+              style={{ color: isDark ? "#F1F5F9" : "#111827" }}
+            >
+              Couldn't Generate Lessons
+            </h2>
+            <p
+              className="text-sm leading-relaxed"
+              style={{ color: textMutedErr }}
+            >
+              {errorMessage}
+            </p>
           </div>
           <div className="flex flex-col gap-2 w-full pt-2">
             <button
-              onClick={() => { setErrorMessage(null); setLoadingState("loading"); setApiResolved(false); setRetryKey((k) => k + 1); }}
+              onClick={() => {
+                setErrorMessage(null);
+                setLoadingState("loading");
+                setApiResolved(false);
+                setRetryKey((k) => k + 1);
+              }}
               className="w-full py-3 rounded-2xl text-sm font-semibold text-white transition hover:opacity-90 cursor-pointer"
-              style={{ background: "linear-gradient(135deg, #6366F1, #4F46E5)" }}>
+              style={{
+                background: "linear-gradient(135deg, #6366F1, #4F46E5)",
+              }}
+            >
               Try Again
             </button>
-            <button onClick={() => navigate("/dashboard")}
+            <button
+              onClick={() => navigate("/dashboard")}
               className="w-full py-3 rounded-2xl text-sm font-semibold transition hover:opacity-80 cursor-pointer"
-              style={{ background: isDark ? "#1e293b" : "#F3F4F6", color: textMutedErr }}>
+              style={{
+                background: isDark ? "#1e293b" : "#F3F4F6",
+                color: textMutedErr,
+              }}
+            >
               Back to Dashboard
             </button>
           </div>
@@ -2176,10 +2757,12 @@ export default function RoadmapPage() {
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
 
   const totalLessons = modules.length;
-  const progressPct = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+  const progressPct =
+    totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
   const displayTitle = docTitle || "Loading…";
 
-  const handleStart = (lessonId: string) => navigate(`/reader/${pdfId ?? "unknown"}/${lessonId}`);
+  const handleStart = (lessonId: string) =>
+    navigate(`/reader/${pdfId ?? "unknown"}/${lessonId}`);
 
   return (
     <>
@@ -2227,7 +2810,9 @@ export default function RoadmapPage() {
             onClick={() => navigate("/dashboard")}
             className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition hover:scale-105 cursor-pointer"
             style={{
-              background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+              background: isDark
+                ? "rgba(255,255,255,0.06)"
+                : "rgba(0,0,0,0.05)",
               border: `1px solid ${borderCol}`,
               backdropFilter: "blur(8px)",
             }}
@@ -2236,14 +2821,21 @@ export default function RoadmapPage() {
           </button>
 
           {/* Progress pill */}
-          <div className="absolute left-1/2 -translate-x-1/2" style={{ width: "min(440px, calc(100vw - 7rem))" }}>
+          <div
+            className="absolute left-1/2 -translate-x-1/2"
+            style={{ width: "min(440px, calc(100vw - 7rem))" }}
+          >
             <div
               className="rounded-2xl px-5 py-3"
               style={{
-                background: isDark ? "rgba(8,14,28,0.75)" : "rgba(255,255,255,0.85)",
+                background: isDark
+                  ? "rgba(8,14,28,0.75)"
+                  : "rgba(255,255,255,0.85)",
                 backdropFilter: "blur(16px)",
                 WebkitBackdropFilter: "blur(16px)",
-                border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)",
+                border: isDark
+                  ? "1px solid rgba(255,255,255,0.08)"
+                  : "1px solid rgba(0,0,0,0.06)",
                 boxShadow: isDark
                   ? "0 4px 20px rgba(0,0,0,0.4)"
                   : "0 4px 20px rgba(0,0,0,0.06)",
@@ -2261,22 +2853,39 @@ export default function RoadmapPage() {
                 <span className="text-[11px]" style={{ color: textMuted }}>
                   {totalCompleted}/{totalLessons} done
                 </span>
-                <span className="text-[14px] font-bold" style={{ color: progressPct === 100 ? "#22C55E" : "#6366F1" }}>
+                <span
+                  className="text-[14px] font-bold"
+                  style={{ color: progressPct === 100 ? "#22C55E" : "#4F7CDD" }}
+                >
                   {progressPct}%
                 </span>
               </div>
-              <div className="w-full rounded-full overflow-hidden" style={{ height: 7, background: isDark ? "rgba(255,255,255,0.06)" : "#E2E8F0", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.15)" }}>
+              <div
+                className="w-full rounded-full overflow-hidden"
+                style={{
+                  height: 7,
+                  background: isDark ? "rgba(255,255,255,0.06)" : "#E2E8F0",
+                  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.15)",
+                }}
+              >
                 <div
                   className="roadmap-motion-ambient h-full rounded-full relative overflow-hidden"
                   style={{
                     width: `${progressPct}%`,
-                    background: progressPct === 100
-                      ? "linear-gradient(90deg, #16A34A, #22C55E)"
-                      : "linear-gradient(90deg, #6366F1, #818cf8, #a78bfa, #818cf8)",
+                    background:
+                      progressPct === 100
+                        ? "linear-gradient(90deg, #16A34A, #22C55E)"
+                        : "linear-gradient(90deg, #4F7CDD, #80AAE8, #6094e0, #80AAE8)",
                     backgroundSize: "200% 100%",
                     transition: "width 0.8s ease",
-                    animation: progressPct > 0 && progressPct < 100 ? "roadmap-bar-shimmer 3s linear infinite" : undefined,
-                    boxShadow: progressPct > 0 ? `0 0 8px ${progressPct === 100 ? "rgba(34,197,94,0.6)" : "rgba(99,102,241,0.5)"}` : undefined,
+                    animation:
+                      progressPct > 0 && progressPct < 100
+                        ? "roadmap-bar-shimmer 3s linear infinite"
+                        : undefined,
+                    boxShadow:
+                      progressPct > 0
+                        ? `0 0 8px ${progressPct === 100 ? "rgba(34,197,94,0.6)" : "rgba(79,124,221,0.5)"}`
+                        : undefined,
                   }}
                 />
               </div>
@@ -2288,10 +2897,21 @@ export default function RoadmapPage() {
           <button
             onClick={toggleTheme}
             className="flex items-center gap-2 px-3 py-2 rounded-xl transition hover:bg-opacity-80 shrink-0 cursor-pointer"
-            style={{ background: pageBg, border: `1px solid ${borderCol}`, userSelect: "none" }}
+            style={{
+              background: pageBg,
+              border: `1px solid ${borderCol}`,
+              userSelect: "none",
+            }}
           >
-            {isDark ? <Sun size={15} className="text-yellow-400" /> : <Moon size={15} style={{ color: textMuted }} />}
-            <span className="text-[12px] font-medium" style={{ color: textMuted }}>
+            {isDark ? (
+              <Sun size={15} className="text-yellow-400" />
+            ) : (
+              <Moon size={15} style={{ color: textMuted }} />
+            )}
+            <span
+              className="text-[12px] font-medium"
+              style={{ color: textMuted }}
+            >
               {isDark ? "Dark Mode" : "Light Mode"}
             </span>
           </button>
@@ -2299,13 +2919,25 @@ export default function RoadmapPage() {
 
         {/* Desktop */}
         <div className="hidden md:flex flex-1 overflow-hidden">
-          <DesktopRoadmap isDark={isDark} modules={modules} pdfId={pdfId} onStart={handleStart} totalCompleted={totalCompleted} />
+          <DesktopRoadmap
+            isDark={isDark}
+            modules={modules}
+            pdfId={pdfId}
+            onStart={handleStart}
+            totalCompleted={totalCompleted}
+          />
         </div>
 
         {/* Mobile */}
         <div className="flex md:hidden flex-1 overflow-y-auto">
           <div className="w-full">
-            <MobileRoadmap isDark={isDark} modules={modules} pdfId={pdfId} onStart={handleStart} totalCompleted={totalCompleted} />
+            <MobileRoadmap
+              isDark={isDark}
+              modules={modules}
+              pdfId={pdfId}
+              onStart={handleStart}
+              totalCompleted={totalCompleted}
+            />
           </div>
         </div>
       </div>

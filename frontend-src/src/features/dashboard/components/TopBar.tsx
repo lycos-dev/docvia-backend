@@ -43,7 +43,7 @@ export default function TopBar({ searchTerm, onSearchChange }: TopBarProps) {
           {searchTerm && (
             <button
               onClick={() => onSearchChange('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
               aria-label="Clear search"
             >
               <X size={16} />
@@ -56,7 +56,7 @@ export default function TopBar({ searchTerm, onSearchChange }: TopBarProps) {
       <div className="ml-4">
         <button
           onClick={toggleTheme}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer select-none"
         >
           {theme === 'light' ? (
             <>

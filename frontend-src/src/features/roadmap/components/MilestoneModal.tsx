@@ -72,7 +72,7 @@ export default function MilestoneModal({
           </div>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="h-8 w-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
             aria-label="Close modal"
           >
             <X size={18} />
@@ -136,7 +136,7 @@ export default function MilestoneModal({
           {isCompleted ? (
             <button
               onClick={onStart}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-2xl text-sm font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-2xl text-sm font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors cursor-pointer"
             >
               <RotateCcw size={15} />
               Review Chapter
@@ -144,7 +144,7 @@ export default function MilestoneModal({
           ) : isUnlocked ? (
             <button
               onClick={onStart}
-              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-2xl text-sm font-semibold transition-all"
+              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white rounded-2xl text-sm font-semibold transition-all cursor-pointer"
             >
               Start Chapter →
             </button>
@@ -158,7 +158,7 @@ export default function MilestoneModal({
           )}
           <button
             onClick={onClose}
-            className="px-5 py-3 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-2xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            className="px-5 py-3 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-2xl text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
           >
             Close
           </button>

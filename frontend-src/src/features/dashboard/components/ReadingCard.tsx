@@ -327,13 +327,13 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={handleSaveTitle}
-                      className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                      className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition cursor-pointer"
                     >
                       Save
                     </button>
                     <button
                       onClick={handleCancelEdit}
-                      className="text-xs px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                      className="text-xs px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition cursor-pointer"
                     >
                       Cancel
                     </button>
@@ -375,7 +375,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
             <div
               ref={menuPanelRef}
               style={menuFixedStyle ?? { position: "fixed", visibility: "hidden", top: 0, left: 0 }}
-              className="z-[100] w-48 max-h-[min(70vh,calc(100dvh-16px))] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 py-1 shadow-xl"
+              className="z-100 w-48 max-h-[min(70vh,calc(100dvh-16px))] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 py-1 shadow-xl"
             >
               <button
                 type="button"
@@ -485,13 +485,13 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                 <div className="flex gap-2 mt-2">
                   <button
                     onClick={handleSaveTitle}
-                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition cursor-pointer"
                   >
                     Save
                   </button>
                   <button
                     onClick={handleCancelEdit}
-                    className="text-xs px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                    className="text-xs px-3 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition cursor-pointer"
                   >
                     Cancel
                   </button>
