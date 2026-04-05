@@ -96,7 +96,7 @@ export default function RoadmapLoadingPage({
 
         {/* Skeleton progress bar — absolutely centred */}
         <div className="absolute left-1/2 -translate-x-1/2">
-          <div className="w-64 h-2 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
+          <div className="w-64 h-2 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse select-none" />
         </div>
 
         <div className="flex-1" />

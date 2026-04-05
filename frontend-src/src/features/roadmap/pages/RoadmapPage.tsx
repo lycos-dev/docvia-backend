@@ -2739,7 +2739,7 @@ export default function RoadmapPage() {
               onClick={() => navigate("/dashboard")}
               className="w-full py-3 rounded-2xl text-sm font-semibold transition hover:opacity-80 cursor-pointer"
               style={{
-                background: isDark ? "#1e293b" : "#80AAE8",
+                background: isDark ? "#1e293b" : "#E5E7EB",
                 color: textMutedErr,
               }}
             >
