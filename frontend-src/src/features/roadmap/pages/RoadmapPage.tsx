@@ -2701,20 +2701,20 @@ export default function RoadmapPage() {
           }}
         >
           <div
-            className="h-16 w-16 rounded-full flex items-center justify-center text-3xl"
+            className="h-16 w-16 rounded-full flex items-center justify-center text-3xl select-none"
             style={{ background: isDark ? "rgba(127,29,29,0.3)" : "#FEF2F2" }}
           >
             📄
           </div>
           <div>
             <h2
-              className="text-lg font-bold mb-1"
+              className="text-lg font-bold mb-1 select-none"
               style={{ color: isDark ? "#F1F5F9" : "#111827" }}
             >
               Couldn't Generate Lessons
             </h2>
             <p
-              className="text-sm leading-relaxed"
+              className="text-sm leading-relaxed select-none"
               style={{ color: textMutedErr }}
             >
               {errorMessage}
@@ -2728,7 +2728,7 @@ export default function RoadmapPage() {
                 setApiResolved(false);
                 setRetryKey((k) => k + 1);
               }}
-              className="w-full py-3 rounded-2xl text-sm font-semibold text-white transition hover:opacity-90 cursor-pointer"
+              className="w-full py-3 rounded-2xl text-sm font-semibold text-white transition hover:opacity-90 cursor-pointer select-none"
               style={{
                 background: "#80AAE8",
               }}
@@ -2737,7 +2737,7 @@ export default function RoadmapPage() {
             </button>
             <button
               onClick={() => navigate("/dashboard")}
-              className="w-full py-3 rounded-2xl text-sm font-semibold transition hover:opacity-80 cursor-pointer"
+              className="w-full py-3 rounded-2xl text-sm font-semibold transition hover:opacity-80 cursor-pointer select-none"
               style={{
                 background: isDark ? "#1e293b" : "#E5E7EB",
                 color: textMutedErr,
