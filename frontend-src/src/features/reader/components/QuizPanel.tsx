@@ -502,7 +502,7 @@ export default function QuizPanel({
           {pct >= 75 && (
             <div className="w-32 h-32 flex items-center justify-center">
               <img
-                src="/assets/images/happy-Photoroom.png"
+                src="https://raw.githubusercontent.com/lycos-dev/docvia-backend/refs/heads/waru-branch/frontend-src/public/assets/images/happy-Photoroom.png"
                 alt="Happy Penguin"
                 className="max-h-full w-auto object-contain"
               />
@@ -512,8 +512,8 @@ export default function QuizPanel({
           {pct >= 50 && pct < 75 && (
             <div className="w-32 h-32 flex items-center justify-center">
               <img
-                src="/assets/images/nani-Photoroom.png"
-                alt="Nani Penguin"
+                src="https://github.com/lycos-dev/docvia-backend/blob/waru-branch/frontend-src/public/assets/images/nani-Photoroom.png?raw=true"
+                alt="Shoulders Up Penguin"
                 className="max-h-full w-auto object-contain"
               />
             </div>
@@ -522,7 +522,7 @@ export default function QuizPanel({
           {pct < 50 && (
             <div className="w-32 h-32 flex items-center justify-center">
               <img
-                src="/assets/images/sad-Photoroom.png"
+                src="https://raw.githubusercontent.com/lycos-dev/docvia-backend/refs/heads/waru-branch/frontend-src/public/assets/images/sad-Photoroom.png"
                 alt="Sad Penguin"
                 className="max-h-full w-auto object-contain"
               />
