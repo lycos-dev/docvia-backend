@@ -3,6 +3,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useId,
 } from "react";
@@ -22,14 +23,16 @@ import {
   Check,
   Circle,
   Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { Button } from "../../../shared/components/ui/Button";
 import { getVisitedLessonIds } from "../../../shared/utils/lessonVisitStorage";
 import { useTimeTracker } from "../../../shared/hooks/useTimeTracker";
 
 // ─── Embedded image assets ──────────────────────────────────────────────────
 const CAR_IMG = "/assets/images/mobilecar.png";
-const SCHOOL_IMG = "/assets/images/school.png";
+const SCHOOL_IMG = "/assets/images/schoolimage.png";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Lesson {
@@ -44,11 +47,9 @@ interface Module {
   id: string;
   title: string;
   segment: number;
-  /** One short line: what this segment will cover (from AI explanation, shortened). */
   overview: string;
   isCompleted: boolean;
   isCurrent: boolean;
-  /** True after the user has opened this lesson in the reader at least once. */
   hasVisitedContent: boolean;
   isLocked: boolean;
   percentage: number;
@@ -59,9 +60,60 @@ interface Module {
   pinEmoji: string;
 }
 
-// ─── Lesson → Segment mapping (1 lesson per segment) ────────────────────────
-const PIN_COLORS_LIST = ["#EF4444", "#F97316", "#22C55E", "#3B82F6", "#8B5CF6"];
-const PIN_EMOJIS_LIST = ["🎯", "📦", "⚡", "🔍", "🏆"];
+// ─── Segment colors by progress state (not per-index rainbow) ────────────────
+interface SegmentStatePalette {
+  from: string;
+  to: string;
+  glow: string;
+  border: string;
+  textAccent: string;
+}
+
+const SEGMENT_NOT_STARTED_PALETTE: SegmentStatePalette = {
+  from: "#2563EB",
+  to: "#3B82F6",
+  glow: "rgba(37,99,235,0.45)",
+  border: "#1D4ED8",
+  textAccent: "#1E40AF",
+};
+
+const SEGMENT_IN_PROGRESS_PALETTE: SegmentStatePalette = {
+  from: "#F59E0B",
+  to: "#FB923C",
+  glow: "rgba(234,88,12,0.45)",
+  border: "#D97706",
+  textAccent: "#B45309",
+};
+
+const SEGMENT_COMPLETED_PALETTE: SegmentStatePalette = {
+  from: "#15803D",
+  to: "#166534",
+  glow: "rgba(21,128,61,0.45)",
+  border: "#14532D",
+  textAccent: "#15803D",
+};
+
+/** Ahead on the path but previous segment not finished — neutral, not the blue “next” state. */
+const SEGMENT_LOCKED_PALETTE: SegmentStatePalette = {
+  from: "#9CA3AF",
+  to: "#6B7280",
+  glow: "rgba(107,114,128,0.35)",
+  border: "#4B5563",
+  textAccent: "#6B7280",
+};
+
+function moduleStatePalette(mod: {
+  isCompleted: boolean;
+  isCurrent: boolean;
+  isLocked?: boolean;
+}): SegmentStatePalette {
+  if (mod.isCompleted) return SEGMENT_COMPLETED_PALETTE;
+  if (mod.isCurrent) return SEGMENT_IN_PROGRESS_PALETTE;
+  if (mod.isLocked) return SEGMENT_LOCKED_PALETTE;
+  return SEGMENT_NOT_STARTED_PALETTE;
+}
+
+const PIN_EMOJIS_LIST = ["🎯", "📦", "⚡", "🔍", "🏆", "💡", "🚀", "🌟"];
 
 const SEEN_SEGMENT_MODAL_KEY = (docId: string) =>
   `docvia-segment-modal-seen:${docId}`;
@@ -88,7 +140,6 @@ function markLessonSegmentModalSeen(docId: string, lessonId: string): void {
   );
 }
 
-/** Full overview sentence shown in the modal. */
 function formatLessonOverviewParagraph(overviewRaw: string): string {
   const t = overviewRaw.trim();
   if (!t) {
@@ -102,7 +153,6 @@ function formatLessonOverviewParagraph(overviewRaw: string): string {
   return `This lesson will tackle ${body}.`;
 }
 
-/** One short line: what this segment covers (first sentence, capped for the modal). */
 function shortSegmentOverview(raw: string, maxLen = 160): string {
   const t = raw.trim();
   if (!t) return "";
@@ -131,7 +181,6 @@ function mapLessonsToModules(
     const hasVisitedContent =
       visitedLessonIds.has(lessonIdStr) || isCompleted;
 
-    // First incomplete lesson is "current"
     const firstIncompleteIdx = lessons.findIndex(
       (l) => !completedSet.has(String(l.id)),
     );
@@ -139,7 +188,6 @@ function mapLessonsToModules(
       idx ===
       (firstIncompleteIdx === -1 ? lessons.length - 1 : firstIncompleteIdx);
 
-    // Locked if more than 1 ahead of last completed
     const lastCompletedIdx = (() => {
       let last = -1;
       lessons.forEach((l, i) => {
@@ -175,19 +223,24 @@ function mapLessonsToModules(
           durationMin: 10,
         },
       ],
-      pinColor: PIN_COLORS_LIST[idx % PIN_COLORS_LIST.length],
+      pinColor: isCompleted
+        ? SEGMENT_COMPLETED_PALETTE.from
+        : isCurrent
+          ? SEGMENT_IN_PROGRESS_PALETTE.from
+          : isLocked
+            ? SEGMENT_LOCKED_PALETTE.from
+            : SEGMENT_NOT_STARTED_PALETTE.from,
       pinEmoji: PIN_EMOJIS_LIST[idx % PIN_EMOJIS_LIST.length],
     };
   });
 }
 
-// ─── SVG Road geometry (dynamic — scales with module count) ──────────────────
+// ─── SVG Road geometry ────────────────────────────────────────────────────────
 const C_H = 380;
 const ROAD_Y_CENTER = 160;
 const WAVE_AMP = 90;
 const PIN_SPACING = 260;
 const MARGIN_X = 80;
-/** Push road + pins down so elevated nodes / car / school stay inside the viewBox */
 const SVG_ROAD_Y_PAD = 175;
 
 const Y_WAVE = [
@@ -220,22 +273,146 @@ function buildRoadPath(pins: Array<{ x: number; y: number }>): string {
   return d;
 }
 
-// ─── Node above road + title card to the left; dashed line road → node center ─
-const NODE_R = 26;
-/** Vertical distance from road anchor (x, roadY) up to node center */
-const NODE_ELEVATION_ABOVE_ROAD = 118;
-const CARD_NODE_GAP = 16;
-const PILL_PAD_X = 14;
-const MIN_PILL_W = 120;
-const MAX_PILL_W = 320;
-const CHAR_EST_PX = 5.6;
+/** Arc length along `pathEl` closest to `target` (path must match `roadPath` geometry). */
+function lengthOnPathToNearestPoint(
+  pathEl: SVGPathElement,
+  target: { x: number; y: number },
+  totalLen: number,
+): number {
+  const samples = Math.min(4000, Math.max(120, Math.ceil(totalLen * 4)));
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i <= samples; i++) {
+    const s = (i / samples) * totalLen;
+    const p = pathEl.getPointAtLength(s);
+    const d = (p.x - target.x) ** 2 + (p.y - target.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = s;
+    }
+  }
+  return best;
+}
 
-const CURRENT_GOLD = "#F59E0B";
-const CURRENT_GOLD_DARK = "#D97706";
-const CURRENT_GOLD_DEEP = "#B45309";
+/** Index of last segment completed in order from the start (no gaps). */
+function lastContiguousCompletedIndex(modules: Module[]): number {
+  let last = -1;
+  for (let i = 0; i < modules.length; i++) {
+    if (modules[i].isCompleted) last = i;
+    else break;
+  }
+  return last;
+}
+
+// ─── Node layout constants ────────────────────────────────────────────────────
+const NODE_R = 28;
+const NODE_ELEVATION_ABOVE_ROAD = 118;
+
+/**
+ * Goal graphic **past** the path end: anchor is offset along travel direction beyond the last pin,
+ * then shifted perpendicular so the art sits beside the road (not on the asphalt).
+ */
+function schoolRectOnRoad(
+  pinX: number,
+  roadY: number,
+  approach: { dx: number; dy: number } | undefined,
+  canvasW?: number,
+): { x: number; y: number; w: number; h: number; anchorX: number; anchorY: number } {
+  const dx = approach?.dx ?? 1;
+  const dy = approach?.dy ?? 0;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const w = 310;
+  const h = 242;
+  const pastEnd = 118;
+  const offRoad = 96;
+  const tipX = pinX + ux * pastEnd;
+  const tipY = roadY + uy * pastEnd;
+  let anchorX = tipX - uy * offRoad;
+  let anchorY = tipY + ux * offRoad;
+  const groundBlend = 40;
+  const pad = 6;
+  const half = w / 2;
+  if (canvasW !== undefined) {
+    const minX = pinX + ux * Math.min(pastEnd, 40) - half;
+    anchorX = Math.min(anchorX, canvasW - pad - half);
+    anchorX = Math.max(anchorX, Math.max(pad + half, minX));
+  }
+  return {
+    x: anchorX - w / 2,
+    y: anchorY - h + groundBlend,
+    w,
+    h,
+    anchorX,
+    anchorY,
+  };
+}
+
+function RoadmapSchoolLayer({
+  pins,
+  canvasW,
+  isDark,
+}: {
+  pins: Array<{ x: number; y: number }>;
+  canvasW: number;
+  isDark: boolean;
+}) {
+  if (pins.length === 0) return null;
+  const last = pins.length - 1;
+  const approach =
+    last > 0
+      ? { dx: pins[last].x - pins[last - 1].x, dy: pins[last].y - pins[last - 1].y }
+      : { dx: 1, dy: 0 };
+  const s = schoolRectOnRoad(pins[last].x, pins[last].y, approach, canvasW);
+  return (
+    <g style={{ pointerEvents: "none" }} aria-hidden>
+      <ellipse
+        cx={s.anchorX}
+        cy={s.anchorY + 12}
+        rx={s.w * 0.36}
+        ry={16}
+        fill={isDark ? "rgba(0,0,0,0.5)" : "rgba(15,23,42,0.2)"}
+        opacity={0.7}
+        style={{ filter: "blur(14px)" }}
+      />
+      <image
+        href={SCHOOL_IMG}
+        xlinkHref={SCHOOL_IMG}
+        x={s.x}
+        y={s.y}
+        width={s.w}
+        height={s.h}
+        preserveAspectRatio="xMidYMax meet"
+        style={{
+          filter: isDark
+            ? "drop-shadow(0 14px 36px rgba(0,0,0,0.65)) drop-shadow(0 2px 10px rgba(0,0,0,0.5))"
+            : "drop-shadow(0 16px 36px rgba(15,23,42,0.22)) drop-shadow(0 4px 14px rgba(30,58,95,0.2))",
+        }}
+      />
+    </g>
+  );
+}
+const CARD_NODE_GAP = 18;
+const PILL_PAD_X = 16;
+const MIN_PILL_W = 130;
+const MAX_PILL_W = 330;
+/** Slightly conservative so bold Poppins titles stay inside the pill. */
+const CHAR_EST_PX = 6.2;
+const MAX_TITLE_LINES_IN_PILL = 3;
 
 function wrapTitleForCard(title: string, maxCharsPerLine: number): string[] {
-  const words = title.split(/\s+/).filter(Boolean);
+  const rawWords = title.split(/\s+/).filter(Boolean);
+  const words: string[] = [];
+  for (const w of rawWords) {
+    if (w.length <= maxCharsPerLine) {
+      words.push(w);
+    } else {
+      for (let i = 0; i < w.length; i += maxCharsPerLine) {
+        words.push(w.slice(i, i + maxCharsPerLine));
+      }
+    }
+  }
   const lines: string[] = [];
   let cur = "";
   for (const w of words) {
@@ -251,19 +428,58 @@ function wrapTitleForCard(title: string, maxCharsPerLine: number): string[] {
   return lines.length ? lines : [""];
 }
 
-function computePillWidth(title: string, segment: number): number {
-  const lines = wrapTitleForCard(title, 28);
-  const segLabel = `Segment ${segment}`;
-  let maxLen = segLabel.length;
-  for (const ln of lines) maxLen = Math.max(maxLen, Math.min(ln.length, 36));
-  const w = PILL_PAD_X * 2 + maxLen * CHAR_EST_PX;
-  return Math.min(MAX_PILL_W, Math.max(MIN_PILL_W, Math.round(w)));
+function maxCharsForPillInnerWidth(pillW: number): number {
+  const inner = pillW - 2 * PILL_PAD_X - 6;
+  return Math.max(8, Math.floor(inner / CHAR_EST_PX));
 }
 
-function pillHeightForTitle(title: string): number {
-  const lines = wrapTitleForCard(title, 28);
-  const titleLines = Math.min(2, Math.max(1, lines.length));
-  return 20 + titleLines * 12 + 18;
+function getPillTitleLayout(
+  title: string,
+  segment: number,
+): { pillW: number; pillH: number; titleLines: string[] } {
+  const segLabel = `Segment ${segment}`;
+  let pillW = MAX_PILL_W;
+  let wrapped: string[] = [""];
+
+  for (let iter = 0; iter < 6; iter++) {
+    const mcl = maxCharsForPillInnerWidth(pillW);
+    wrapped = wrapTitleForCard(title.trim() || "Untitled", mcl);
+    let maxLen = segLabel.length;
+    for (const ln of wrapped) {
+      maxLen = Math.max(maxLen, ln.length);
+    }
+    const nextW = Math.min(
+      MAX_PILL_W,
+      Math.max(MIN_PILL_W, Math.round(PILL_PAD_X * 2 + maxLen * CHAR_EST_PX)),
+    );
+    if (nextW === pillW) break;
+    pillW = nextW;
+  }
+
+  const mclFinal = maxCharsForPillInnerWidth(pillW);
+  wrapped = wrapTitleForCard(title.trim() || "Untitled", mclFinal);
+
+  let titleLines: string[];
+  if (wrapped.length > MAX_TITLE_LINES_IN_PILL) {
+    const ell = "…";
+    const room = Math.max(1, mclFinal - ell.length);
+    const head = wrapped.slice(0, MAX_TITLE_LINES_IN_PILL - 1);
+    const tailParts = wrapped.slice(MAX_TITLE_LINES_IN_PILL - 1);
+    const tailJoined = tailParts.join(" ");
+    const lastLine =
+      tailJoined.length > room ? `${tailJoined.slice(0, room)}${ell}` : tailJoined;
+    titleLines = [...head, lastLine];
+  } else {
+    titleLines = wrapped;
+  }
+
+  const nTitleLines = Math.min(
+    MAX_TITLE_LINES_IN_PILL,
+    Math.max(1, titleLines.length),
+  );
+  const pillH = 22 + nTitleLines * 13 + 20;
+
+  return { pillW, pillH, titleLines };
 }
 
 function getCardLayout(
@@ -278,16 +494,98 @@ function getCardLayout(
   PILL_H: number;
   PILL_X: number;
   PILL_Y: number;
+  titleLines: string[];
 } {
   const nodeY = roadY - NODE_ELEVATION_ABOVE_ROAD;
-  const PILL_W = computePillWidth(title, segment);
-  const PILL_H = pillHeightForTitle(title);
-  const PILL_X = x - NODE_R - CARD_NODE_GAP - PILL_W;
-  const PILL_Y = nodeY - PILL_H / 2;
-  return { roadY, nodeY, PILL_W, PILL_H, PILL_X, PILL_Y };
+  const { pillW, pillH, titleLines } = getPillTitleLayout(title, segment);
+  const PILL_X = x - NODE_R - CARD_NODE_GAP - pillW;
+  const PILL_Y = nodeY - pillH / 2;
+  return {
+    roadY,
+    nodeY,
+    PILL_W: pillW,
+    PILL_H: pillH,
+    PILL_X,
+    PILL_Y,
+    titleLines,
+  };
 }
 
-// ─── Number node (elevated) + title card left + road → node dashed connector ───
+// ─── Soft prompt when opening a segment before the previous one is done ─────────
+function SegmentOutOfOrderPrompt({
+  isDark,
+  open,
+  onGoBack,
+  onContinue,
+}: {
+  isDark: boolean;
+  open: boolean;
+  onGoBack: () => void;
+  onContinue: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onGoBack();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onGoBack]);
+
+  if (!open) return null;
+
+  const cardBg = isDark ? "rgba(30,41,59,0.94)" : "rgba(255,255,255,0.96)";
+  const borderCol = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
+  const textPri = isDark ? "#F1F5F9" : "#1F2937";
+  const textSub = isDark ? "#94A3B8" : "#64748B";
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-[54]"
+        style={{ background: isDark ? "rgba(0,0,0,0.28)" : "rgba(15,23,42,0.12)" }}
+        aria-hidden
+        onClick={onGoBack}
+      />
+      <div
+        className="fixed left-1/2 bottom-6 z-[55] w-[min(400px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl px-4 py-4 shadow-xl"
+        style={{
+          background: cardBg,
+          border: `1px solid ${borderCol}`,
+          backdropFilter: "blur(12px)",
+          boxShadow: isDark
+            ? "0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)"
+            : "0 12px 40px rgba(15,23,42,0.12), 0 0 0 1px rgba(0,0,0,0.04)",
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="roadmap-seg-order-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p
+          id="roadmap-seg-order-title"
+          className="text-[14px] font-semibold leading-snug m-0"
+          style={{ color: textPri, fontFamily: "Poppins,sans-serif" }}
+        >
+          You haven&apos;t completed the previous segment. Continue anyway?
+        </p>
+        <p className="text-[12px] leading-relaxed mt-2 mb-0" style={{ color: textSub, fontFamily: "Poppins,sans-serif" }}>
+          You can return to earlier segments anytime.
+        </p>
+        <div className="flex flex-wrap justify-end gap-2 mt-4">
+          <Button type="button" variant="ghost" size="sm" className="dark:text-slate-200" onClick={onGoBack}>
+            Go Back
+          </Button>
+          <Button type="button" variant="primary" size="sm" onClick={onContinue}>
+            Continue
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── NumberNode ───────────────────────────────────────────────────────────────
 function NumberNode({
   x,
   y,
@@ -297,8 +595,6 @@ function NumberNode({
   isCurrent,
   hasVisitedContent,
   isLocked,
-  isFinal,
-  color,
   isDark,
   onClick,
 }: {
@@ -310,13 +606,12 @@ function NumberNode({
   isCurrent: boolean;
   hasVisitedContent: boolean;
   isLocked: boolean;
-  isFinal: boolean;
-  color: string;
   isDark: boolean;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const r = NODE_R;
+  const palette = moduleStatePalette({ isCompleted, isCurrent, isLocked });
   const { roadY, nodeY, PILL_W, PILL_H, PILL_X, PILL_Y } = getCardLayout(
     x,
     y,
@@ -324,215 +619,192 @@ function NumberNode({
     segment,
   );
 
-  const accentCol = isCompleted
-    ? "#22C55E"
-    : isCurrent
-      ? CURRENT_GOLD
-      : isLocked
-        ? "#94A3B8"
-        : color;
+  const nodeGradId = `nodeGrad-${segment}`;
+  const nodeGlowId = `nodeGlowF-${segment}`;
 
-  const bgColor = isCompleted
-    ? "#22C55E"
-    : isCurrent
-      ? CURRENT_GOLD
-      : isLocked
-        ? "#9CA3AF"
-        : isDark
-          ? "#334155"
-          : "#FFFFFF";
-  const txtColor =
-    isCompleted || isCurrent || isLocked
-      ? "#fff"
+  const accentCol = palette.from;
+
+  const pillBg = isLocked
+    ? isDark
+      ? "rgba(30,41,59,0.9)"
+      : "rgba(241,245,249,0.96)"
+    : isDark
+      ? "rgba(15,23,42,0.88)"
+      : "rgba(255,255,255,0.94)";
+
+  const pillBord = palette.border;
+
+  const titleClr = isCompleted || isCurrent
+    ? palette.textAccent
+    : isLocked
+      ? isDark
+        ? "#94A3B8"
+        : "#6B7280"
       : isDark
         ? "#F1F5F9"
-        : "#374151";
-  const stroke = isCompleted
-    ? "#16A34A"
-    : isCurrent
-      ? CURRENT_GOLD_DARK
-      : isLocked
-        ? "#6B7280"
-        : isDark
-          ? "#475569"
-          : "#D1D5DB";
+        : "#111827";
 
-  const pillBg = isDark ? "#1e293b" : "#FFFFFF";
-  const pillBord = isCurrent
-    ? CURRENT_GOLD_DARK
-    : isCompleted
-      ? "#22C55E"
-      : isDark
-        ? "rgba(255,255,255,0.1)"
-        : "rgba(0,0,0,0.1)";
-  const titleClr = isCompleted
-    ? "#16A34A"
-    : isCurrent
-      ? CURRENT_GOLD_DEEP
-      : isLocked
-        ? "#9CA3AF"
-        : isDark
-          ? "#F1F5F9"
-          : "#111827";
-
-  const CAR_W = 64;
-  const CAR_H = 48;
+  const CAR_W = 68;
+  const CAR_H = 52;
   const carX = x - CAR_W / 2;
-  const carY = nodeY - r - CAR_H - 6;
+  const carY = nodeY - r - CAR_H - 8;
 
-  const SCH_W = 64 * 1.5;
-  const SCH_H = 64 * 1.5;
-  const schCx = x;
-  const schCy = nodeY - r - SCH_H / 2 - 4;
-  const schX = x - SCH_W / 2;
-  const schY = nodeY - r - SCH_H - 4;
-
-  const cardLift =
-    hovered && !isLocked
-      ? isDark
-        ? "drop-shadow(0 10px 22px rgba(59,130,246,0.35))"
-        : "drop-shadow(0 8px 20px rgba(37,99,235,0.22))"
-      : "drop-shadow(0 2px 8px rgba(0,0,0,0.12))";
+  const hoverScale = hovered ? "scale(1.06)" : "scale(1)";
 
   return (
     <g
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ cursor: isLocked ? "default" : "pointer" }}
+      style={{ cursor: "pointer" }}
     >
-      {/* Road → node (vertical dashed; ends at node center) */}
+      <defs>
+        <radialGradient id={nodeGradId} cx="35%" cy="30%" r="70%">
+          <stop
+            offset="0%"
+            stopColor={
+              isCompleted
+                ? "#22C55E"
+                : isCurrent
+                  ? "#FDE68A"
+                  : isLocked
+                    ? "#D1D5DB"
+                    : palette.to
+            }
+          />
+          <stop
+            offset="100%"
+            stopColor={
+              isCompleted
+                ? palette.to
+                : isCurrent
+                  ? palette.from
+                  : isLocked
+                    ? "#6B7280"
+                    : palette.from
+            }
+          />
+        </radialGradient>
+        <filter id={nodeGlowId} x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+          <feComposite in="blur" in2="SourceGraphic" operator="over" />
+        </filter>
+      </defs>
+
+      {/* Connector line from road to node */}
       <line
         x1={x}
         y1={roadY}
         x2={x}
-        y2={nodeY}
+        y2={nodeY + r}
         stroke={accentCol}
-        strokeWidth="2"
-        strokeDasharray="4 4"
-        opacity={isLocked ? 0.45 : 0.85}
+        strokeWidth="2.5"
+        strokeDasharray="5 4"
+        opacity={0.8}
         style={{ pointerEvents: "none" }}
       />
 
+      {/* Current node pulse rings */}
       {isCurrent && (
         <>
-          <circle
-            cx={x}
-            cy={nodeY}
-            r={r + 12}
-            fill={CURRENT_GOLD}
-            opacity="0.18"
-          >
-            <animate
-              attributeName="r"
-              values={`${r + 6};${r + 18};${r + 6}`}
-              dur="2.2s"
-              repeatCount="indefinite"
-            />
-            <animate
-              attributeName="opacity"
-              values="0.22;0;0.22"
-              dur="2.2s"
-              repeatCount="indefinite"
-            />
+          <circle cx={x} cy={nodeY} r={r + 18} fill={SEGMENT_IN_PROGRESS_PALETTE.from} opacity="0.12">
+            <animate attributeName="r" values={`${r + 8};${r + 22};${r + 8}`} dur="2.4s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.18;0;0.18" dur="2.4s" repeatCount="indefinite" />
           </circle>
-          <circle
-            cx={x}
-            cy={nodeY}
-            r={r + 6}
-            fill={CURRENT_GOLD}
-            opacity="0.14"
-          >
-            <animate
-              attributeName="r"
-              values={`${r + 3};${r + 12};${r + 3}`}
-              dur="2.2s"
-              repeatCount="indefinite"
-              begin="0.3s"
-            />
-            <animate
-              attributeName="opacity"
-              values="0.14;0;0.14"
-              dur="2.2s"
-              repeatCount="indefinite"
-              begin="0.3s"
-            />
+          <circle cx={x} cy={nodeY} r={r + 9} fill={SEGMENT_IN_PROGRESS_PALETTE.from} opacity="0.18">
+            <animate attributeName="r" values={`${r + 4};${r + 14};${r + 4}`} dur="2.4s" repeatCount="indefinite" begin="0.4s" />
+            <animate attributeName="opacity" values="0.22;0;0.22" dur="2.4s" repeatCount="indefinite" begin="0.4s" />
           </circle>
         </>
       )}
 
-      <circle cx={x + 2} cy={nodeY + 4} r={r} fill="rgba(0,0,0,0.18)" />
+      {/* Non-current hover glow */}
+      {!isCurrent && hovered && (
+        <circle
+          cx={x}
+          cy={nodeY}
+          r={r + 10}
+          fill={palette.from}
+          opacity="0.18"
+          filter={`url(#${nodeGlowId})`}
+        />
+      )}
+
+      {/* Node drop shadow */}
+      <circle cx={x + 3} cy={nodeY + 5} r={r + 1} fill="rgba(0,0,0,0.28)" />
+
+      {/* Node outer ring */}
+      <circle
+        cx={x}
+        cy={nodeY}
+        r={r + 3}
+        fill="none"
+        stroke={accentCol}
+        strokeWidth="2"
+        opacity={0.65}
+        strokeDasharray={isCurrent ? "none" : isCompleted ? "none" : "6 3"}
+      />
+
+      {/* Main node circle */}
       <circle
         cx={x}
         cy={nodeY}
         r={r}
-        fill={bgColor}
-        stroke={stroke}
-        strokeWidth="3"
+        fill={`url(#${nodeGradId})`}
+        style={{
+          filter: hovered
+            ? `drop-shadow(0 0 10px ${isCompleted ? "rgba(21,128,61,0.75)" : isCurrent ? "rgba(234,88,12,0.7)" : isLocked ? "rgba(107,114,128,0.45)" : palette.glow})`
+            : `drop-shadow(0 2px 6px rgba(0,0,0,0.3))`,
+          transform: hoverScale,
+          transformOrigin: `${x}px ${nodeY}px`,
+          transition: "transform 0.2s ease, filter 0.25s ease",
+        }}
       />
 
+      {/* Inner highlight shine */}
+      <ellipse
+        cx={x - r * 0.22}
+        cy={nodeY - r * 0.28}
+        rx={r * 0.38}
+        ry={r * 0.22}
+        fill="rgba(255,255,255,0.35)"
+        style={{ pointerEvents: "none", opacity: isLocked ? 0.2 : 1 }}
+      />
+
+      {/* Node icon/number */}
       {isCompleted ? (
-        <text
-          x={x}
-          y={nodeY + 6}
-          textAnchor="middle"
-          fontSize="17"
-          fill="#fff"
-          fontWeight="800"
-          fontFamily="Poppins,sans-serif"
-          style={{ userSelect: "none" }}
-        >
-          ✓
-        </text>
+        <text x={x} y={nodeY + 6} textAnchor="middle" fontSize="18" fill="#fff" fontWeight="900" fontFamily="Poppins,sans-serif" style={{ userSelect: "none", pointerEvents: "none" }}>✓</text>
       ) : isLocked ? (
-        <text
-          x={x}
-          y={nodeY + 6}
-          textAnchor="middle"
-          fontSize="15"
-          fill="#fff"
-          style={{ userSelect: "none" }}
-        >
-          🔒
-        </text>
+        <g style={{ pointerEvents: "none", userSelect: "none" as const }}>
+          <text x={x} y={nodeY - 5} textAnchor="middle" fontSize="11" fill="#fff" opacity={0.88} style={{ textShadow: "0 1px 2px rgba(0,0,0,0.35)" }} aria-hidden>🔒</text>
+          <text x={x} y={nodeY + 10} textAnchor="middle" fontSize="13" fill="#fff" fontWeight="800" fontFamily="Poppins,sans-serif" style={{ textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>{segment}</text>
+        </g>
       ) : (
-        <text
-          x={x}
-          y={nodeY + 6}
-          textAnchor="middle"
-          fontSize="15"
-          fill={txtColor}
-          fontWeight="800"
-          fontFamily="Poppins,sans-serif"
-          style={{ userSelect: "none" }}
-        >
-          {segment}
-        </text>
+        <text x={x} y={nodeY + 6} textAnchor="middle" fontSize="15" fill="#fff" fontWeight="800" fontFamily="Poppins,sans-serif" style={{ userSelect: "none", pointerEvents: "none", textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>{segment}</text>
       )}
 
+      {/* Car image (current segment) */}
       {isCurrent && (
         <g style={{ pointerEvents: "none" }}>
           <animateTransform
             attributeName="transform"
             type="translate"
-            values="0,0; 0,-6; 0,0"
-            dur="1.4s"
+            values="0,0; 0,-7; 0,0"
+            dur="1.5s"
             repeatCount="indefinite"
             calcMode="spline"
             keySplines="0.4 0 0.6 1; 0.4 0 0.6 1"
           />
-
-          {/* Glow Effect for SVG */}
           {isDark && (
-            <circle
+            <ellipse
               cx={carX + CAR_W / 2}
-              cy={carY + CAR_H / 2}
-              r={20}
-              fill="rgba(253,224,71,0.2)"
-              style={{ filter: "blur(8px)" }}
+              cy={carY + CAR_H + 2}
+              rx={CAR_W * 0.45}
+              ry={6}
+              fill="rgba(253,224,71,0.18)"
+              style={{ filter: "blur(4px)" }}
             />
           )}
-
           <image
             href={CAR_IMG}
             x={carX}
@@ -541,104 +813,86 @@ function NumberNode({
             height={CAR_H}
             preserveAspectRatio="xMidYMid meet"
             style={{
-              // Using drop-shadow filter within SVG for the 'lit' look
               filter: isDark
-                ? "drop-shadow(0 0 4px rgba(253,224,71,0.7))"
-                : "none",
+                ? "drop-shadow(0 0 6px rgba(253,224,71,0.8)) drop-shadow(0 2px 4px rgba(0,0,0,0.5))"
+                : "drop-shadow(0 2px 6px rgba(0,0,0,0.3))",
             }}
           />
         </g>
       )}
 
-      {isFinal && !isCurrent && (
-        <>
-          <circle
-            cx={schCx}
-            cy={schCy}
-            r={SCH_H * 0.55}
-            fill="#f7f5bc"
-            opacity="0.22"
-            filter="url(#goalGlow)"
-          />
-          <circle
-            cx={schCx}
-            cy={schCy}
-            r={SCH_H * 0.42}
-            fill="#e47200"
-            opacity="0.12"
-          />
-          <image
-            href={SCHOOL_IMG}
-            x={schX}
-            y={schY}
-            width={SCH_W}
-            height={SCH_H}
-            preserveAspectRatio="xMidYMid meet"
-            style={{ filter: "drop-shadow(0 4px 40px rgba(37,99,235,0.45))" }}
-          />
-        </>
-      )}
-
+      {/* Info card pill */}
       <rect
         x={PILL_X}
         y={PILL_Y}
         width={PILL_W}
         height={PILL_H}
-        rx="12"
+        rx="14"
         fill={pillBg}
         stroke={pillBord}
-        strokeWidth={hovered && !isLocked ? 2.25 : 1.5}
-        opacity={isLocked ? 0.65 : 1}
+        strokeWidth={hovered ? 2 : 1.5}
+        opacity={1}
         style={{
-          filter: cardLift,
-          transition: "stroke-width 0.2s ease, filter 0.2s ease",
+          filter: hovered
+            ? isDark
+              ? `drop-shadow(0 8px 24px ${palette.glow}) drop-shadow(0 2px 8px rgba(0,0,0,0.4))`
+              : `drop-shadow(0 8px 24px ${palette.glow}) drop-shadow(0 2px 8px rgba(0,0,0,0.15))`
+            : "drop-shadow(0 2px 10px rgba(0,0,0,0.14))",
+          backdropFilter: "blur(12px)",
+          transition: "filter 0.25s ease, stroke-width 0.2s ease",
         }}
       />
 
+      {/* Colored left accent bar on pill */}
+      <rect
+        x={PILL_X}
+        y={PILL_Y + 4}
+        width={4}
+        height={PILL_H - 8}
+        rx="2"
+        fill={palette.from}
+        opacity={0.92}
+      />
+
       <text
-        x={PILL_X + PILL_PAD_X}
+        x={PILL_X + PILL_PAD_X + 2}
         y={PILL_Y + PILL_H - 20}
-        fontSize="10"
-        fontWeight="600"
+        fontSize="10.5"
+        fontWeight="700"
         fill={titleClr}
-        fontFamily="Inter, system-ui, sans-serif"
-        style={{ userSelect: "none" }}
+        fontFamily="'Poppins', system-ui, sans-serif"
+        letterSpacing="0.02em"
+        style={{ userSelect: "none", pointerEvents: "none" }}
       >
         Segment {segment}
       </text>
       <text
-        x={PILL_X + PILL_PAD_X}
+        x={PILL_X + PILL_PAD_X + 2}
         y={PILL_Y + PILL_H - 6}
-        fontSize="9"
+        fontSize="9.5"
         fill={
-          isCompleted
-            ? "#16A34A"
-            : isCurrent
-              ? CURRENT_GOLD_DEEP
-              : isLocked
-                ? "#9CA3AF"
-                : isDark
-                  ? "#94A3B8"
-                  : "#6B7280"
+          isCompleted || isCurrent
+            ? palette.textAccent
+            : isDark
+              ? "#94A3B8"
+              : "#6B7280"
         }
-        fontFamily="Inter, system-ui, sans-serif"
-        style={{ userSelect: "none" }}
+        fontFamily="'Poppins', system-ui, sans-serif"
+        style={{ userSelect: "none", pointerEvents: "none" }}
       >
         {isCompleted
           ? "✓ Completed"
           : isCurrent && hasVisitedContent
             ? "▶ In Progress"
             : isCurrent
-              ? "Not started"
-              : isLocked
-                ? "Locked"
-                : "Not started"}
+              ? "Ready to start"
+              : "Not started"}
       </text>
     </g>
   );
 }
 
-// ─── Title on info card (matches getCardLayout + responsive width) ────────────
+// ─── Lesson title label on card ───────────────────────────────────────────────
 function LessonLabel({
   x,
   y,
@@ -658,50 +912,58 @@ function LessonLabel({
   isLocked: boolean;
   isDark: boolean;
 }) {
-  const { PILL_X, PILL_Y } = getCardLayout(x, y, title, segment);
+  const clipUid = useId().replace(/:/g, "");
+  const titleClipId = `pill-title-clip-${clipUid}-${segment}`;
+  const { PILL_X, PILL_Y, PILL_W, PILL_H, titleLines } = getCardLayout(
+    x,
+    y,
+    title,
+    segment,
+  );
+  const palette = moduleStatePalette({ isCompleted, isCurrent, isLocked });
 
-  const titleClr = isCompleted
-    ? "#16A34A"
-    : isCurrent
-      ? CURRENT_GOLD_DEEP
-      : isLocked
-        ? "#9CA3AF"
-        : isDark
-          ? "#F1F5F9"
-          : "#111827";
+  const titleClr = isCompleted || isCurrent
+    ? palette.textAccent
+    : isLocked
+      ? isDark
+        ? "#94A3B8"
+        : "#6B7280"
+      : isDark
+        ? "#F1F5F9"
+        : "#111827";
 
-  const lines = wrapTitleForCard(title, 28);
-  const line1 = (lines[0] ?? "").slice(0, 40);
-  const line2 = lines.slice(1).join(" ").slice(0, 40);
-
-  const titleTop = PILL_Y + 14;
+  const titleTop = PILL_Y + 16;
+  const clipPad = 2;
+  const clipX = PILL_X + PILL_PAD_X;
+  const clipY = PILL_Y + 8;
+  const clipW = Math.max(0, PILL_W - 2 * PILL_PAD_X - clipPad);
+  const clipH = Math.max(0, PILL_H - 36);
 
   return (
     <g style={{ pointerEvents: "none" }}>
-      <text
-        x={PILL_X + PILL_PAD_X}
-        y={titleTop}
-        fontSize="10"
-        fontWeight="700"
-        fill={titleClr}
-        fontFamily="Inter, system-ui, sans-serif"
-        style={{ userSelect: "none" }}
-      >
-        {line1}
-      </text>
-      {line2 ? (
-        <text
-          x={PILL_X + PILL_PAD_X}
-          y={titleTop + 12}
-          fontSize="9"
-          fontWeight="500"
-          fill={titleClr}
-          fontFamily="Inter, system-ui, sans-serif"
-          style={{ userSelect: "none" }}
-        >
-          {line2}
-        </text>
-      ) : null}
+      <defs>
+        <clipPath id={titleClipId}>
+          <rect x={clipX} y={clipY} width={clipW} height={clipH} rx={4} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${titleClipId})`}>
+        {titleLines.map((line, i) => (
+          <text
+            key={i}
+            x={PILL_X + PILL_PAD_X + 2}
+            y={titleTop + i * 13}
+            fontSize={i === 0 ? 10.5 : 9.5}
+            fontWeight={i === 0 ? 700 : 500}
+            fill={titleClr}
+            opacity={i === 0 ? 1 : 0.88}
+            fontFamily="'Poppins', system-ui, sans-serif"
+            letterSpacing="0.01em"
+            style={{ userSelect: "none" }}
+          >
+            {line}
+          </text>
+        ))}
+      </g>
     </g>
   );
 }
@@ -713,25 +975,26 @@ function LessonModal({
   pdfId,
   onClose,
   onStart,
-  onSkip,
+  lockContinueAcknowledged = false,
 }: {
   mod: Module;
   isDark: boolean;
   pdfId: string | null;
   onClose: () => void;
   onStart: (lessonId: string) => void;
-  onSkip: (lessonId: string) => void;
+  /** User already confirmed via the light out-of-order prompt; do not show a second blocking confirm. */
+  lockContinueAcknowledged?: boolean;
 }) {
-  const surfaceBg = isDark ? "#1e293b" : "#FFFFFF";
+  const palette = moduleStatePalette(mod);
+  const surfaceBg = isDark ? "#0f1829" : "#FFFFFF";
   const textPri = isDark ? "#F1F5F9" : "#111827";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
 
   const lesson = mod.lessons[0];
 
-  const isFirstOpenOfSegment = Boolean(lesson) &&
-    (pdfId
-      ? !readSeenLessonIdsForDoc(pdfId).has(String(lesson.id))
-      : true);
+  const isFirstOpenOfSegment =
+    Boolean(lesson) &&
+    (pdfId ? !readSeenLessonIdsForDoc(pdfId).has(String(lesson.id)) : true);
 
   const overviewParagraph = formatLessonOverviewParagraph(mod.overview);
 
@@ -744,6 +1007,12 @@ function LessonModal({
 
   const handlePrimaryCta = (): void => {
     if (!lesson) return;
+    if (mod.isLocked && !lockContinueAcknowledged) {
+      const ok = window.confirm(
+        "You haven't completed the previous segment. Continue anyway?\n\nYou can return to earlier segments anytime.",
+      );
+      if (!ok) return;
+    }
     if (pdfId) markLessonSegmentModalSeen(pdfId, lesson.id);
     onStart(lesson.id);
   };
@@ -751,222 +1020,232 @@ function LessonModal({
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+      style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
           background: surfaceBg,
-          borderRadius: 24,
-          padding: "24px",
-          width: "min(432px, calc(100vw - 32px))",
+          borderRadius: 28,
+          padding: "28px 26px",
+          width: "min(440px, calc(100vw - 32px))",
           maxWidth: "calc(100vw - 32px)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
-          animation: "modalPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both",
+          boxShadow: isDark
+            ? `0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.04)`
+            : `0 24px 80px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05)`,
+          animation: "modalPop 0.32s cubic-bezier(0.34,1.56,0.64,1) both",
           position: "relative",
+          overflow: "hidden",
         }}
       >
-        {/* Close X */}
+        {/* Decorative top accent */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
+            background: `linear-gradient(90deg, ${palette.from}, ${palette.to})`,
+            borderRadius: "28px 28px 0 0",
+          }}
+        />
+
+        {/* Subtle background glow */}
+        <div
+          style={{
+            position: "absolute",
+            top: -60,
+            right: -60,
+            width: 200,
+            height: 200,
+            borderRadius: "50%",
+            background: `radial-gradient(circle, ${palette.from}22 0%, transparent 70%)`,
+            pointerEvents: "none",
+          }}
+        />
+
+        {/* Close button */}
         <button
           onClick={onClose}
           style={{
             position: "absolute",
-            top: 14,
-            right: 14,
-            background: "none",
+            top: 16,
+            right: 16,
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
             border: "none",
             cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             fontSize: 18,
             color: textMuted,
             lineHeight: 1,
+            transition: "background 0.2s",
           }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.1)")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)")
+          }
         >
           ×
         </button>
 
-        {/* Status icon + segment info (no overall progress %) */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            marginBottom: 20,
-          }}
-        >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 22, paddingTop: 8 }}>
           <div
-            className="flex items-center justify-center shrink-0 rounded-2xl"
             style={{
               width: 56,
               height: 56,
-              background: isDark ? "#0f172a" : "#F1F5F9",
-              border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
+              borderRadius: 18,
+              background: `linear-gradient(135deg, ${palette.from}22, ${palette.to}11)`,
+              border: `1.5px solid ${palette.from}44`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
             }}
-            aria-hidden
           >
             {mod.isCompleted ? (
-              <Check size={26} className="text-emerald-500" strokeWidth={2.5} />
+              <Check size={26} style={{ color: SEGMENT_COMPLETED_PALETTE.from }} strokeWidth={2.5} />
             ) : mod.hasVisitedContent ? (
-              <Loader2
-                size={26}
-                className="text-blue-500 animate-spin"
-                style={{ animationDuration: "2.2s" }}
-              />
+              <Loader2 size={26} style={{ color: palette.from, animationDuration: "2.2s" }} className="animate-spin" />
             ) : (
-              <Circle
-                size={26}
-                className={isDark ? "text-slate-500" : "text-slate-400"}
-                strokeWidth={2}
-              />
+              <Circle size={26} style={{ color: palette.from }} strokeWidth={2} />
             )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p
-              style={{
-                fontSize: 11,
-                color: textMuted,
-                margin: "0 0 3px",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-              }}
-            >
+            <p style={{ fontSize: 10.5, color: palette.from, margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700, fontFamily: "Poppins,sans-serif" }}>
               Segment {mod.segment}
             </p>
-            <p
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: textPri,
-                margin: 0,
-                lineHeight: 1.3,
-              }}
-            >
+            <p style={{ fontSize: 15, fontWeight: 700, color: textPri, margin: 0, lineHeight: 1.35, fontFamily: "Poppins,sans-serif" }}>
               {mod.title}
             </p>
           </div>
         </div>
 
-        {/* Lesson overview — heading left-only; body justified */}
+        {/* Overview box */}
         <div
-          className="mb-4"
           style={{
-            borderRadius: 14,
+            borderRadius: 16,
             padding: "16px 18px",
+            marginBottom: 18,
             background: isDark
-              ? "linear-gradient(155deg, rgba(37,99,235,0.2) 0%, rgba(15,23,42,0.95) 55%)"
-              : "linear-gradient(155deg, #EFF6FF 0%, #FFFFFF 65%)",
-            border: `1px solid ${isDark ? "rgba(96, 165, 250, 0.42)" : "#BFDBFE"}`,
-            boxShadow: isDark
-              ? "inset 0 1px 0 rgba(255,255,255,0.05)"
-              : "inset 0 1px 0 rgba(255,255,255,0.9)",
+              ? `linear-gradient(145deg, ${palette.from}18 0%, rgba(15,24,42,0.95) 60%)`
+              : `linear-gradient(145deg, ${palette.from}0f 0%, #FFFFFF 65%)`,
+            border: `1px solid ${palette.from}44`,
           }}
         >
-          <p
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.07em",
-              textTransform: "uppercase",
-              color: isDark ? "#93C5FD" : "#2563EB",
-              margin: "0 0 12px",
-              fontFamily: "Poppins,sans-serif",
-              textAlign: "left",
-              textAlignLast: "left",
-              width: "100%",
-              display: "flex",
-              alignItems: "baseline",
-              flexWrap: "wrap",
-              columnGap: "0.65em",
-              rowGap: "0.25em",
-            }}
-          >
-            <span style={{ letterSpacing: "0.07em" }}>Lesson</span>
-            <span style={{ letterSpacing: "0.07em" }}>Overview</span>
+          <p style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: palette.from, margin: "0 0 10px", fontFamily: "Poppins,sans-serif" }}>
+            Lesson Overview
           </p>
-          <p
-            style={{
-              fontSize: 13,
-              lineHeight: 1.65,
-              color: isDark ? "#CBD5E1" : "#374151",
-              margin: 0,
-              paddingLeft: 14,
-              borderLeft: `3px solid ${isDark ? "rgba(59,130,246,0.55)" : "rgba(37,99,235,0.35)"}`,
-              textAlign: "justify",
-              textAlignLast: "left",
-              fontFamily: "Poppins,sans-serif",
-              fontWeight: 400,
-            }}
-          >
+          <p style={{ fontSize: 13, lineHeight: 1.7, color: isDark ? "#CBD5E1" : "#374151", margin: 0, paddingLeft: 14, borderLeft: `3px solid ${palette.from}66`, fontFamily: "Poppins,sans-serif", fontWeight: 400, textAlign: "justify", textAlignLast: "left" }}>
             {overviewParagraph}
           </p>
         </div>
 
-        {!mod.isLocked && lesson && (
+        {/* Out-of-order notice (recommended path: complete earlier lessons first) */}
+        {mod.isLocked && lesson && (
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              alignItems: "flex-start",
+              marginBottom: 14,
+              padding: "14px 16px",
+              borderRadius: 16,
+              background: isDark
+                ? "linear-gradient(135deg, rgba(148,163,184,0.14) 0%, rgba(15,23,42,0.92) 100%)"
+                : "linear-gradient(135deg, rgba(248,250,252,0.98) 0%, #FFFFFF 100%)",
+              border: `1px solid ${isDark ? "rgba(148,163,184,0.35)" : "rgba(203,213,225,0.9)"}`,
+              boxShadow: isDark
+                ? "inset 0 1px 0 rgba(255,255,255,0.04)"
+                : "0 2px 12px rgba(15,23,42,0.06)",
+            }}
+          >
+            <AlertCircle
+              size={22}
+              strokeWidth={2.2}
+              style={{
+                color: isDark ? "#94A3B8" : "#64748B",
+                flexShrink: 0,
+                marginTop: 1,
+              }}
+              aria-hidden
+            />
+            <div>
+              <p
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: isDark ? "#E2E8F0" : "#374151",
+                  margin: "0 0 6px",
+                  fontFamily: "Poppins,sans-serif",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                Previous segment not completed yet
+              </p>
+              <p
+                style={{
+                  fontSize: 12.5,
+                  lineHeight: 1.55,
+                  color: isDark ? "#94A3B8" : "#64748B",
+                  margin: 0,
+                  fontFamily: "Poppins,sans-serif",
+                  fontWeight: 400,
+                }}
+              >
+                The path usually works best in order. You can still open this lesson when you&apos;re ready.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* CTA button */}
+        {lesson && (
           <button
             type="button"
             onClick={handlePrimaryCta}
             style={{
               width: "100%",
-              marginTop: 4,
+              marginTop: mod.isLocked ? 0 : 4,
               background: mod.isCompleted
-                ? "linear-gradient(135deg,#16A34A,#15803D)"
-                : "linear-gradient(135deg,#2563EB,#4F46E5)",
+                ? `linear-gradient(135deg, ${SEGMENT_COMPLETED_PALETTE.to}, ${SEGMENT_COMPLETED_PALETTE.from})`
+                : `linear-gradient(135deg, ${palette.from}, ${palette.to})`,
               border: "none",
               borderRadius: 50,
-              padding: "14px 24px",
+              padding: "15px 24px",
               cursor: "pointer",
-              boxShadow: "0 6px 20px rgba(59,130,246,0.35)",
+              boxShadow: `0 8px 24px ${mod.isCompleted ? "rgba(21,128,61,0.45)" : palette.glow}`,
               color: "#fff",
               fontWeight: 700,
               fontSize: 15,
               fontFamily: "Poppins,sans-serif",
+              letterSpacing: "0.02em",
+              transition: "transform 0.2s ease, box-shadow 0.2s ease",
+              position: "relative",
+              overflow: "hidden",
             }}
-            aria-label={primaryCtaLabel}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-1px) scale(1.01)";
+              e.currentTarget.style.boxShadow = `0 12px 32px ${mod.isCompleted ? "rgba(21,128,61,0.55)" : palette.glow}`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "none";
+              e.currentTarget.style.boxShadow = `0 8px 24px ${mod.isCompleted ? "rgba(21,128,61,0.45)" : palette.glow}`;
+            }}
           >
-            {primaryCtaLabel}
+            <span style={{ position: "relative", zIndex: 1 }}>
+              {mod.isLocked && !mod.isCompleted ? "Open this lesson" : primaryCtaLabel}
+            </span>
           </button>
-        )}
-
-        {mod.isLocked && (
-          <div
-            style={{
-              background: isDark ? "#1e3a5f" : "#FEF9C3",
-              border: `1px solid ${isDark ? "#2563EB40" : "#FDE047"}`,
-              borderRadius: 12,
-              padding: "10px 14px",
-              marginBottom: 16,
-            }}
-          >
-            <p
-              style={{
-                fontSize: 12,
-                color: isDark ? "#93C5FD" : "#92400E",
-                margin: "0 0 6px",
-              }}
-            >
-              🔒 This segment is locked. Complete previous segments first.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (lesson && pdfId) markLessonSegmentModalSeen(pdfId, lesson.id);
-                if (lesson) onSkip(lesson.id);
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 12,
-                color: isDark ? "#60A5FA" : "#2563EB",
-                fontWeight: 600,
-                padding: 0,
-                textDecoration: "underline",
-                fontFamily: "Poppins,sans-serif",
-              }}
-            >
-              Skip lock and open anyway →
-            </button>
-          </div>
         )}
       </div>
     </div>
@@ -979,24 +1258,39 @@ function MobileRoadmap({
   modules,
   pdfId,
   onStart,
-  onSkip,
   totalCompleted,
 }: {
   isDark: boolean;
   modules: Module[];
   pdfId: string | null;
   onStart: (lessonId: string) => void;
-  onSkip: (lessonId: string) => void;
   totalCompleted: number;
 }) {
   const [selected, setSelected] = useState<Module | null>(null);
-  const surfaceBg = isDark ? "#1e293b" : "#FFFFFF";
-  const borderCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+  const [lockPromptModule, setLockPromptModule] = useState<Module | null>(null);
+  const [lockContinueAcknowledged, setLockContinueAcknowledged] = useState(false);
   const textPri = isDark ? "#F1F5F9" : "#111827";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
 
-  const allLessonsDone =
-    modules.length > 0 && totalCompleted >= modules.length;
+  const openSegmentCard = useCallback((mod: Module) => {
+    if (mod.isLocked && !mod.isCompleted) {
+      setLockPromptModule(mod);
+      return;
+    }
+    setLockContinueAcknowledged(false);
+    setSelected(mod);
+  }, []);
+
+  const onLockPromptGoBack = useCallback(() => {
+    setLockPromptModule(null);
+  }, []);
+
+  const onLessonModalClose = useCallback(() => {
+    setSelected(null);
+    setLockContinueAcknowledged(false);
+  }, []);
+
+  const allLessonsDone = modules.length > 0 && totalCompleted >= modules.length;
   const curMod =
     modules.find((m) => m.isCurrent) ??
     modules.find((m) => !m.isCompleted && !m.isLocked);
@@ -1005,265 +1299,236 @@ function MobileRoadmap({
   return (
     <>
       <div
-        className="relative px-4 py-6 pb-24 min-h-full overflow-hidden"
+        className="relative px-4 py-6 pb-28 min-h-full overflow-hidden"
         style={{
           background: isDark
-            ? "linear-gradient(180deg, rgba(37,99,235,0.1) 0%, transparent 32%, rgba(15,23,42,0.55) 100%)"
-            : "linear-gradient(180deg, rgba(59,130,246,0.1) 0%, transparent 35%, rgba(241,245,249,0.95) 100%)",
+            ? "linear-gradient(180deg, rgba(30,41,59,0.8) 0%, transparent 40%)"
+            : "linear-gradient(180deg, rgba(241,245,249,0.9) 0%, transparent 40%)",
         }}
       >
-        <div
-          className="roadmap-motion-ambient pointer-events-none absolute -top-24 -right-16 h-48 w-48 rounded-full blur-[56px] opacity-60"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, rgba(59,130,246,0.5) 0%, transparent 70%)"
-              : "radial-gradient(circle, rgba(99,102,241,0.35) 0%, transparent 70%)",
-            animation: "roadmap-orb-drift 20s ease-in-out infinite",
-          }}
-          aria-hidden
-        />
-        <div
-          className="roadmap-motion-ambient pointer-events-none absolute bottom-32 -left-20 h-44 w-44 rounded-full blur-[52px] opacity-50"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)",
-            animation: "roadmap-orb-drift-alt 24s ease-in-out infinite",
-          }}
-          aria-hidden
-        />
+        {/* Ambient orbs */}
+        <div className="roadmap-motion-ambient pointer-events-none absolute -top-24 -right-16 h-48 w-48 rounded-full blur-[56px] opacity-60"
+          style={{ background: isDark ? "radial-gradient(circle, rgba(99,102,241,0.5) 0%, transparent 70%)" : "radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)", animation: "roadmap-orb-drift 20s ease-in-out infinite" }}
+          aria-hidden />
+        <div className="roadmap-motion-ambient pointer-events-none absolute bottom-32 -left-20 h-44 w-44 rounded-full blur-[52px] opacity-50"
+          style={{ background: "radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)", animation: "roadmap-orb-drift-alt 24s ease-in-out infinite" }}
+          aria-hidden />
+
         <div className="relative z-[1]">
-      {modules.map((mod, i) => (
-        <div key={mod.id} className="flex gap-4">
-          <div className="flex flex-col items-center">
-            <button
-              onClick={() => setSelected(mod)}
-              className="h-11 w-11 rounded-full flex items-center justify-center shrink-0 text-lg transition-all duration-300 hover:scale-110 active:scale-95 relative"
-              style={{
-                background: mod.isCompleted
-                  ? "#22C55E"
-                  : mod.isCurrent
-                    ? "#F59E0B"
-                    : mod.isLocked
-                      ? isDark
-                        ? "#334155"
-                        : "#E5E7EB"
-                      : isDark
-                        ? "#1e293b"
-                        : "#F9FAFB",
-                border: `2.5px solid ${mod.isCompleted ? "#16A34A" : mod.isCurrent ? "#D97706" : isDark ? "#475569" : "#D1D5DB"}`,
-                boxShadow:
-                  !mod.isLocked && mod.isCurrent
-                    ? "0 0 0 4px rgba(245,158,11,0.35), 0 6px 20px rgba(245,158,11,0.25)"
-                    : "none",
-                color:
-                  mod.isCompleted || mod.isCurrent
-                    ? "#fff"
-                    : isDark
-                      ? "#94A3B8"
-                      : "#6B7280",
-                fontSize: 13,
-                fontWeight: 700,
-                fontFamily: "Poppins,sans-serif",
-              }}
-            >
-              {mod.isCompleted ? "✓" : mod.isLocked ? "🔒" : mod.segment}
-              {mod.isCurrent && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: -28,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 36,
-                    height: 28,
-                    animation: "carBounce 1.4s ease-in-out infinite",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {/* Ambient Glow behind the car */}
-                  {isDark && (
-                    <span
-                      aria-hidden
+          {modules.map((mod, i) => {
+            const palette = moduleStatePalette(mod);
+            const borderColor = mod.isCompleted
+              ? SEGMENT_COMPLETED_PALETTE.border
+              : mod.isCurrent
+                ? SEGMENT_IN_PROGRESS_PALETTE.border
+                : mod.isLocked
+                  ? SEGMENT_LOCKED_PALETTE.border
+                  : `${palette.from}aa`;
+
+            return (
+              <div key={mod.id} className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => openSegmentCard(mod)}
+                    className="relative h-12 w-12 rounded-full flex items-center justify-center shrink-0 text-lg transition-all duration-300 hover:scale-110 active:scale-95"
+                    style={{
+                      background: mod.isCompleted
+                        ? `linear-gradient(135deg, ${SEGMENT_COMPLETED_PALETTE.from}, ${SEGMENT_COMPLETED_PALETTE.to})`
+                        : mod.isCurrent
+                          ? "linear-gradient(135deg, #FDE68A, #F59E0B)"
+                          : mod.isLocked
+                            ? `linear-gradient(145deg, ${SEGMENT_LOCKED_PALETTE.from}, ${SEGMENT_LOCKED_PALETTE.to})`
+                            : `linear-gradient(145deg, ${palette.from}, ${palette.to})`,
+                      border: `2.5px solid ${borderColor}`,
+                      boxShadow: mod.isCurrent
+                        ? `0 0 0 4px rgba(245,158,11,0.28), 0 8px 22px rgba(234,88,12,0.28)`
+                        : mod.isLocked
+                          ? "0 4px 14px rgba(107,114,128,0.35), inset 0 1px 0 rgba(255,255,255,0.15)"
+                          : !mod.isCompleted
+                            ? `0 4px 16px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,0.2)`
+                            : mod.isCompleted
+                              ? "0 4px 14px rgba(21,128,61,0.5)"
+                              : "none",
+                      color: "#fff",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      fontFamily: "Poppins,sans-serif",
+                    }}
+                  >
+                    {mod.isCompleted ? (
+                      "✓"
+                    ) : mod.isLocked ? (
+                      <span className="flex flex-col items-center justify-center leading-none gap-0.5" aria-hidden>
+                        <span className="text-[10px] opacity-90">🔒</span>
+                        <span className="text-[12px] font-extrabold">{mod.segment}</span>
+                      </span>
+                    ) : (
+                      mod.segment
+                    )}
+
+                    {/* Car on current */}
+                    {mod.isCurrent && (
+                      <span style={{ position: "absolute", top: -30, left: "50%", transform: "translateX(-50%)", width: 38, height: 30, animation: "carBounce 1.5s ease-in-out infinite", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {isDark && (
+                          <span aria-hidden style={{ position: "absolute", width: 44, height: 32, background: "radial-gradient(circle, rgba(253,224,71,0.3) 0%, transparent 70%)", borderRadius: "50%", pointerEvents: "none" }} />
+                        )}
+                        <img src={CAR_IMG} alt="" style={{ width: 38, height: 30, objectFit: "contain", display: "block", position: "relative", filter: isDark ? "drop-shadow(0 0 6px rgba(253,224,71,0.7))" : "drop-shadow(0 2px 4px rgba(0,0,0,0.25))" }} />
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Connector line */}
+                  {i < modules.length - 1 && (
+                    <div
+                      className="w-0.5 flex-1 my-1.5 rounded-full"
                       style={{
-                        position: "absolute",
-                        width: 40,
-                        height: 30,
-                        background:
-                          "radial-gradient(circle, rgba(253,224,71,0.3) 0%, rgba(253,224,71,0) 70%)",
-                        borderRadius: "50%",
-                        pointerEvents: "none",
+                        background: mod.isCompleted
+                          ? `linear-gradient(180deg, ${SEGMENT_COMPLETED_PALETTE.from}, ${SEGMENT_COMPLETED_PALETTE.to})`
+                          : isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)",
+                        minHeight: 36,
                       }}
                     />
                   )}
+                </div>
 
-                  <img
-                    src={CAR_IMG}
-                    alt=""
+                {/* Info card */}
+                <div className="flex-1 pb-6">
+                  <button
+                    type="button"
+                    onClick={() => openSegmentCard(mod)}
+                    className="w-full text-left rounded-2xl px-4 py-3.5 transition-all duration-300 hover:scale-[1.02] active:scale-[0.99] hover:-translate-y-0.5"
                     style={{
-                      width: 36,
-                      height: 28,
-                      objectFit: "contain",
-                      display: "block",
+                      background: mod.isCurrent
+                        ? isDark
+                          ? `linear-gradient(145deg, ${palette.from}22 0%, #0f172a 52%)`
+                          : `linear-gradient(145deg, ${palette.from}14 0%, #FFFFFF 58%)`
+                        : mod.isLocked
+                          ? isDark
+                            ? "rgba(30,41,59,0.88)"
+                            : "rgba(241,245,249,0.95)"
+                          : isDark
+                            ? "rgba(15,23,42,0.82)"
+                            : "rgba(255,255,255,0.92)",
+                      border: `1.5px solid ${mod.isCurrent ? palette.from + "90" : mod.isLocked ? (isDark ? "rgba(148,163,184,0.25)" : "rgba(203,213,225,0.85)") : isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.06)"}`,
+                      boxShadow: mod.isCurrent
+                        ? `0 0 0 3px ${palette.from}25, 0 10px 28px ${palette.glow}`
+                        : `0 4px 16px rgba(0,0,0,${isDark ? "0.35" : "0.07"})`,
+                      backdropFilter: "blur(10px)",
                       position: "relative",
-                      // TypeScript-safe conditional filter
-                      filter: isDark
-                        ? "drop-shadow(0 0 5px rgba(253,224,71,0.6))"
-                        : "none",
+                      overflow: "hidden",
                     }}
-                  />
-                </span>
-              )}
-              {i === modules.length - 1 && !mod.isCurrent && (
-                <img
-                  src={SCHOOL_IMG}
-                  alt="destination"
+                  >
+                    {/* Left accent */}
+                    <div style={{ position: "absolute", left: 0, top: 6, bottom: 6, width: 3, borderRadius: "0 3px 3px 0", background: mod.isCompleted ? SEGMENT_COMPLETED_PALETTE.from : mod.isCurrent ? SEGMENT_IN_PROGRESS_PALETTE.from : mod.isLocked ? SEGMENT_LOCKED_PALETTE.from : palette.from }} />
+
+                    <div className="flex items-center gap-2 mb-1 pl-1 min-w-0">
+                      <span className="text-[13px] font-bold truncate min-w-0 flex-1" style={{ color: textPri, fontFamily: "Poppins,sans-serif" }}>
+                        {mod.title}
+                      </span>
+                      {mod.isLocked && !mod.isCompleted && (
+                        <span className="shrink-0 text-[11px] opacity-80" aria-hidden>🔒</span>
+                      )}
+                      {mod.isCurrent && <span title="You are here" style={{ fontSize: 14 }}>🚗</span>}
+                      {mod.isCompleted && (
+                        <span className="ml-auto text-[10px] font-bold" style={{ color: "#4ADE80" }}>✓ Done</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] pl-1" style={{ color: mod.isCurrent ? palette.from : textMuted, fontWeight: mod.isCurrent ? 600 : 400 }}>
+                      {mod.isCompleted ? "Completed" : mod.isCurrent && mod.hasVisitedContent ? "In Progress" : mod.isCurrent ? "Ready to start" : "Not started"}
+                    </p>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {modules.length > 0 && (
+            <div className="flex gap-4 mt-2 pointer-events-none" aria-hidden>
+              <div className="flex flex-col items-center shrink-0 w-12">
+                <div
+                  className="w-0.5 rounded-full"
                   style={{
-                    position: "absolute",
-                    top: -36,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 36,
-                    height: 36,
-                    objectFit: "contain",
+                    minHeight: 44,
+                    background: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.1)",
                   }}
                 />
-              )}
-            </button>
-            {i < modules.length - 1 && (
-              <div
-                className="w-0.5 flex-1 my-1 rounded-full"
-                style={{
-                  background: mod.isCompleted
-                    ? "linear-gradient(180deg,#22C55E,#16A34A)"
-                    : isDark
-                      ? "#334155"
-                      : "#E5E7EB",
-                  minHeight: 32,
-                }}
-              />
-            )}
-          </div>
-
-          <div className="flex-1 pb-5">
-            <button
-              onClick={() => setSelected(mod)}
-              className="w-full text-left rounded-2xl px-4 py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.99] hover:-translate-y-0.5"
-              style={{
-                background: mod.isCurrent
-                  ? isDark
-                    ? "linear-gradient(145deg, rgba(245,158,11,0.12) 0%, #1e293b 45%)"
-                    : "linear-gradient(145deg, rgba(245,158,11,0.15) 0%, #FFFFFF 50%)"
-                  : surfaceBg,
-                border: `1.5px solid ${mod.isCurrent ? "#F59E0B" : borderCol}`,
-                boxShadow: mod.isCurrent
-                  ? "0 0 0 3px rgba(245,158,11,0.22), 0 8px 24px rgba(245,158,11,0.12), 0 4px 12px rgba(0,0,0,0.08)"
-                  : `0 2px 10px rgba(0,0,0,${isDark ? "0.28" : "0.07"})`,
-                opacity: mod.isLocked ? 0.7 : 1,
-              }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className="text-[13px] font-semibold"
-                  style={{ color: textPri }}
-                >
-                  {mod.title}
-                </span>
-                {mod.isCurrent && <span title="You are here">🚗</span>}
-                {mod.isCompleted && (
-                  <span
-                    className="ml-auto text-[10px] font-bold"
-                    style={{ color: "#4ADE80" }}
-                  >
-                    ✓ Done
-                  </span>
-                )}
               </div>
-              <p className="text-[11px]" style={{ color: textMuted }}>
-                {mod.isCompleted
-                  ? "Completed"
-                  : mod.isCurrent && mod.hasVisitedContent
-                    ? "In Progress"
-                    : mod.isCurrent
-                      ? "Not started"
-                      : mod.isLocked
-                        ? "Locked"
-                        : "Not started"}
-              </p>
-            </button>
-          </div>
-        </div>
-      ))}
+              <div className="flex-1 flex justify-end items-end pb-1">
+                <img
+                  src={SCHOOL_IMG}
+                  alt=""
+                  style={{
+                    width: 168,
+                    maxHeight: 128,
+                    objectFit: "contain",
+                    objectPosition: "bottom right",
+                    filter: isDark
+                      ? "drop-shadow(0 14px 32px rgba(0,0,0,0.55))"
+                      : "drop-shadow(0 14px 32px rgba(15,23,42,0.2))",
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-      {selected && (
-        <LessonModal
-          mod={selected}
+        <SegmentOutOfOrderPrompt
           isDark={isDark}
-          pdfId={pdfId}
-          onClose={() => setSelected(null)}
-          onStart={(lid) => {
-            setSelected(null);
-            onStart(lid);
-          }}
-          onSkip={(lid) => {
-            setSelected(null);
-            onSkip(lid);
+          open={lockPromptModule !== null}
+          onGoBack={onLockPromptGoBack}
+          onContinue={() => {
+            if (!lockPromptModule) return;
+            const next = lockPromptModule;
+            setLockPromptModule(null);
+            setLockContinueAcknowledged(true);
+            setSelected(next);
           }}
         />
-      )}
+
+        {selected && (
+          <LessonModal
+            mod={selected}
+            isDark={isDark}
+            pdfId={pdfId}
+            lockContinueAcknowledged={lockContinueAcknowledged}
+            onClose={onLessonModalClose}
+            onStart={(lid) => {
+              onLessonModalClose();
+              onStart(lid);
+            }}
+          />
+        )}
       </div>
 
+      {/* Floating CTA */}
       {curMod && nextLesson && !allLessonsDone && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-20 w-[min(100%,calc(100vw-2rem))] px-1">
           <button
             type="button"
             onClick={() => onStart(nextLesson.id)}
-            className="flex items-center gap-3 rounded-full px-4 py-2.5 w-full transition-all duration-300 active:scale-[0.98] cursor-pointer border border-white/10"
+            className="flex items-center gap-3 rounded-full px-5 py-3 w-full transition-all duration-300 active:scale-[0.98] cursor-pointer"
             style={{
               background: isDark
-                ? "linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #172554 100%)"
-                : "linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)",
+                ? "linear-gradient(135deg, #1e293b 0%, #0f172a 60%, #1e1b4b 100%)"
+                : "linear-gradient(135deg, #fff 0%, #f1f5f9 100%)",
               boxShadow: isDark
-                ? "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.25)"
-                : "0 8px 28px rgba(15,23,42,0.12), 0 0 0 1px rgba(59,130,246,0.12)",
+                ? "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.3)"
+                : "0 8px 28px rgba(15,23,42,0.15), 0 0 0 1px rgba(99,102,241,0.15)",
             }}
-            aria-label={
-              totalCompleted === 0
-                ? `Start reading: ${nextLesson.title}`
-                : `Continue to: ${nextLesson.title}`
-            }
           >
-            <div
-              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-lg"
-              style={{
-                background:
-                  "linear-gradient(135deg, #2563EB, #6366F1)",
-                boxShadow: "0 4px 14px rgba(37,99,235,0.45)",
-              }}
-            >
-              <Play size={13} className="text-white" fill="white" />
+            <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "linear-gradient(135deg, #6366F1, #4F46E5)", boxShadow: "0 4px 14px rgba(99,102,241,0.5)" }}>
+              <Play size={14} className="text-white" fill="white" />
             </div>
             <div className="text-left min-w-0 flex-1">
-              <p
-                className="text-[9px] font-bold uppercase tracking-widest"
-                style={{ color: isDark ? "#94A3B8" : "#64748B" }}
-              >
+              <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: isDark ? "#94A3B8" : "#64748B" }}>
                 {totalCompleted === 0 ? "Start reading" : "Up next"}
               </p>
-              <p
-                className="text-[12px] font-bold truncate"
-                style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}
-              >
+              <p className="text-[12.5px] font-bold truncate" style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}>
                 {nextLesson.title}
               </p>
             </div>
-            <ChevronRight
-              size={14}
-              className="shrink-0"
-              style={{ color: isDark ? "#64748B" : "#94A3B8" }}
-            />
+            <ChevronRight size={15} className="shrink-0" style={{ color: isDark ? "#64748B" : "#94A3B8" }} />
           </button>
         </div>
       )}
@@ -1277,43 +1542,62 @@ function DesktopRoadmap({
   modules,
   pdfId,
   onStart,
-  onSkip,
   totalCompleted,
 }: {
   isDark: boolean;
   modules: Module[];
   pdfId: string | null;
   onStart: (lessonId: string) => void;
-  onSkip: (lessonId: string) => void;
   totalCompleted: number;
 }) {
   const [selected, setSelected] = useState<Module | null>(null);
+  const [lockPromptModule, setLockPromptModule] = useState<Module | null>(null);
+  const [lockContinueAcknowledged, setLockContinueAcknowledged] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [grabbing, setGrab] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panRef = useRef({ dragging: false, sx: 0, sy: 0, px: 0, py: 0 });
+  const roadPathMeasureRef = useRef<SVGPathElement | null>(null);
+  const [doneOverlayLength, setDoneOverlayLength] = useState(0);
+  const [pathTotalLength, setPathTotalLength] = useState(0);
   const MIN_Z = 0.4;
   const MAX_Z = 2.0;
 
-  const surfaceBg = isDark ? "#1e293b" : "#FFFFFF";
   const borderCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
+  const surfaceBg = isDark ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.9)";
 
   const roadMeshUid = useId().replace(/:/g, "");
   const roadMeshPatternId = `road-mesh-${roadMeshUid}`;
   const roadMeshMaskId = `road-mesh-mask-${roadMeshUid}`;
+  const curbPatternId = `curb-${roadMeshUid}`;
+  const doneGradId = `doneGrad-${roadMeshUid}`;
+  const roadGradId = `roadGrad-${roadMeshUid}`;
+  const roadEdgeGradId = `roadEdgeGrad-${roadMeshUid}`;
+
+  const openSegmentCard = useCallback((mod: Module) => {
+    if (mod.isLocked && !mod.isCompleted) {
+      setLockPromptModule(mod);
+      return;
+    }
+    setLockContinueAcknowledged(false);
+    setSelected(mod);
+  }, []);
+
+  const onLockPromptGoBack = useCallback(() => {
+    setLockPromptModule(null);
+  }, []);
+
+  const onLessonModalClose = useCallback(() => {
+    setSelected(null);
+    setLockContinueAcknowledged(false);
+  }, []);
 
   const onMD = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
-      panRef.current = {
-        dragging: true,
-        sx: e.clientX,
-        sy: e.clientY,
-        px: pan.x,
-        py: pan.y,
-      };
+      panRef.current = { dragging: true, sx: e.clientX, sy: e.clientY, px: pan.x, py: pan.y };
       setGrab(true);
       e.preventDefault();
     },
@@ -1323,21 +1607,12 @@ function DesktopRoadmap({
   useEffect(() => {
     const onMM = (e: MouseEvent) => {
       if (!panRef.current.dragging) return;
-      setPan({
-        x: panRef.current.px + (e.clientX - panRef.current.sx),
-        y: panRef.current.py + (e.clientY - panRef.current.sy),
-      });
+      setPan({ x: panRef.current.px + (e.clientX - panRef.current.sx), y: panRef.current.py + (e.clientY - panRef.current.sy) });
     };
-    const onMU = () => {
-      panRef.current.dragging = false;
-      setGrab(false);
-    };
+    const onMU = () => { panRef.current.dragging = false; setGrab(false); };
     window.addEventListener("mousemove", onMM);
     window.addEventListener("mouseup", onMU);
-    return () => {
-      window.removeEventListener("mousemove", onMM);
-      window.removeEventListener("mouseup", onMU);
-    };
+    return () => { window.removeEventListener("mousemove", onMM); window.removeEventListener("mouseup", onMU); };
   }, []);
 
   useEffect(() => {
@@ -1345,117 +1620,94 @@ function DesktopRoadmap({
     if (!el) return;
     const fn = (e: WheelEvent) => {
       e.preventDefault();
-      setZoom((z) =>
-        Math.min(
-          MAX_Z,
-          Math.max(MIN_Z, +(z + (e.deltaY < 0 ? 0.08 : -0.08)).toFixed(2)),
-        ),
-      );
+      setZoom((z) => Math.min(MAX_Z, Math.max(MIN_Z, +(z + (e.deltaY < 0 ? 0.08 : -0.08)).toFixed(2))));
     };
     el.addEventListener("wheel", fn, { passive: false });
     return () => el.removeEventListener("wheel", fn);
   }, []);
 
-  const pins = buildPins(modules.length).map((p) => ({
-    x: p.x,
-    y: p.y + SVG_ROAD_Y_PAD,
-  }));
+  const pins = useMemo(
+    () => buildPins(modules.length).map((p) => ({ x: p.x, y: p.y + SVG_ROAD_Y_PAD })),
+    [modules.length],
+  );
   const cW = svgCanvasWidth(modules.length);
-  const roadPath = buildRoadPath(pins);
+  const roadPath = useMemo(() => buildRoadPath(pins), [pins]);
   const svgH = C_H + 280 + SVG_ROAD_Y_PAD;
 
-  const allLessonsDone =
-    modules.length > 0 && totalCompleted >= modules.length;
+  const contiguousDoneKey = useMemo(
+    () => modules.map((m) => (m.isCompleted ? "1" : "0")).join(""),
+    [modules],
+  );
 
-  // Next / current lesson for the floating banner (hidden when everything is done)
-  const curMod =
-    modules.find((m) => m.isCurrent) ??
-    modules.find((m) => !m.isCompleted && !m.isLocked);
+  const modulesRef = useRef(modules);
+  modulesRef.current = modules;
+
+  useLayoutEffect(() => {
+    const el = roadPathMeasureRef.current;
+    const mods = modulesRef.current;
+    if (!el || !roadPath || mods.length < 2) {
+      setPathTotalLength(0);
+      setDoneOverlayLength(0);
+      return;
+    }
+    const total = el.getTotalLength();
+    setPathTotalLength(total);
+    const lastDone = lastContiguousCompletedIndex(mods);
+    if (lastDone < 0) {
+      setDoneOverlayLength(0);
+    } else if (lastDone >= mods.length - 1) {
+      setDoneOverlayLength(total);
+    } else {
+      // End at the node after the last completed leg so the first segment is not zero-length
+      // (path starts at pin 0; completing segment 1 should fill through to pin 1).
+      const targetPin = Math.min(lastDone + 1, pins.length - 1);
+      const pt = pins[targetPin];
+      setDoneOverlayLength(lengthOnPathToNearestPoint(el, pt, total));
+    }
+  }, [roadPath, pins, contiguousDoneKey]);
+
+  const allLessonsDone = modules.length > 0 && totalCompleted >= modules.length;
+  const curMod = modules.find((m) => m.isCurrent) ?? modules.find((m) => !m.isCompleted && !m.isLocked);
   const nextLesson = curMod?.lessons[0];
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden relative">
-      {/* Atmospheric backdrop + floating orbs (does not pan) */}
-      <div
-        className="absolute inset-0 pointer-events-none overflow-hidden"
-        aria-hidden
-      >
-        <div
-          className="absolute inset-0"
-          style={{
-            background: isDark
-              ? "radial-gradient(ellipse 95% 60% at 50% -18%, rgba(59,130,246,0.28) 0%, transparent 55%), radial-gradient(ellipse 75% 50% at 100% 100%, rgba(139,92,246,0.18) 0%, transparent 52%), radial-gradient(ellipse 60% 45% at 0% 90%, rgba(34,197,94,0.1) 0%, transparent 50%), radial-gradient(ellipse 50% 40% at 80% 20%, rgba(245,158,11,0.08) 0%, transparent 45%)"
-              : "radial-gradient(ellipse 90% 55% at 50% -12%, rgba(59,130,246,0.2) 0%, transparent 52%), radial-gradient(ellipse 70% 48% at 100% 100%, rgba(139,92,246,0.12) 0%, transparent 50%), radial-gradient(ellipse 55% 40% at 0% 88%, rgba(34,197,94,0.08) 0%, transparent 48%)",
-          }}
-        />
-        {/* Slow-moving colour orbs */}
-        <div
-          className="roadmap-motion-ambient absolute -top-[20%] -left-[10%] h-[55%] w-[55%] rounded-full blur-[80px]"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, rgba(59,130,246,0.45) 0%, transparent 70%)"
-              : "radial-gradient(circle, rgba(99,102,241,0.35) 0%, transparent 70%)",
-            animation: "roadmap-orb-drift 18s ease-in-out infinite",
-          }}
-        />
-        <div
-          className="roadmap-motion-ambient absolute -bottom-[15%] -right-[8%] h-[50%] w-[48%] rounded-full blur-[72px]"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)"
-              : "radial-gradient(circle, rgba(59,130,246,0.22) 0%, transparent 70%)",
-            animation: "roadmap-orb-drift-alt 22s ease-in-out infinite",
-          }}
-        />
-        <div
-          className="roadmap-motion-ambient absolute top-[30%] right-[5%] h-[35%] w-[40%] rounded-full blur-[64px] opacity-70"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(34,197,94,0.25) 0%, transparent 68%)",
-            animation: "roadmap-orb-drift 26s ease-in-out infinite reverse",
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-[0.45] dark:opacity-[0.32]"
-          style={{
-            backgroundImage: `radial-gradient(${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"} 1px, transparent 1px)`,
-            backgroundSize: "24px 24px",
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-35 dark:opacity-28 mix-blend-overlay"
-          style={{
-            background: isDark
-              ? "repeating-linear-gradient(-12deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 3px)"
-              : "repeating-linear-gradient(-12deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 3px)",
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-35 dark:opacity-30"
-          style={{
-            background: isDark
-              ? "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0.65) 100%)"
-              : "linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(226,232,240,0.85) 100%)",
-          }}
-        />
+      {/* Background */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
+        <div className="absolute inset-0" style={{
+          background: isDark
+            ? "radial-gradient(ellipse 90% 55% at 50% -10%, rgba(99,102,241,0.22) 0%, transparent 55%), radial-gradient(ellipse 70% 50% at 100% 100%, rgba(168,85,247,0.15) 0%, transparent 52%), radial-gradient(ellipse 55% 45% at 0% 90%, rgba(34,197,94,0.1) 0%, transparent 50%)"
+            : "radial-gradient(ellipse 90% 55% at 50% -12%, rgba(99,102,241,0.15) 0%, transparent 52%), radial-gradient(ellipse 70% 48% at 100% 100%, rgba(168,85,247,0.1) 0%, transparent 50%), radial-gradient(ellipse 55% 40% at 0% 88%, rgba(34,197,94,0.07) 0%, transparent 48%)",
+        }} />
+        <div className="roadmap-motion-ambient absolute -top-[20%] -left-[10%] h-[55%] w-[55%] rounded-full blur-[80px]"
+          style={{ background: isDark ? "radial-gradient(circle, rgba(99,102,241,0.4) 0%, transparent 70%)" : "radial-gradient(circle, rgba(99,102,241,0.28) 0%, transparent 70%)", animation: "roadmap-orb-drift 18s ease-in-out infinite" }} />
+        <div className="roadmap-motion-ambient absolute -bottom-[15%] -right-[8%] h-[50%] w-[48%] rounded-full blur-[72px]"
+          style={{ background: isDark ? "radial-gradient(circle, rgba(168,85,247,0.3) 0%, transparent 70%)" : "radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%)", animation: "roadmap-orb-drift-alt 22s ease-in-out infinite" }} />
+        <div className="roadmap-motion-ambient absolute top-[30%] right-[5%] h-[35%] w-[40%] rounded-full blur-[64px] opacity-60"
+          style={{ background: "radial-gradient(circle, rgba(34,197,94,0.22) 0%, transparent 68%)", animation: "roadmap-orb-drift 26s ease-in-out infinite reverse" }} />
+        {/* Dot grid */}
+        <div className="absolute inset-0 opacity-[0.35] dark:opacity-[0.2]"
+          style={{ backgroundImage: `radial-gradient(${isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.035)"} 1px, transparent 1px)`, backgroundSize: "28px 28px" }} />
+        {/* Bottom fade */}
+        <div className="absolute inset-0 opacity-40"
+          style={{ background: isDark ? "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(10,15,26,0.7) 100%)" : "linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(226,232,240,0.8) 100%)" }} />
       </div>
 
+      {/* Pannable canvas */}
       <div
         ref={wrapRef}
         className="flex-1 relative overflow-hidden select-none z-[1]"
         style={{ cursor: grabbing ? "grabbing" : "grab" }}
         onMouseDown={onMD}
       >
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
-            transformOrigin: "center center",
-            willChange: "transform",
-          }}
-        >
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
+          transformOrigin: "center center",
+          willChange: "transform",
+        }}>
           <svg
             width={cW}
             height={svgH}
@@ -1463,278 +1715,149 @@ function DesktopRoadmap({
             style={{ display: "block", overflow: "visible" }}
           >
             <defs>
-              <linearGradient id="roadGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0a3566" />
-                <stop offset="45%" stopColor="#022658" />
-                <stop offset="100%" stopColor="#011a3d" />
+              {/* Road gradient - rich asphalt look */}
+              <linearGradient id={roadGradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={isDark ? "#1a2540" : "#2a3650"} />
+                <stop offset="40%" stopColor={isDark ? "#0d1626" : "#1a2540"} />
+                <stop offset="100%" stopColor={isDark ? "#080e1c" : "#111827"} />
               </linearGradient>
-              <linearGradient id="doneGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#15803D" />
-                <stop offset="100%" stopColor="#22C55E" />
+
+              {/* Road edge highlight */}
+              <linearGradient id={roadEdgeGradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgba(255,255,255,0.35)" />
+                <stop offset="100%" stopColor="rgba(255,255,255,0.05)" />
               </linearGradient>
-              <filter
-                id="roadShadow"
-                x="-5%"
-                y="-20%"
-                width="110%"
-                height="160%"
-              >
-                <feDropShadow
-                  dx="0"
-                  dy="10"
-                  stdDeviation="12"
-                  floodColor={isDark ? "#00000060" : "#00000030"}
-                />
-              </filter>
-              <filter
-                id="goalGlow"
-                x="-80%"
-                y="-80%"
-                width="260%"
-                height="260%"
-              >
-                <feGaussianBlur
-                  in="SourceGraphic"
-                  stdDeviation="6"
-                  result="b"
-                />
-                <feMerge>
-                  <feMergeNode in="b" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              <filter
-                id="carHeadlightGlow"
-                x="-150%"
-                y="-150%"
-                width="400%"
-                height="400%"
-              >
-                <feGaussianBlur
-                  in="SourceGraphic"
-                  stdDeviation="2.5"
-                  result="blur"
-                />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              <radialGradient id="carHeadlightBeam" cx="0%" cy="50%" r="100%">
-                <stop offset="0%" stopColor="#FEF9C3" stopOpacity="0.55" />
-                <stop offset="70%" stopColor="#FDE047" stopOpacity="0.12" />
-                <stop offset="100%" stopColor="#FDE047" stopOpacity="0" />
-              </radialGradient>
-              <linearGradient id="flowLaneGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.95" />
-                <stop offset="50%" stopColor="#A5F3FC" stopOpacity="0.75" />
-                <stop offset="100%" stopColor="#E0F2FE" stopOpacity="0.35" />
+
+              {/* Done section gradient */}
+              <linearGradient id={doneGradId} x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#15803D" stopOpacity="0.78" />
+                <stop offset="100%" stopColor="#22C55E" stopOpacity="0.62" />
               </linearGradient>
-              {/* High-res mesh: orthogonal + diagonal weave (tiled on road surface) */}
-              <pattern
-                id={roadMeshPatternId}
-                patternUnits="userSpaceOnUse"
-                width={18}
-                height={18}
-              >
-                <rect width={18} height={18} fill="none" />
-                <path
-                  d="M0 0 H18 M0 0 V18 M0 9 H18 M9 0 V18"
-                  stroke={
-                    isDark
-                      ? "rgba(255,255,255,0.11)"
-                      : "rgba(255,255,255,0.12)"
-                  }
-                  strokeWidth={0.38}
-                  vectorEffect="non-scaling-stroke"
-                  fill="none"
-                />
-                <path
-                  d="M0 0 L18 18 M18 0 L0 18"
-                  stroke={
-                    isDark
-                      ? "rgba(147,197,253,0.08)"
-                      : "rgba(186,230,253,0.1)"
-                  }
-                  strokeWidth={0.32}
-                  vectorEffect="non-scaling-stroke"
-                  fill="none"
-                />
-                <path
-                  d="M9 0 L18 9 M0 9 L9 18 M9 18 L18 9 M18 9 L9 0"
-                  stroke={
-                    isDark
-                      ? "rgba(56,189,248,0.06)"
-                      : "rgba(125,211,252,0.08)"
-                  }
-                  strokeWidth={0.28}
-                  fill="none"
-                />
-                <circle
-                  cx={9}
-                  cy={9}
-                  r={0.55}
-                  fill={
-                    isDark
-                      ? "rgba(255,255,255,0.1)"
-                      : "rgba(255,255,255,0.12)"
-                  }
-                />
+
+              {/* Road shadow filter */}
+              <filter id="roadShadow" x="-5%" y="-20%" width="110%" height="160%">
+                <feDropShadow dx="0" dy="12" stdDeviation="14" floodColor={isDark ? "#00000070" : "#00000040"} />
+              </filter>
+
+              {/* Road surface mesh pattern */}
+              <pattern id={roadMeshPatternId} patternUnits="userSpaceOnUse" width={20} height={20}>
+                <rect width={20} height={20} fill="none" />
+                {/* Primary grid */}
+                <path d="M0 0 H20 M0 0 V20 M0 10 H20 M10 0 V20"
+                  stroke={isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.1)"}
+                  strokeWidth={0.4} vectorEffect="non-scaling-stroke" fill="none" />
+                {/* Diagonal weave */}
+                <path d="M0 0 L20 20 M20 0 L0 20"
+                  stroke={isDark ? "rgba(147,197,253,0.06)" : "rgba(186,230,253,0.08)"}
+                  strokeWidth={0.3} vectorEffect="non-scaling-stroke" fill="none" />
+                {/* Intersection dots */}
+                <circle cx={10} cy={10} r={0.6} fill={isDark ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.11)"} />
+                <circle cx={0} cy={0} r={0.5} fill={isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"} />
+                <circle cx={20} cy={0} r={0.5} fill={isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"} />
+                <circle cx={0} cy={20} r={0.5} fill={isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.09)"} />
               </pattern>
-              <mask
-                id={roadMeshMaskId}
-                maskUnits="userSpaceOnUse"
-                maskContentUnits="userSpaceOnUse"
-                x={0}
-                y={0}
-                width={cW}
-                height={svgH}
-              >
+
+              {/* Road mesh mask */}
+              <mask id={roadMeshMaskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={0} y={0} width={cW} height={svgH}>
                 <rect x={0} y={0} width={cW} height={svgH} fill="#000" />
-                <path
-                  d={roadPath}
-                  fill="none"
-                  stroke="#fff"
-                  strokeWidth={49}
-                  strokeLinecap="round"
-                />
+                <path d={roadPath} fill="none" stroke="#fff" strokeWidth={52} strokeLinecap="round" />
               </mask>
+
+              {/* Curb/edge stripe pattern */}
+              <pattern id={curbPatternId} patternUnits="userSpaceOnUse" width={28} height={8}>
+                <rect width={14} height={8} fill="rgba(255,220,0,0.75)" />
+                <rect x={14} width={14} height={8} fill="rgba(30,30,30,0.6)" />
+              </pattern>
             </defs>
 
-            {/* Soft sparkles — depth without covering the road */}
-            <g style={{ pointerEvents: "none" }} opacity={isDark ? 0.45 : 0.55}>
+            {/* Background sparkles */}
+            <g style={{ pointerEvents: "none" }} opacity={isDark ? 0.5 : 0.6}>
               {[
-                [0.06, 0.1],
-                [0.18, 0.07],
-                [0.38, 0.14],
-                [0.58, 0.09],
-                [0.78, 0.12],
-                [0.92, 0.2],
-                [0.12, 0.42],
-                [0.48, 0.36],
-                [0.72, 0.44],
-                [0.88, 0.38],
+                [0.06, 0.1], [0.18, 0.07], [0.38, 0.14], [0.58, 0.09],
+                [0.78, 0.12], [0.92, 0.2], [0.12, 0.42], [0.48, 0.36],
+                [0.72, 0.44], [0.88, 0.38], [0.3, 0.25], [0.65, 0.18],
               ].map(([fx, fy], i) => (
-                <circle
-                  key={`sp-${i}`}
-                  cx={fx * cW}
-                  cy={fy * svgH}
-                  r={isDark ? 2.2 : 1.9}
-                  fill={isDark ? "#60A5FA" : "#3B82F6"}
-                >
-                  <animate
-                    attributeName="opacity"
-                    values="0.2;0.95;0.2"
-                    dur={`${2.2 + (i % 5) * 0.35}s`}
-                    repeatCount="indefinite"
-                  />
+                <circle key={`sp-${i}`} cx={fx * cW} cy={fy * svgH} r={isDark ? 2.4 : 2.0}
+                  fill={["#818cf8", "#a78bfa", "#60a5fa", "#34d399"][i % 4]}>
+                  <animate attributeName="opacity" values="0.15;0.9;0.15" dur={`${2.0 + (i % 6) * 0.4}s`} repeatCount="indefinite" />
+                  <animate attributeName="r" values={`${isDark ? 1.5 : 1.2};${isDark ? 2.8 : 2.4};${isDark ? 1.5 : 1.2}`} dur={`${2.0 + (i % 6) * 0.4}s`} repeatCount="indefinite" />
                 </circle>
               ))}
             </g>
 
-            {/* Road layers */}
-            <path
-              d={roadPath}
-              fill="none"
-              stroke="rgba(0,0,0,0.35)"
-              strokeWidth="56"
-              strokeLinecap="round"
-              transform="translate(0,8)"
-              filter="url(#roadShadow)"
-            />
-            <path
-              d={roadPath}
-              fill="none"
-              stroke="#141f30"
-              strokeWidth="58"
-              strokeLinecap="round"
-            />
-            <path
-              d={roadPath}
-              fill="none"
-              stroke="url(#roadGrad)"
-              strokeWidth="50"
-              strokeLinecap="round"
-            />
+            {/* === ROAD LAYERS (outermost → innermost) === */}
 
-            {/* Mesh texture — clipped to road band only */}
-            <rect
-              x={0}
-              y={0}
-              width={cW}
-              height={svgH}
-              fill={`url(#${roadMeshPatternId})`}
-              mask={`url(#${roadMeshMaskId})`}
-              opacity={0.7}
-              style={{
-                pointerEvents: "none",
-                mixBlendMode: "soft-light",
-              }}
-            />
+            {/* 1. Outer shadow */}
+            <path d={roadPath} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth="64"
+              strokeLinecap="round" transform="translate(0,10)" filter="url(#roadShadow)" />
 
-            {/* Completed section overlay */}
-            {totalCompleted > 0 && (
-              <path
-                d={roadPath}
-                fill="none"
-                stroke="url(#doneGrad)"
-                strokeWidth="50"
-                strokeLinecap="round"
-                opacity="0.65"
-                strokeDasharray={`${cW * (totalCompleted / modules.length)} ${cW}`}
-              />
-            )}
+            {/* 2. Road border/curb outer glow */}
+            <path d={roadPath} fill="none" stroke={isDark ? "rgba(99,102,241,0.25)" : "rgba(99,102,241,0.18)"}
+              strokeWidth="62" strokeLinecap="round" />
 
+            {/* 3. Curb edge stripes (yellow/black) - gives road a real border */}
+            <path d={roadPath} fill="none" stroke={`url(#${curbPatternId})`}
+              strokeWidth="58" strokeLinecap="round" opacity="0.65"
+              style={{ mixBlendMode: "overlay" }} />
+
+            {/* 4. Road base asphalt */}
             <path
+              ref={roadPathMeasureRef}
               d={roadPath}
               fill="none"
-              stroke="rgba(255,255,255,0.18)"
+              stroke={`url(#${roadGradId})`}
               strokeWidth="52"
               strokeLinecap="round"
             />
-            <path
-              d={roadPath}
-              fill="none"
-              stroke="url(#roadGrad)"
-              strokeWidth="48"
-              strokeLinecap="round"
-            />
-            <path
-              d={roadPath}
-              fill="none"
-              stroke="rgba(255,255,255,0.07)"
-              strokeWidth="24"
-              strokeLinecap="round"
-            />
-            <path
-              d={roadPath}
-              fill="none"
-              stroke="rgba(255,255,255,0.7)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray="22 16"
-            />
-            {/* Flowing energy line — motion along the journey */}
-            <path
-              d={roadPath}
-              fill="none"
-              stroke="url(#flowLaneGrad)"
-              strokeWidth="5"
-              strokeLinecap="round"
-              opacity={isDark ? 0.55 : 0.5}
-              strokeDasharray="14 36"
-              style={{ pointerEvents: "none" }}
-            >
-              <animate
-                attributeName="stroke-dashoffset"
-                from="0"
-                to="-50"
-                dur="2.8s"
-                repeatCount="indefinite"
-              />
-            </path>
 
-            {/* Number nodes */}
+            {/* 5. Surface texture mesh */}
+            <rect x={0} y={0} width={cW} height={svgH}
+              fill={`url(#${roadMeshPatternId})`}
+              mask={`url(#${roadMeshMaskId})`}
+              opacity={0.75}
+              style={{ pointerEvents: "none", mixBlendMode: "soft-light" }} />
+
+            {/* 6. Subtle inner shadow for depth */}
+            <path d={roadPath} fill="none"
+              stroke={isDark ? "rgba(0,0,0,0.55)" : "rgba(0,0,0,0.35)"}
+              strokeWidth="40" strokeLinecap="round"
+              style={{ mixBlendMode: "multiply" }} />
+
+            {/* 7. Completed section overlay (length matches path geometry to each completed node) */}
+            {doneOverlayLength > 0 && pathTotalLength > 0 && (
+              <path
+                d={roadPath}
+                fill="none"
+                stroke={`url(#${doneGradId})`}
+                strokeWidth="52"
+                strokeLinecap="round"
+                opacity="0.52"
+                strokeDasharray={`${doneOverlayLength} ${pathTotalLength + doneOverlayLength + 24}`}
+              />
+            )}
+
+            {/* 8. Road surface sheen / highlight along top edge */}
+            <path d={roadPath} fill="none"
+              stroke={`url(#${roadEdgeGradId})`}
+              strokeWidth="4" strokeLinecap="round" opacity="0.5" />
+
+            {/* 9. Center dashed lane markings */}
+            <path d={roadPath} fill="none"
+              stroke="rgba(255,255,255,0.65)"
+              strokeWidth="2.5" strokeLinecap="round"
+              strokeDasharray="24 18" />
+
+            {/* 10. Second lane dash (offset) */}
+            <path d={roadPath} fill="none"
+              stroke="rgba(255,255,255,0.2)"
+              strokeWidth="1.2" strokeLinecap="round"
+              strokeDasharray="24 18"
+              strokeDashoffset="21" />
+
+            {/* Goal school: SVG-root layer after road, before nodes (past path end, off asphalt) */}
+            <RoadmapSchoolLayer pins={pins} canvasW={cW} isDark={isDark} />
+
+            {/* === NODES === */}
             {modules.map((mod, i) => (
               <NumberNode
                 key={mod.id}
@@ -1746,14 +1869,12 @@ function DesktopRoadmap({
                 isCurrent={mod.isCurrent}
                 hasVisitedContent={mod.hasVisitedContent}
                 isLocked={mod.isLocked}
-                isFinal={i === modules.length - 1}
-                color={mod.pinColor}
                 isDark={isDark}
-                onClick={() => setSelected(mod)}
+                onClick={() => openSegmentCard(mod)}
               />
             ))}
 
-            {/* Lesson title on each info card */}
+            {/* Labels */}
             {modules.map((mod, i) => (
               <LessonLabel
                 key={`label-${mod.id}`}
@@ -1771,161 +1892,108 @@ function DesktopRoadmap({
         </div>
       </div>
 
-      {/* Interaction hint + zoom */}
-      <div className="absolute bottom-10 right-8 z-20 flex flex-col items-end gap-2">
+      {/* Controls */}
+      <div className="absolute bottom-10 right-8 z-20 flex flex-col items-end gap-2.5">
         <div
-          className="px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide"
+          className="px-3.5 py-1.5 rounded-full text-[10.5px] font-semibold tracking-wide"
           style={{
             color: textMuted,
-            background: isDark ? "rgba(15,23,42,0.75)" : "rgba(255,255,255,0.85)",
+            background: isDark ? "rgba(10,15,26,0.8)" : "rgba(255,255,255,0.88)",
             border: `1px solid ${borderCol}`,
-            boxShadow: isDark
-              ? "0 2px 12px rgba(0,0,0,0.35)"
-              : "0 2px 10px rgba(0,0,0,0.08)",
+            boxShadow: isDark ? "0 2px 12px rgba(0,0,0,0.4)" : "0 2px 10px rgba(0,0,0,0.08)",
             backdropFilter: "blur(8px)",
           }}
         >
           Drag to pan · Scroll to zoom
         </div>
-        <div
-          className="flex items-center rounded-2xl"
+
+        <div className="flex items-center rounded-2xl overflow-hidden"
           style={{
             background: surfaceBg,
             border: `1px solid ${borderCol}`,
-            boxShadow: isDark
-              ? "0 4px 20px rgba(0,0,0,0.5)"
-              : "0 4px 20px rgba(0,0,0,0.1)",
-          }}
-        >
-        {[
-          {
-            label: "+",
-            onClick: () =>
-              setZoom((z) => Math.min(MAX_Z, +(z + 0.15).toFixed(2))),
-            title: "Zoom in",
-          },
-          {
-            label: <Maximize2 size={15} />,
-            onClick: () => {
-              setZoom(1);
-              setPan({ x: 0, y: 0 });
-            },
-            title: "Reset",
-          },
-          {
-            label: "−",
-            onClick: () =>
-              setZoom((z) => Math.max(MIN_Z, +(z - 0.15).toFixed(2))),
-            title: "Zoom out",
-          },
-        ].map((btn, i, arr) => (
-          <div key={i} className="flex items-center">
-            <button
-              onClick={btn.onClick}
-              title={btn.title}
-              className="h-11 w-12 flex items-center justify-center transition-colors cursor-pointer"
-              style={{
-                color: textMuted,
-                borderRadius:
-                  i === 0
-                    ? "14px 0 0 14px"
-                    : i === arr.length - 1
-                      ? "0 14px 14px 0"
-                      : "0",
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = isDark
-                  ? "#334155"
-                  : "#F3F4F6")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "transparent")
-              }
-            >
-              {typeof btn.label === "string" ? (
-                <span className="text-[20px] font-light leading-none">
-                  {btn.label}
-                </span>
-              ) : (
-                btn.label
-              )}
-            </button>
-            {i < arr.length - 1 && (
-              <div style={{ width: 1, height: 22, background: borderCol }} />
-            )}
-          </div>
-        ))}
-      </div>
+            boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.55)" : "0 4px 20px rgba(0,0,0,0.1)",
+            backdropFilter: "blur(10px)",
+          }}>
+          {[
+            { label: "+", onClick: () => setZoom((z) => Math.min(MAX_Z, +(z + 0.15).toFixed(2))), title: "Zoom in" },
+            { label: <Maximize2 size={15} />, onClick: () => { setZoom(1); setPan({ x: 0, y: 0 }); }, title: "Reset" },
+            { label: "−", onClick: () => setZoom((z) => Math.max(MIN_Z, +(z - 0.15).toFixed(2))), title: "Zoom out" },
+          ].map((btn, i, arr) => (
+            <div key={i} className="flex items-center">
+              <button
+                onClick={btn.onClick}
+                title={btn.title}
+                className="h-11 w-12 flex items-center justify-center transition-colors cursor-pointer"
+                style={{ color: textMuted }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? "#1e293b" : "#F3F4F6")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                {typeof btn.label === "string" ? (
+                  <span className="text-[22px] font-light leading-none">{btn.label}</span>
+                ) : btn.label}
+              </button>
+              {i < arr.length - 1 && <div style={{ width: 1, height: 22, background: borderCol }} />}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* UP NEXT banner */}
+      {/* Up Next Banner */}
       {curMod && nextLesson && !allLessonsDone && (
         <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 px-3">
           <button
             type="button"
             onClick={() => onStart(nextLesson.id)}
-            className="flex items-center gap-3 rounded-full px-4 py-2.5 transition-all duration-300 hover:scale-[1.04] hover:shadow-xl active:scale-[0.98] cursor-pointer border border-white/10"
+            className="flex items-center gap-3 rounded-full px-5 py-3 transition-all duration-300 hover:scale-[1.04] hover:shadow-xl active:scale-[0.98] cursor-pointer"
             style={{
               background: isDark
-                ? "linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #172554 100%)"
-                : "linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)",
+                ? "linear-gradient(135deg, #1e293b 0%, #0f172a 55%, #1e1b4b 100%)"
+                : "linear-gradient(135deg, #fff 0%, #f1f5f9 100%)",
               boxShadow: isDark
-                ? "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.25), 0 0 40px rgba(59,130,246,0.15)"
-                : "0 8px 28px rgba(15,23,42,0.12), 0 0 0 1px rgba(59,130,246,0.12)",
+                ? "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.3), 0 0 40px rgba(99,102,241,0.12)"
+                : "0 8px 28px rgba(15,23,42,0.15), 0 0 0 1px rgba(99,102,241,0.18)",
             }}
-            aria-label={
-              totalCompleted === 0
-                ? `Start reading: ${nextLesson.title}`
-                : `Continue to: ${nextLesson.title}`
-            }
           >
-            <div
-              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-lg"
-              style={{
-                background:
-                  "linear-gradient(135deg, #2563EB, #6366F1)",
-                boxShadow: "0 4px 14px rgba(37,99,235,0.45)",
-              }}
-            >
-              <Play size={13} className="text-white" fill="white" />
+            <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "linear-gradient(135deg, #6366F1, #4F46E5)", boxShadow: "0 4px 16px rgba(99,102,241,0.55)" }}>
+              <Play size={14} className="text-white" fill="white" />
             </div>
             <div className="text-left min-w-0">
-              <p
-                className="text-[9px] font-bold uppercase tracking-widest"
-                style={{ color: isDark ? "#94A3B8" : "#64748B" }}
-              >
+              <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: isDark ? "#94A3B8" : "#64748B" }}>
                 {totalCompleted === 0 ? "Start reading" : "Up next"}
               </p>
-              <p
-                className="text-[12px] font-bold max-w-[220px] truncate"
-                style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}
-              >
+              <p className="text-[12.5px] font-bold max-w-[220px] truncate" style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}>
                 {nextLesson.title}
               </p>
             </div>
-            <ChevronRight
-              size={14}
-              className="shrink-0"
-              style={{ color: isDark ? "#64748B" : "#94A3B8" }}
-            />
+            <ChevronRight size={14} className="shrink-0" style={{ color: isDark ? "#64748B" : "#94A3B8" }} />
           </button>
         </div>
       )}
 
-      {/* Module modal */}
+      <SegmentOutOfOrderPrompt
+        isDark={isDark}
+        open={lockPromptModule !== null}
+        onGoBack={onLockPromptGoBack}
+        onContinue={() => {
+          if (!lockPromptModule) return;
+          const next = lockPromptModule;
+          setLockPromptModule(null);
+          setLockContinueAcknowledged(true);
+          setSelected(next);
+        }}
+      />
+
       {selected && (
         <LessonModal
           mod={selected}
           isDark={isDark}
           pdfId={pdfId}
-          onClose={() => setSelected(null)}
+          lockContinueAcknowledged={lockContinueAcknowledged}
+          onClose={onLessonModalClose}
           onStart={(lid) => {
-            setSelected(null);
+            onLessonModalClose();
             onStart(lid);
-          }}
-          onSkip={(lid) => {
-            setSelected(null);
-            onSkip(lid);
           }}
         />
       )}
@@ -1945,9 +2013,7 @@ export default function RoadmapPage() {
 
   const [modules, setModules] = useState<Module[]>([]);
   const [docTitle, setDocTitle] = useState("");
-  const [loadingState, setLoadingState] = useState<"loading" | "ready">(
-    "loading",
-  );
+  const [loadingState, setLoadingState] = useState<"loading" | "ready">("loading");
   const [apiResolved, setApiResolved] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1956,11 +2022,9 @@ export default function RoadmapPage() {
   useEffect(() => {
     const onVisit = () => setVisitBump((n) => n + 1);
     window.addEventListener("docvia-lesson-content-visited", onVisit);
-    return () =>
-      window.removeEventListener("docvia-lesson-content-visited", onVisit);
+    return () => window.removeEventListener("docvia-lesson-content-visited", onVisit);
   }, []);
 
-  // Get completed lesson IDs from progress context
   const docProgress = pdfId ? getDocumentProgress(pdfId) : null;
   const completedLessonIds = docProgress?.completedLessons ?? [];
   const totalCompleted = completedLessonIds.length;
@@ -1970,36 +2034,18 @@ export default function RoadmapPage() {
     const fetchLessons = async () => {
       if (!pdfId) {
         await new Promise<void>((r) => setTimeout(r, 3500));
-        if (!cancelled) {
-          setApiResolved(true);
-          setLoadingState("ready");
-        }
+        if (!cancelled) { setApiResolved(true); setLoadingState("ready"); }
         return;
       }
-      const result = await pdfService.generateLessons(
-        pdfId,
-        user?.id ?? "",
-        token ?? undefined,
-      );
+      const result = await pdfService.generateLessons(pdfId, user?.id ?? "", token ?? undefined);
       if (cancelled) return;
       if (result.success && result.data && result.data.lessons?.length > 0) {
         setDocTitle(result.data.title);
-        setModules(
-          mapLessonsToModules(
-            result.data.lessons,
-            completedLessonIds,
-            result.data.title,
-            pdfId ? getVisitedLessonIds(pdfId) : new Set<string>(),
-          ),
-        );
+        setModules(mapLessonsToModules(result.data.lessons, completedLessonIds, result.data.title, pdfId ? getVisitedLessonIds(pdfId) : new Set<string>()));
         setErrorMessage(null);
       } else {
-        // Delete stale/bad cached entry so retrying will re-generate cleanly
         await pdfService.deleteLessons(pdfId, user?.id ?? "", token ?? undefined).catch(() => {});
-        const msg =
-          (result as { error?: string; message?: string }).message ||
-          (result as { error?: string }).error ||
-          "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
+        const msg = (result as { error?: string; message?: string }).message || (result as { error?: string }).error || "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
         setErrorMessage(msg);
         setModules([]);
       }
@@ -2008,26 +2054,17 @@ export default function RoadmapPage() {
     };
     fetchLessons().catch((err: unknown) => {
       if (!cancelled) {
-        // Also clear cache on unexpected errors
-        if (pdfId && user?.id) {
-          pdfService.deleteLessons(pdfId, user.id, token ?? undefined).catch(() => {});
-        }
-        const msg =
-          err instanceof Error
-            ? err.message
-            : "An unexpected error occurred while generating lessons.";
+        if (pdfId && user?.id) { pdfService.deleteLessons(pdfId, user.id, token ?? undefined).catch(() => {}); }
+        const msg = err instanceof Error ? err.message : "An unexpected error occurred while generating lessons.";
         setErrorMessage(msg);
         setModules([]);
         setApiResolved(true);
         setLoadingState("ready");
       }
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [pdfId, user?.id, token, retryKey]);
 
-  // Re-sync modules when progress or lesson visits change (reader opened a lesson, etc.)
   useEffect(() => {
     const done = new Set(completedLessonIds.map((id) => String(id).trim()));
     const visited = pdfId ? getVisitedLessonIds(pdfId) : new Set<string>();
@@ -2037,19 +2074,12 @@ export default function RoadmapPage() {
         const lessonId = mod.lessons[0]?.id;
         if (!lessonId) return mod;
         const isCompleted = done.has(String(lessonId));
-        const hasVisitedContent =
-          visited.has(String(lessonId)) || isCompleted;
-        const firstIncompleteIdx = prev.findIndex(
-          (m) => !done.has(String(m.lessons[0]?.id ?? "")),
-        );
-        const isCurrent =
-          idx ===
-          (firstIncompleteIdx === -1 ? prev.length - 1 : firstIncompleteIdx);
+        const hasVisitedContent = visited.has(String(lessonId)) || isCompleted;
+        const firstIncompleteIdx = prev.findIndex((m) => !done.has(String(m.lessons[0]?.id ?? "")));
+        const isCurrent = idx === (firstIncompleteIdx === -1 ? prev.length - 1 : firstIncompleteIdx);
         const lastCompletedIdx = (() => {
           let last = -1;
-          prev.forEach((m, i) => {
-            if (done.has(String(m.lessons[0]?.id ?? ""))) last = i;
-          });
+          prev.forEach((m, i) => { if (done.has(String(m.lessons[0]?.id ?? ""))) last = i; });
           return last;
         })();
         const isLocked = idx > lastCompletedIdx + 1;
@@ -2061,11 +2091,7 @@ export default function RoadmapPage() {
           isLocked,
           percentage: isCompleted ? 100 : 0,
           lessonsCompleted: isCompleted ? 1 : 0,
-          lessons: mod.lessons.map((l) => ({
-            ...l,
-            isCompleted: done.has(String(l.id)),
-            isCurrent,
-          })),
+          lessons: mod.lessons.map((l) => ({ ...l, isCompleted: done.has(String(l.id)), isCurrent })),
         };
       });
     });
@@ -2081,86 +2107,40 @@ export default function RoadmapPage() {
   useTimeTracker({ documentId: pdfId, lessonId: roadmapTimerLessonId });
 
   if (loadingState === "loading") {
-    return (
-      <RoadmapLoadingPage
-        onClose={() => navigate("/dashboard")}
-        apiResolved={apiResolved}
-        onReady={() => setLoadingState("ready")}
-      />
-    );
+    return <RoadmapLoadingPage onClose={() => navigate("/dashboard")} apiResolved={apiResolved} onReady={() => setLoadingState("ready")} />;
   }
 
-  // ── Error state: generation failed ───────────────────────────────────────
+  // Error state
   if (errorMessage) {
-    const pageBgErr = isDark ? "#0f172a" : "#F0F2F5";
+    const pageBgErr = isDark ? "#080e1c" : "#F0F2F5";
     const borderColErr = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
     const textMutedErr = isDark ? "#94A3B8" : "#6B7280";
     return (
-      <div
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
-        style={{ background: pageBgErr, fontFamily: "Poppins, sans-serif" }}
-      >
-        {/* Close button */}
-        <button
-          onClick={() => navigate("/dashboard")}
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
+        style={{ background: pageBgErr, fontFamily: "Poppins, sans-serif" }}>
+        <button onClick={() => navigate("/dashboard")}
           className="absolute top-5 left-5 h-9 w-9 rounded-full flex items-center justify-center transition hover:scale-105 cursor-pointer"
-          style={{ background: pageBgErr, border: `1px solid ${borderColErr}` }}
-        >
+          style={{ background: pageBgErr, border: `1px solid ${borderColErr}` }}>
           <X size={15} style={{ color: textMutedErr }} />
         </button>
-
-        {/* Error card */}
-        <div
-          className="w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center gap-4"
-          style={{
-            background: isDark ? "#1e293b" : "#FFFFFF",
-            border: `1px solid ${borderColErr}`,
-            boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.5)" : "0 8px 32px rgba(0,0,0,0.08)",
-          }}
-        >
-          <div
-            className="h-16 w-16 rounded-full flex items-center justify-center text-3xl"
-            style={{ background: isDark ? "#7f1d1d33" : "#FEF2F2" }}
-          >
-            📄
-          </div>
-
+        <div className="w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center gap-4"
+          style={{ background: isDark ? "#0d1626" : "#FFFFFF", border: `1px solid ${borderColErr}`, boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.6)" : "0 8px 32px rgba(0,0,0,0.08)" }}>
+          <div className="h-16 w-16 rounded-full flex items-center justify-center text-3xl"
+            style={{ background: isDark ? "rgba(127,29,29,0.3)" : "#FEF2F2" }}>📄</div>
           <div>
-            <h2
-              className="text-lg font-bold mb-1"
-              style={{ color: isDark ? "#F1F5F9" : "#111827" }}
-            >
-              Couldn't Generate Lessons
-            </h2>
-            <p
-              className="text-sm leading-relaxed"
-              style={{ color: textMutedErr }}
-            >
-              {errorMessage}
-            </p>
+            <h2 className="text-lg font-bold mb-1" style={{ color: isDark ? "#F1F5F9" : "#111827" }}>Couldn't Generate Lessons</h2>
+            <p className="text-sm leading-relaxed" style={{ color: textMutedErr }}>{errorMessage}</p>
           </div>
-
           <div className="flex flex-col gap-2 w-full pt-2">
             <button
-              onClick={() => {
-                setErrorMessage(null);
-                setLoadingState("loading");
-                setApiResolved(false);
-                setRetryKey((k) => k + 1);
-              }}
+              onClick={() => { setErrorMessage(null); setLoadingState("loading"); setApiResolved(false); setRetryKey((k) => k + 1); }}
               className="w-full py-3 rounded-2xl text-sm font-semibold text-white transition hover:opacity-90 cursor-pointer"
-              style={{ background: "linear-gradient(135deg,#2563EB,#4F46E5)" }}
-            >
+              style={{ background: "linear-gradient(135deg, #6366F1, #4F46E5)" }}>
               Try Again
             </button>
-            <button
-              onClick={() => navigate("/dashboard")}
+            <button onClick={() => navigate("/dashboard")}
               className="w-full py-3 rounded-2xl text-sm font-semibold transition hover:opacity-80 cursor-pointer"
-              style={{
-                background: isDark ? "#334155" : "#F3F4F6",
-                color: textMutedErr,
-              }}
-            >
+              style={{ background: isDark ? "#1e293b" : "#F3F4F6", color: textMutedErr }}>
               Back to Dashboard
             </button>
           </div>
@@ -2169,34 +2149,44 @@ export default function RoadmapPage() {
     );
   }
 
-  const pageBg = isDark ? "#0f172a" : "#F0F2F5";
   const borderCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const textPri = isDark ? "#F1F5F9" : "#111827";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
 
   const totalLessons = modules.length;
-  const progressPct =
-    totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
+  const progressPct = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
   const displayTitle = docTitle || "Loading…";
 
-  const handleStart = (lessonId: string) => {
-    navigate(`/reader/${pdfId ?? "unknown"}/${lessonId}`);
-  };
-  const handleSkip = (lessonId: string) => {
-    navigate(`/reader/${pdfId ?? "unknown"}/${lessonId}`);
-  };
+  const handleStart = (lessonId: string) => navigate(`/reader/${pdfId ?? "unknown"}/${lessonId}`);
 
   return (
     <>
       <style>{`
         @keyframes modalPop {
-          0%   { transform: scale(0.9) translateY(10px); opacity: 0; }
+          0%   { transform: scale(0.88) translateY(12px); opacity: 0; }
           70%  { transform: scale(1.02); opacity: 1; }
           100% { transform: scale(1) translateY(0); }
         }
         @keyframes carBounce {
           0%, 100% { transform: translateX(-50%) translateY(0px); }
-          50%       { transform: translateX(-50%) translateY(-6px); }
+          50%       { transform: translateX(-50%) translateY(-7px); }
+        }
+        @keyframes roadmap-orb-drift {
+          0%, 100% { transform: translate(0%, 0%) scale(1); }
+          33%       { transform: translate(4%, 3%) scale(1.06); }
+          66%       { transform: translate(-3%, 2%) scale(0.95); }
+        }
+        @keyframes roadmap-orb-drift-alt {
+          0%, 100% { transform: translate(0%, 0%) scale(1); }
+          40%       { transform: translate(-5%, -4%) scale(1.08); }
+          70%       { transform: translate(3%, 5%) scale(0.94); }
+        }
+        @keyframes roadmap-bar-shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        .roadmap-motion-ambient {
+          will-change: transform;
         }
       `}</style>
 
@@ -2204,80 +2194,63 @@ export default function RoadmapPage() {
         className="fixed inset-0 z-50 flex flex-col"
         style={{
           background: isDark
-            ? "linear-gradient(168deg, #0a0f1a 0%, #0f172a 38%, #111827 100%)"
-            : "linear-gradient(168deg, #eef2ff 0%, #f1f5f9 42%, #f8fafc 100%)",
+            ? "linear-gradient(160deg, #080e1c 0%, #0c1424 45%, #0a0f1a 100%)"
+            : "linear-gradient(160deg, #eef2ff 0%, #f1f5f9 45%, #f8fafc 100%)",
           fontFamily: "Poppins, sans-serif",
         }}
       >
         {/* Header */}
-        <header className="shrink-0 flex items-center px-5 py-8 gap-4 relative z-10">
+        <header className="shrink-0 flex items-center px-4 sm:px-5 py-4 md:py-5 gap-3 md:gap-4 relative z-10 min-h-0">
           <button
             onClick={() => navigate("/dashboard")}
             className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition hover:scale-105 cursor-pointer"
-            style={{ background: pageBg, border: `1px solid ${borderCol}` }}
+            style={{
+              background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+              border: `1px solid ${borderCol}`,
+              backdropFilter: "blur(8px)",
+            }}
           >
             <X size={15} style={{ color: textMuted }} />
           </button>
 
-          {/* Progress pill — centre-aligned in header */}
-          <div
-            className="absolute left-1/2 -translate-x-1/2"
-            style={{ width: 420 }}
-          >
+          {/* Progress pill */}
+          <div className="absolute left-1/2 -translate-x-1/2" style={{ width: "min(440px, calc(100vw - 7rem))" }}>
             <div
-              className="rounded-2xl px-5 py-2.5"
+              className="rounded-2xl px-5 py-3"
               style={{
-                background: isDark
-                  ? "rgba(15,23,42,0.65)"
-                  : "rgba(255,255,255,0.82)",
-                backdropFilter: "blur(14px)",
-                WebkitBackdropFilter: "blur(14px)",
-                border: isDark
-                  ? "1px solid rgba(148,163,184,0.18)"
-                  : "1px solid rgba(0,0,0,0.06)",
+                background: isDark ? "rgba(8,14,28,0.75)" : "rgba(255,255,255,0.85)",
+                backdropFilter: "blur(16px)",
+                WebkitBackdropFilter: "blur(16px)",
+                border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)",
                 boxShadow: isDark
-                  ? "0 0 0 1px rgba(59,130,246,0.12), 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)"
+                  ? "0 0 0 1px rgba(99,102,241,0.15), 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)"
                   : "0 8px 28px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.95)",
               }}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span
-                  className="text-[13px] font-semibold truncate max-w-[180px]"
-                  style={{ color: textPri }}
-                >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[13px] font-semibold truncate max-w-[200px]" style={{ color: textPri }}>
                   {displayTitle}
                 </span>
                 <span className="flex-1" />
                 <span className="text-[11px]" style={{ color: textMuted }}>
-                  {totalCompleted}/{totalLessons} lessons
+                  {totalCompleted}/{totalLessons} done
                 </span>
-                <span
-                  className="text-[14px] font-bold"
-                  style={{ color: "#22C55E" }}
-                >
+                <span className="text-[14px] font-bold" style={{ color: progressPct === 100 ? "#22C55E" : "#6366F1" }}>
                   {progressPct}%
                 </span>
               </div>
-              <div
-                className="w-full rounded-full overflow-hidden"
-                style={{
-                  height: 6,
-                  background: isDark ? "#1e293b" : "#E2E8F0",
-                  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.12)",
-                }}
-              >
+              <div className="w-full rounded-full overflow-hidden" style={{ height: 7, background: isDark ? "rgba(255,255,255,0.06)" : "#E2E8F0", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.15)" }}>
                 <div
                   className="roadmap-motion-ambient h-full rounded-full relative overflow-hidden"
                   style={{
                     width: `${progressPct}%`,
-                    background:
-                      "linear-gradient(90deg,#2563EB,#6366F1,#22C55E,#6366F1)",
+                    background: progressPct === 100
+                      ? "linear-gradient(90deg, #16A34A, #22C55E)"
+                      : "linear-gradient(90deg, #6366F1, #818cf8, #a78bfa, #818cf8)",
                     backgroundSize: "200% 100%",
                     transition: "width 0.8s ease",
-                    animation:
-                      progressPct > 0 && progressPct < 100
-                        ? "roadmap-bar-shimmer 4s linear infinite"
-                        : undefined,
+                    animation: progressPct > 0 && progressPct < 100 ? "roadmap-bar-shimmer 3s linear infinite" : undefined,
+                    boxShadow: progressPct > 0 ? `0 0 8px ${progressPct === 100 ? "rgba(34,197,94,0.6)" : "rgba(99,102,241,0.5)"}` : undefined,
                   }}
                 />
               </div>
@@ -2288,46 +2261,29 @@ export default function RoadmapPage() {
 
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl transition hover:bg-opacity-80 shrink-0 cursor-pointer"
-            style={{ background: pageBg, border: `1px solid ${borderCol}` }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl transition hover:opacity-80 shrink-0 cursor-pointer"
+            style={{
+              background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
+              border: `1px solid ${borderCol}`,
+              backdropFilter: "blur(8px)",
+            }}
           >
-            {isDark ? (
-              <Sun size={15} className="text-yellow-400" />
-            ) : (
-              <Moon size={15} style={{ color: textMuted }} />
-            )}
-            <span
-              className="text-[12px] font-medium"
-              style={{ color: textMuted }}
-            >
-              {isDark ? "Dark Mode" : "Light Mode"}
+            {isDark ? <Sun size={15} className="text-yellow-400" /> : <Moon size={15} style={{ color: textMuted }} />}
+            <span className="text-[12px] font-medium" style={{ color: textMuted }}>
+              {isDark ? "Dark" : "Light"}
             </span>
           </button>
         </header>
 
-        {/* Desktop roadmap */}
+        {/* Desktop */}
         <div className="hidden md:flex flex-1 overflow-hidden">
-          <DesktopRoadmap
-            isDark={isDark}
-            modules={modules}
-            pdfId={pdfId}
-            onStart={handleStart}
-            onSkip={handleSkip}
-            totalCompleted={totalCompleted}
-          />
+          <DesktopRoadmap isDark={isDark} modules={modules} pdfId={pdfId} onStart={handleStart} totalCompleted={totalCompleted} />
         </div>
 
-        {/* Mobile roadmap */}
+        {/* Mobile */}
         <div className="flex md:hidden flex-1 overflow-y-auto">
           <div className="w-full">
-            <MobileRoadmap
-              isDark={isDark}
-              modules={modules}
-              pdfId={pdfId}
-              onStart={handleStart}
-              onSkip={handleSkip}
-              totalCompleted={totalCompleted}
-            />
+            <MobileRoadmap isDark={isDark} modules={modules} pdfId={pdfId} onStart={handleStart} totalCompleted={totalCompleted} />
           </div>
         </div>
       </div>
