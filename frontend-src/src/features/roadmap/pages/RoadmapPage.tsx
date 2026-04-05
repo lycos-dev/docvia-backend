@@ -1,4 +1,11 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useId,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import RoadmapLoadingPage from "./RoadmapLoadingPage";
 import { useAuth } from "../../../shared/contexts/AuthContext";
@@ -174,130 +181,6 @@ function mapLessonsToModules(
   });
 }
 
-// ─── Fallback / Demo Data ─────────────────────────────────────────────────────
-const MODULES: Module[] = [
-  {
-    id: "m1",
-    title: "What is Software Testing?",
-    segment: 1,
-    overview: "What software testing is and why it matters.",
-    isCompleted: true,
-    isCurrent: false,
-    hasVisitedContent: true,
-    isLocked: false,
-    percentage: 100,
-    lessonsCompleted: 1,
-    totalLessons: 1,
-    pinColor: "#EF4444",
-    pinEmoji: "🎯",
-    lessons: [
-      {
-        id: "l1",
-        title: "What is Software Testing?",
-        isCompleted: true,
-        isCurrent: false,
-        durationMin: 12,
-      },
-    ],
-  },
-  {
-    id: "m2",
-    title: "Boundary Value Analysis",
-    segment: 2,
-    overview: "Boundary values and edge cases for inputs.",
-    isCompleted: true,
-    isCurrent: false,
-    hasVisitedContent: true,
-    isLocked: false,
-    percentage: 100,
-    lessonsCompleted: 1,
-    totalLessons: 1,
-    pinColor: "#F97316",
-    pinEmoji: "📦",
-    lessons: [
-      {
-        id: "l4",
-        title: "Boundary Value Analysis",
-        isCompleted: true,
-        isCurrent: false,
-        durationMin: 18,
-      },
-    ],
-  },
-  {
-    id: "m3",
-    title: "Use Case Testing",
-    segment: 3,
-    overview: "Tests built from use cases and real user flows.",
-    isCompleted: false,
-    isCurrent: true,
-    hasVisitedContent: false,
-    isLocked: false,
-    percentage: 0,
-    lessonsCompleted: 0,
-    totalLessons: 1,
-    pinColor: "#22C55E",
-    pinEmoji: "⚡",
-    lessons: [
-      {
-        id: "l8",
-        title: "Use Case Testing",
-        isCompleted: false,
-        isCurrent: true,
-        durationMin: 22,
-      },
-    ],
-  },
-  {
-    id: "m4",
-    title: "Branch Coverage",
-    segment: 4,
-    overview: "Branch coverage and covering decision paths.",
-    isCompleted: false,
-    isCurrent: false,
-    hasVisitedContent: false,
-    isLocked: false,
-    percentage: 0,
-    lessonsCompleted: 0,
-    totalLessons: 1,
-    pinColor: "#3B82F6",
-    pinEmoji: "🔍",
-    lessons: [
-      {
-        id: "l10",
-        title: "Branch Coverage",
-        isCompleted: false,
-        isCurrent: false,
-        durationMin: 20,
-      },
-    ],
-  },
-  {
-    id: "m5",
-    title: "Certification Test",
-    segment: 5,
-    overview: "Quick review of the main ideas from earlier segments.",
-    isCompleted: false,
-    isCurrent: false,
-    hasVisitedContent: false,
-    isLocked: true,
-    percentage: 0,
-    lessonsCompleted: 0,
-    totalLessons: 1,
-    pinColor: "#8B5CF6",
-    pinEmoji: "🏆",
-    lessons: [
-      {
-        id: "l14",
-        title: "Certification Test",
-        isCompleted: false,
-        isCurrent: false,
-        durationMin: 60,
-      },
-    ],
-  },
-];
-
 // ─── SVG Road geometry (dynamic — scales with module count) ──────────────────
 const C_H = 380;
 const ROAD_Y_CENTER = 160;
@@ -432,6 +315,7 @@ function NumberNode({
   isDark: boolean;
   onClick: () => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   const r = NODE_R;
   const { roadY, nodeY, PILL_W, PILL_H, PILL_X, PILL_Y } = getCardLayout(
     x,
@@ -503,8 +387,20 @@ function NumberNode({
   const schX = x - SCH_W / 2;
   const schY = nodeY - r - SCH_H - 4;
 
+  const cardLift =
+    hovered && !isLocked
+      ? isDark
+        ? "drop-shadow(0 10px 22px rgba(59,130,246,0.35))"
+        : "drop-shadow(0 8px 20px rgba(37,99,235,0.22))"
+      : "drop-shadow(0 2px 8px rgba(0,0,0,0.12))";
+
   return (
-    <g onClick={onClick} style={{ cursor: "pointer" }}>
+    <g
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ cursor: isLocked ? "default" : "pointer" }}
+    >
       {/* Road → node (vertical dashed; ends at node center) */}
       <line
         x1={x}
@@ -688,12 +584,15 @@ function NumberNode({
         y={PILL_Y}
         width={PILL_W}
         height={PILL_H}
-        rx="10"
+        rx="12"
         fill={pillBg}
         stroke={pillBord}
-        strokeWidth="1.5"
+        strokeWidth={hovered && !isLocked ? 2.25 : 1.5}
         opacity={isLocked ? 0.65 : 1}
-        style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.10))" }}
+        style={{
+          filter: cardLift,
+          transition: "stroke-width 0.2s ease, filter 0.2s ease",
+        }}
       />
 
       <text
@@ -861,7 +760,7 @@ function LessonModal({
           background: surfaceBg,
           borderRadius: 24,
           padding: "24px",
-          width: 400,
+          width: "min(432px, calc(100vw - 32px))",
           maxWidth: "calc(100vw - 32px)",
           boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
           animation: "modalPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both",
@@ -947,34 +846,53 @@ function LessonModal({
           </div>
         </div>
 
-        {/* Lesson overview (per segment) */}
+        {/* Lesson overview — heading left-only; body justified */}
         <div
           className="mb-4"
           style={{
-            borderRadius: 12,
-            padding: "14px 16px",
-            textAlign: "center",
-            background: isDark ? "rgba(37, 99, 235, 0.14)" : "#EFF6FF",
-            border: `1px solid ${isDark ? "rgba(96, 165, 250, 0.45)" : "#93C5FD"}`,
+            borderRadius: 14,
+            padding: "16px 18px",
+            background: isDark
+              ? "linear-gradient(155deg, rgba(37,99,235,0.2) 0%, rgba(15,23,42,0.95) 55%)"
+              : "linear-gradient(155deg, #EFF6FF 0%, #FFFFFF 65%)",
+            border: `1px solid ${isDark ? "rgba(96, 165, 250, 0.42)" : "#BFDBFE"}`,
+            boxShadow: isDark
+              ? "inset 0 1px 0 rgba(255,255,255,0.05)"
+              : "inset 0 1px 0 rgba(255,255,255,0.9)",
           }}
         >
           <p
             style={{
-              fontSize: 13,
+              fontSize: 11,
               fontWeight: 700,
+              letterSpacing: "0.07em",
+              textTransform: "uppercase",
               color: isDark ? "#93C5FD" : "#2563EB",
-              margin: "0 0 10px",
+              margin: "0 0 12px",
               fontFamily: "Poppins,sans-serif",
+              textAlign: "left",
+              textAlignLast: "left",
+              width: "100%",
+              display: "flex",
+              alignItems: "baseline",
+              flexWrap: "wrap",
+              columnGap: "0.65em",
+              rowGap: "0.25em",
             }}
           >
-            Lesson Overview
+            <span style={{ letterSpacing: "0.07em" }}>Lesson</span>
+            <span style={{ letterSpacing: "0.07em" }}>Overview</span>
           </p>
           <p
             style={{
-              fontSize: 12,
-              lineHeight: 1.55,
-              color: isDark ? "#7DD3FC" : "#1D4ED8",
+              fontSize: 13,
+              lineHeight: 1.65,
+              color: isDark ? "#CBD5E1" : "#374151",
               margin: 0,
+              paddingLeft: 14,
+              borderLeft: `3px solid ${isDark ? "rgba(59,130,246,0.55)" : "rgba(37,99,235,0.35)"}`,
+              textAlign: "justify",
+              textAlignLast: "left",
               fontFamily: "Poppins,sans-serif",
               fontWeight: 400,
             }}
@@ -1086,13 +1004,40 @@ function MobileRoadmap({
 
   return (
     <>
-      <div className="px-4 py-6 pb-24">
+      <div
+        className="relative px-4 py-6 pb-24 min-h-full overflow-hidden"
+        style={{
+          background: isDark
+            ? "linear-gradient(180deg, rgba(37,99,235,0.1) 0%, transparent 32%, rgba(15,23,42,0.55) 100%)"
+            : "linear-gradient(180deg, rgba(59,130,246,0.1) 0%, transparent 35%, rgba(241,245,249,0.95) 100%)",
+        }}
+      >
+        <div
+          className="roadmap-motion-ambient pointer-events-none absolute -top-24 -right-16 h-48 w-48 rounded-full blur-[56px] opacity-60"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(59,130,246,0.5) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(99,102,241,0.35) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift 20s ease-in-out infinite",
+          }}
+          aria-hidden
+        />
+        <div
+          className="roadmap-motion-ambient pointer-events-none absolute bottom-32 -left-20 h-44 w-44 rounded-full blur-[52px] opacity-50"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift-alt 24s ease-in-out infinite",
+          }}
+          aria-hidden
+        />
+        <div className="relative z-[1]">
       {modules.map((mod, i) => (
         <div key={mod.id} className="flex gap-4">
           <div className="flex flex-col items-center">
             <button
               onClick={() => setSelected(mod)}
-              className="h-11 w-11 rounded-full flex items-center justify-center shrink-0 text-lg transition-transform hover:scale-110 relative"
+              className="h-11 w-11 rounded-full flex items-center justify-center shrink-0 text-lg transition-all duration-300 hover:scale-110 active:scale-95 relative"
               style={{
                 background: mod.isCompleted
                   ? "#22C55E"
@@ -1108,7 +1053,7 @@ function MobileRoadmap({
                 border: `2.5px solid ${mod.isCompleted ? "#16A34A" : mod.isCurrent ? "#D97706" : isDark ? "#475569" : "#D1D5DB"}`,
                 boxShadow:
                   !mod.isLocked && mod.isCurrent
-                    ? "0 0 0 4px rgba(245,158,11,0.35)"
+                    ? "0 0 0 4px rgba(245,158,11,0.35), 0 6px 20px rgba(245,158,11,0.25)"
                     : "none",
                 color:
                   mod.isCompleted || mod.isCurrent
@@ -1204,13 +1149,17 @@ function MobileRoadmap({
           <div className="flex-1 pb-5">
             <button
               onClick={() => setSelected(mod)}
-              className="w-full text-left rounded-2xl px-4 py-3 transition-all hover:scale-[1.01]"
+              className="w-full text-left rounded-2xl px-4 py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.99] hover:-translate-y-0.5"
               style={{
-                background: surfaceBg,
+                background: mod.isCurrent
+                  ? isDark
+                    ? "linear-gradient(145deg, rgba(245,158,11,0.12) 0%, #1e293b 45%)"
+                    : "linear-gradient(145deg, rgba(245,158,11,0.15) 0%, #FFFFFF 50%)"
+                  : surfaceBg,
                 border: `1.5px solid ${mod.isCurrent ? "#F59E0B" : borderCol}`,
                 boxShadow: mod.isCurrent
-                  ? "0 0 0 3px rgba(245,158,11,0.2), 0 4px 16px rgba(0,0,0,0.1)"
-                  : `0 2px 8px rgba(0,0,0,${isDark ? "0.25" : "0.06"})`,
+                  ? "0 0 0 3px rgba(245,158,11,0.22), 0 8px 24px rgba(245,158,11,0.12), 0 4px 12px rgba(0,0,0,0.08)"
+                  : `0 2px 10px rgba(0,0,0,${isDark ? "0.28" : "0.07"})`,
                 opacity: mod.isLocked ? 0.7 : 1,
               }}
             >
@@ -1246,6 +1195,7 @@ function MobileRoadmap({
           </div>
         </div>
       ))}
+        </div>
 
       {selected && (
         <LessonModal
@@ -1266,14 +1216,18 @@ function MobileRoadmap({
       </div>
 
       {curMod && nextLesson && !allLessonsDone && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-20 w-[min(100%,calc(100vw-2rem))]">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-20 w-[min(100%,calc(100vw-2rem))] px-1">
           <button
             type="button"
             onClick={() => onStart(nextLesson.id)}
-            className="flex items-center gap-3 rounded-full px-4 py-2.5 w-full transition-transform active:scale-[0.98] cursor-pointer"
+            className="flex items-center gap-3 rounded-full px-4 py-2.5 w-full transition-all duration-300 active:scale-[0.98] cursor-pointer border border-white/10"
             style={{
-              background: isDark ? "#1C1C1E" : "#1F2937",
-              boxShadow: "0 6px 28px rgba(0,0,0,0.35)",
+              background: isDark
+                ? "linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #172554 100%)"
+                : "linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)",
+              boxShadow: isDark
+                ? "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.25)"
+                : "0 8px 28px rgba(15,23,42,0.12), 0 0 0 1px rgba(59,130,246,0.12)",
             }}
             aria-label={
               totalCompleted === 0
@@ -1282,20 +1236,34 @@ function MobileRoadmap({
             }
           >
             <div
-              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "#2563EB" }}
+              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-lg"
+              style={{
+                background:
+                  "linear-gradient(135deg, #2563EB, #6366F1)",
+                boxShadow: "0 4px 14px rgba(37,99,235,0.45)",
+              }}
             >
               <Play size={13} className="text-white" fill="white" />
             </div>
             <div className="text-left min-w-0 flex-1">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+              <p
+                className="text-[9px] font-bold uppercase tracking-widest"
+                style={{ color: isDark ? "#94A3B8" : "#64748B" }}
+              >
                 {totalCompleted === 0 ? "Start reading" : "Up next"}
               </p>
-              <p className="text-[12px] font-bold text-white truncate">
+              <p
+                className="text-[12px] font-bold truncate"
+                style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}
+              >
                 {nextLesson.title}
               </p>
             </div>
-            <ChevronRight size={14} className="text-gray-500 shrink-0" />
+            <ChevronRight
+              size={14}
+              className="shrink-0"
+              style={{ color: isDark ? "#64748B" : "#94A3B8" }}
+            />
           </button>
         </div>
       )}
@@ -1331,6 +1299,10 @@ function DesktopRoadmap({
   const surfaceBg = isDark ? "#1e293b" : "#FFFFFF";
   const borderCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
+
+  const roadMeshUid = useId().replace(/:/g, "");
+  const roadMeshPatternId = `road-mesh-${roadMeshUid}`;
+  const roadMeshMaskId = `road-mesh-mask-${roadMeshUid}`;
 
   const onMD = useCallback(
     (e: React.MouseEvent) => {
@@ -1403,9 +1375,74 @@ function DesktopRoadmap({
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden relative">
+      {/* Atmospheric backdrop + floating orbs (does not pan) */}
+      <div
+        className="absolute inset-0 pointer-events-none overflow-hidden"
+        aria-hidden
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            background: isDark
+              ? "radial-gradient(ellipse 95% 60% at 50% -18%, rgba(59,130,246,0.28) 0%, transparent 55%), radial-gradient(ellipse 75% 50% at 100% 100%, rgba(139,92,246,0.18) 0%, transparent 52%), radial-gradient(ellipse 60% 45% at 0% 90%, rgba(34,197,94,0.1) 0%, transparent 50%), radial-gradient(ellipse 50% 40% at 80% 20%, rgba(245,158,11,0.08) 0%, transparent 45%)"
+              : "radial-gradient(ellipse 90% 55% at 50% -12%, rgba(59,130,246,0.2) 0%, transparent 52%), radial-gradient(ellipse 70% 48% at 100% 100%, rgba(139,92,246,0.12) 0%, transparent 50%), radial-gradient(ellipse 55% 40% at 0% 88%, rgba(34,197,94,0.08) 0%, transparent 48%)",
+          }}
+        />
+        {/* Slow-moving colour orbs */}
+        <div
+          className="roadmap-motion-ambient absolute -top-[20%] -left-[10%] h-[55%] w-[55%] rounded-full blur-[80px]"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(59,130,246,0.45) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(99,102,241,0.35) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift 18s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="roadmap-motion-ambient absolute -bottom-[15%] -right-[8%] h-[50%] w-[48%] rounded-full blur-[72px]"
+          style={{
+            background: isDark
+              ? "radial-gradient(circle, rgba(168,85,247,0.35) 0%, transparent 70%)"
+              : "radial-gradient(circle, rgba(59,130,246,0.22) 0%, transparent 70%)",
+            animation: "roadmap-orb-drift-alt 22s ease-in-out infinite",
+          }}
+        />
+        <div
+          className="roadmap-motion-ambient absolute top-[30%] right-[5%] h-[35%] w-[40%] rounded-full blur-[64px] opacity-70"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(34,197,94,0.25) 0%, transparent 68%)",
+            animation: "roadmap-orb-drift 26s ease-in-out infinite reverse",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.45] dark:opacity-[0.32]"
+          style={{
+            backgroundImage: `radial-gradient(${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"} 1px, transparent 1px)`,
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-35 dark:opacity-28 mix-blend-overlay"
+          style={{
+            background: isDark
+              ? "repeating-linear-gradient(-12deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 3px)"
+              : "repeating-linear-gradient(-12deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 3px)",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-35 dark:opacity-30"
+          style={{
+            background: isDark
+              ? "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0.65) 100%)"
+              : "linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(226,232,240,0.85) 100%)",
+          }}
+        />
+      </div>
+
       <div
         ref={wrapRef}
-        className="flex-1 relative overflow-hidden select-none"
+        className="flex-1 relative overflow-hidden select-none z-[1]"
         style={{ cursor: grabbing ? "grabbing" : "grab" }}
         onMouseDown={onMD}
       >
@@ -1488,7 +1525,112 @@ function DesktopRoadmap({
                 <stop offset="70%" stopColor="#FDE047" stopOpacity="0.12" />
                 <stop offset="100%" stopColor="#FDE047" stopOpacity="0" />
               </radialGradient>
+              <linearGradient id="flowLaneGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.95" />
+                <stop offset="50%" stopColor="#A5F3FC" stopOpacity="0.75" />
+                <stop offset="100%" stopColor="#E0F2FE" stopOpacity="0.35" />
+              </linearGradient>
+              {/* High-res mesh: orthogonal + diagonal weave (tiled on road surface) */}
+              <pattern
+                id={roadMeshPatternId}
+                patternUnits="userSpaceOnUse"
+                width={18}
+                height={18}
+              >
+                <rect width={18} height={18} fill="none" />
+                <path
+                  d="M0 0 H18 M0 0 V18 M0 9 H18 M9 0 V18"
+                  stroke={
+                    isDark
+                      ? "rgba(255,255,255,0.11)"
+                      : "rgba(255,255,255,0.12)"
+                  }
+                  strokeWidth={0.38}
+                  vectorEffect="non-scaling-stroke"
+                  fill="none"
+                />
+                <path
+                  d="M0 0 L18 18 M18 0 L0 18"
+                  stroke={
+                    isDark
+                      ? "rgba(147,197,253,0.08)"
+                      : "rgba(186,230,253,0.1)"
+                  }
+                  strokeWidth={0.32}
+                  vectorEffect="non-scaling-stroke"
+                  fill="none"
+                />
+                <path
+                  d="M9 0 L18 9 M0 9 L9 18 M9 18 L18 9 M18 9 L9 0"
+                  stroke={
+                    isDark
+                      ? "rgba(56,189,248,0.06)"
+                      : "rgba(125,211,252,0.08)"
+                  }
+                  strokeWidth={0.28}
+                  fill="none"
+                />
+                <circle
+                  cx={9}
+                  cy={9}
+                  r={0.55}
+                  fill={
+                    isDark
+                      ? "rgba(255,255,255,0.1)"
+                      : "rgba(255,255,255,0.12)"
+                  }
+                />
+              </pattern>
+              <mask
+                id={roadMeshMaskId}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+                x={0}
+                y={0}
+                width={cW}
+                height={svgH}
+              >
+                <rect x={0} y={0} width={cW} height={svgH} fill="#000" />
+                <path
+                  d={roadPath}
+                  fill="none"
+                  stroke="#fff"
+                  strokeWidth={49}
+                  strokeLinecap="round"
+                />
+              </mask>
             </defs>
+
+            {/* Soft sparkles — depth without covering the road */}
+            <g style={{ pointerEvents: "none" }} opacity={isDark ? 0.45 : 0.55}>
+              {[
+                [0.06, 0.1],
+                [0.18, 0.07],
+                [0.38, 0.14],
+                [0.58, 0.09],
+                [0.78, 0.12],
+                [0.92, 0.2],
+                [0.12, 0.42],
+                [0.48, 0.36],
+                [0.72, 0.44],
+                [0.88, 0.38],
+              ].map(([fx, fy], i) => (
+                <circle
+                  key={`sp-${i}`}
+                  cx={fx * cW}
+                  cy={fy * svgH}
+                  r={isDark ? 2.2 : 1.9}
+                  fill={isDark ? "#60A5FA" : "#3B82F6"}
+                >
+                  <animate
+                    attributeName="opacity"
+                    values="0.2;0.95;0.2"
+                    dur={`${2.2 + (i % 5) * 0.35}s`}
+                    repeatCount="indefinite"
+                  />
+                </circle>
+              ))}
+            </g>
 
             {/* Road layers */}
             <path
@@ -1513,6 +1655,21 @@ function DesktopRoadmap({
               stroke="url(#roadGrad)"
               strokeWidth="50"
               strokeLinecap="round"
+            />
+
+            {/* Mesh texture — clipped to road band only */}
+            <rect
+              x={0}
+              y={0}
+              width={cW}
+              height={svgH}
+              fill={`url(#${roadMeshPatternId})`}
+              mask={`url(#${roadMeshMaskId})`}
+              opacity={0.7}
+              style={{
+                pointerEvents: "none",
+                mixBlendMode: "soft-light",
+              }}
             />
 
             {/* Completed section overlay */}
@@ -1557,6 +1714,25 @@ function DesktopRoadmap({
               strokeLinecap="round"
               strokeDasharray="22 16"
             />
+            {/* Flowing energy line — motion along the journey */}
+            <path
+              d={roadPath}
+              fill="none"
+              stroke="url(#flowLaneGrad)"
+              strokeWidth="5"
+              strokeLinecap="round"
+              opacity={isDark ? 0.55 : 0.5}
+              strokeDasharray="14 36"
+              style={{ pointerEvents: "none" }}
+            >
+              <animate
+                attributeName="stroke-dashoffset"
+                from="0"
+                to="-50"
+                dur="2.8s"
+                repeatCount="indefinite"
+              />
+            </path>
 
             {/* Number nodes */}
             {modules.map((mod, i) => (
@@ -1595,17 +1771,32 @@ function DesktopRoadmap({
         </div>
       </div>
 
-      {/* Zoom controls */}
-      <div
-        className="absolute bottom-10 right-8 flex items-center rounded-2xl z-20"
-        style={{
-          background: surfaceBg,
-          border: `1px solid ${borderCol}`,
-          boxShadow: isDark
-            ? "0 4px 20px rgba(0,0,0,0.5)"
-            : "0 4px 20px rgba(0,0,0,0.1)",
-        }}
-      >
+      {/* Interaction hint + zoom */}
+      <div className="absolute bottom-10 right-8 z-20 flex flex-col items-end gap-2">
+        <div
+          className="px-3 py-1.5 rounded-full text-[10px] font-semibold tracking-wide"
+          style={{
+            color: textMuted,
+            background: isDark ? "rgba(15,23,42,0.75)" : "rgba(255,255,255,0.85)",
+            border: `1px solid ${borderCol}`,
+            boxShadow: isDark
+              ? "0 2px 12px rgba(0,0,0,0.35)"
+              : "0 2px 10px rgba(0,0,0,0.08)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          Drag to pan · Scroll to zoom
+        </div>
+        <div
+          className="flex items-center rounded-2xl"
+          style={{
+            background: surfaceBg,
+            border: `1px solid ${borderCol}`,
+            boxShadow: isDark
+              ? "0 4px 20px rgba(0,0,0,0.5)"
+              : "0 4px 20px rgba(0,0,0,0.1)",
+          }}
+        >
         {[
           {
             label: "+",
@@ -1665,17 +1856,22 @@ function DesktopRoadmap({
           </div>
         ))}
       </div>
+      </div>
 
       {/* UP NEXT banner */}
       {curMod && nextLesson && !allLessonsDone && (
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20">
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 px-3">
           <button
             type="button"
             onClick={() => onStart(nextLesson.id)}
-            className="flex items-center gap-3 rounded-full px-4 py-2.5 transition-transform hover:scale-105 cursor-pointer"
+            className="flex items-center gap-3 rounded-full px-4 py-2.5 transition-all duration-300 hover:scale-[1.04] hover:shadow-xl active:scale-[0.98] cursor-pointer border border-white/10"
             style={{
-              background: isDark ? "#1C1C1E" : "#1F2937",
-              boxShadow: "0 6px 28px rgba(0,0,0,0.35)",
+              background: isDark
+                ? "linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #172554 100%)"
+                : "linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)",
+              boxShadow: isDark
+                ? "0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(59,130,246,0.25), 0 0 40px rgba(59,130,246,0.15)"
+                : "0 8px 28px rgba(15,23,42,0.12), 0 0 0 1px rgba(59,130,246,0.12)",
             }}
             aria-label={
               totalCompleted === 0
@@ -1684,20 +1880,34 @@ function DesktopRoadmap({
             }
           >
             <div
-              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "#2563EB" }}
+              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-lg"
+              style={{
+                background:
+                  "linear-gradient(135deg, #2563EB, #6366F1)",
+                boxShadow: "0 4px 14px rgba(37,99,235,0.45)",
+              }}
             >
               <Play size={13} className="text-white" fill="white" />
             </div>
-            <div className="text-left">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+            <div className="text-left min-w-0">
+              <p
+                className="text-[9px] font-bold uppercase tracking-widest"
+                style={{ color: isDark ? "#94A3B8" : "#64748B" }}
+              >
                 {totalCompleted === 0 ? "Start reading" : "Up next"}
               </p>
-              <p className="text-[12px] font-bold text-white max-w-[220px] truncate">
+              <p
+                className="text-[12px] font-bold max-w-[220px] truncate"
+                style={{ color: isDark ? "#F8FAFC" : "#0f172a" }}
+              >
                 {nextLesson.title}
               </p>
             </div>
-            <ChevronRight size={14} className="text-gray-500 shrink-0" />
+            <ChevronRight
+              size={14}
+              className="shrink-0"
+              style={{ color: isDark ? "#64748B" : "#94A3B8" }}
+            />
           </button>
         </div>
       )}
@@ -1992,10 +2202,15 @@ export default function RoadmapPage() {
 
       <div
         className="fixed inset-0 z-50 flex flex-col"
-        style={{ background: pageBg, fontFamily: "Poppins, sans-serif" }}
+        style={{
+          background: isDark
+            ? "linear-gradient(168deg, #0a0f1a 0%, #0f172a 38%, #111827 100%)"
+            : "linear-gradient(168deg, #eef2ff 0%, #f1f5f9 42%, #f8fafc 100%)",
+          fontFamily: "Poppins, sans-serif",
+        }}
       >
         {/* Header */}
-        <header className="shrink-0 flex items-center px-5 py-8 gap-4 relative">
+        <header className="shrink-0 flex items-center px-5 py-8 gap-4 relative z-10">
           <button
             onClick={() => navigate("/dashboard")}
             className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition hover:scale-105 cursor-pointer"
@@ -2012,11 +2227,17 @@ export default function RoadmapPage() {
             <div
               className="rounded-2xl px-5 py-2.5"
               style={{
-                background: isDark ? "#0f172a" : "#F9FAFB",
-                border: `1px solid ${borderCol}`,
+                background: isDark
+                  ? "rgba(15,23,42,0.65)"
+                  : "rgba(255,255,255,0.82)",
+                backdropFilter: "blur(14px)",
+                WebkitBackdropFilter: "blur(14px)",
+                border: isDark
+                  ? "1px solid rgba(148,163,184,0.18)"
+                  : "1px solid rgba(0,0,0,0.06)",
                 boxShadow: isDark
-                  ? "0 4px 20px rgba(0,0,0,0.4)"
-                  : "0 4px 20px rgba(0,0,0,0.06)",
+                  ? "0 0 0 1px rgba(59,130,246,0.12), 0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06)"
+                  : "0 8px 28px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.95)",
               }}
             >
               <div className="flex items-center gap-2 mb-1.5">
@@ -2040,16 +2261,23 @@ export default function RoadmapPage() {
               <div
                 className="w-full rounded-full overflow-hidden"
                 style={{
-                  height: 5,
-                  background: isDark ? "#334155" : "#E5E7EB",
+                  height: 6,
+                  background: isDark ? "#1e293b" : "#E2E8F0",
+                  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.12)",
                 }}
               >
                 <div
-                  className="h-full rounded-full"
+                  className="roadmap-motion-ambient h-full rounded-full relative overflow-hidden"
                   style={{
                     width: `${progressPct}%`,
-                    background: "linear-gradient(90deg,#3B82F6,#6366F1)",
+                    background:
+                      "linear-gradient(90deg,#2563EB,#6366F1,#22C55E,#6366F1)",
+                    backgroundSize: "200% 100%",
                     transition: "width 0.8s ease",
+                    animation:
+                      progressPct > 0 && progressPct < 100
+                        ? "roadmap-bar-shimmer 4s linear infinite"
+                        : undefined,
                   }}
                 />
               </div>
