@@ -9,7 +9,11 @@
 
 const pdfParse = require('pdf-parse');
 const Anthropic = require('@anthropic-ai/sdk');
-const { supabase } = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
+
+// Use admin client for storage operations so custom-JWT users bypass RLS.
+// Falls back to anon client if admin isn't configured (dev without service role key).
+const storageClient = () => (supabaseAdmin || supabase).storage.from('academic-pdfs');
 const { generateLessonsFromText, deepExplainLesson } = require('../services/lessonAI.service');
 
 // ─── OCR FALLBACK (Anthropic claude-haiku-4-5 vision) ──────────────────────────────
@@ -110,8 +114,12 @@ async function extractFullText(pdfBuffer) {
 
 // ─── DB HELPERS ───────────────────────────────────────────────────────────────
 
+// Use admin client for DB + storage — anon client has no Supabase auth session
+// (we use custom JWTs), so RLS would block reads/writes on lesson_sets.
+const db = () => (supabaseAdmin || supabase);
+
 async function getCachedLessonSet(pdfId, userId) {
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('lesson_sets')
     .select('*')
     .eq('pdf_id', pdfId)
@@ -133,7 +141,7 @@ async function saveLessonSet(pdfId, userId, lessonData) {
     created_at:    new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await db()
     .from('lesson_sets')
     .upsert(row, { onConflict: 'pdf_id,user_id' })
     .select()
@@ -178,11 +186,9 @@ async function generateLessonsEndpoint(req, res) {
       return res.status(200).json({ success: true, cached: true, message: 'Lessons loaded from cache', data: formatResponse(cached) });
     }
 
-    // Download PDF from Supabase Storage
+    // Download PDF from Supabase Storage (use admin client to bypass RLS)
     console.log('[Lessons] Downloading PDF from storage...');
-    const { data: pdfBlob, error: dlErr } = await supabase
-      .storage
-      .from('academic-pdfs')
+    const { data: pdfBlob, error: dlErr } = await storageClient()
       .download(`pdfs/${userId}/${pdfId}`);
 
     if (dlErr) {
@@ -267,7 +273,7 @@ async function deleteLessonsEndpoint(req, res) {
   }
 
   try {
-    const { error } = await supabase
+    const { error } = await db()
       .from('lesson_sets')
       .delete()
       .eq('pdf_id', pdfId)

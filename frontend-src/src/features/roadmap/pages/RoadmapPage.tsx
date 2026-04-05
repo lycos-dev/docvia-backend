@@ -309,8 +309,10 @@ export default function RoadmapLoadingPage({
   const [msgVisible,    setMsgVisible]    = useState(true);
   const [timedOut,      setTimedOut]      = useState(false);
   const [retrying,      setRetrying]      = useState(false);
+  // Tracks whether we've reached 95% and started the countdown
+  const [at95,          setAt95]          = useState(false);
 
-  // Keep a ref so callbacks can check without stale closures
+  // Refs for use inside callbacks without stale closures
   const apiResolvedRef = useRef(false);
   useEffect(() => {
     if (apiResolved) apiResolvedRef.current = true;
@@ -319,67 +321,76 @@ export default function RoadmapLoadingPage({
   const retryingRef = useRef(false);
   useEffect(() => { retryingRef.current = retrying; }, [retrying]);
 
-  // ── 8-second timeout ────────────────────────────────────────────────────
+  // ── Phase 1: Fast progress 0 → 95 over ~2 seconds ───────────────────────
+  // Runs on mount (and re-runs after a retry resets progress).
+  // Stops at 95 and sets `at95 = true` to start the countdown.
   useEffect(() => {
-    if (apiResolved) return;
-    const id = setTimeout(() => {
-      if (!apiResolvedRef.current) setTimedOut(true);
-    }, TIMEOUT_MS);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (timedOut) return;
 
-  // ── React to apiResolved ─────────────────────────────────────────────────
+    // ~50 ticks × 40 ms = ~2 s to reach 95
+    const interval = setInterval(() => {
+      setProgressWidth((prev) => {
+        if (prev >= 95) {
+          clearInterval(interval);
+          setAt95(true);
+          return 95;
+        }
+        return Math.min(prev + 1.9, 95);
+      });
+    }, 40);
+
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timedOut]);
+
+  // ── Phase 2: 8-second countdown begins only once we hit 95% ─────────────
+  // If `apiResolved` arrives before the 8 s are up, we cancel and proceed.
   useEffect(() => {
-    if (!apiResolved) return;
-
-    if (retryingRef.current) {
-      // Already clicked "Try Again" → wait 2 s then go
-      setProgressWidth(100);
-      const id = setTimeout(() => onReady(), 2_000);
-      return () => clearTimeout(id);
-    }
-
-    if (timedOut) {
-      // Timeout screen is showing but API quietly finished → proceed
+    if (!at95) return;
+    if (apiResolvedRef.current) {
+      // API already resolved before we even hit 95 — go straight to 100
       setProgressWidth(100);
       const id = setTimeout(() => onReady(), 600);
       return () => clearTimeout(id);
     }
 
-    // Normal happy path
-    setProgressWidth(100);
-    const id = setTimeout(() => onReady(), 600);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiResolved]);
+    const id = setTimeout(() => {
+      if (!apiResolvedRef.current) setTimedOut(true);
+    }, TIMEOUT_MS);
 
-  // ── Fake progress 0 → 95 ────────────────────────────────────────────────
+    return () => clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [at95]);
+
+  // ── React to apiResolved arriving at any point ───────────────────────────
   useEffect(() => {
-    if (timedOut) return;
-    const interval = setInterval(() => {
-      setProgressWidth((prev) => {
-        if (prev >= 95) { clearInterval(interval); return prev; }
-        return Math.min(prev + 1.2, 95);
-      });
-    }, 100);
-    return () => clearInterval(interval);
-  }, [timedOut]);
+    if (!apiResolved) return;
+
+    // Cancel any pending timeout state and advance to 100 %
+    setTimedOut(false);
+    setProgressWidth(100);
+
+    const delay = retryingRef.current ? 2_000 : 600;
+    const id = setTimeout(() => onReady(), delay);
+    return () => clearTimeout(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiResolved]);
 
   // ── Retry handler ────────────────────────────────────────────────────────
   const handleRetry = () => {
     setTimedOut(false);
+    setAt95(false);
     setRetrying(true);
     retryingRef.current = true;
 
     if (apiResolvedRef.current) {
-      // API already finished — no need to re-fetch, just wait 2 s
+      // API already finished while we were showing the timeout screen
       setProgressWidth(100);
       setTimeout(() => onReady(), 2_000);
       return;
     }
 
-    // API still in flight — restart progress bar and call parent retry
+    // API still in flight — restart progress bar and ask parent to re-fetch
     setProgressWidth(0);
     onRetry?.();
   };
@@ -417,7 +428,7 @@ export default function RoadmapLoadingPage({
           </p>
           <div className="flex gap-3">
             <button
-              onClick={() => setTimedOut(false)}
+              onClick={() => { setTimedOut(false); setAt95(false); }}
               className="px-5 py-2.5 rounded-2xl font-semibold transition hover:opacity-80 cursor-pointer"
               style={{
                 background:  'transparent',
@@ -526,7 +537,7 @@ export default function RoadmapLoadingPage({
                 style={{
                   width:      `${progressWidth}%`,
                   background: isDark ? '#60a5fa' : '#2563eb',
-                  transition: 'width 100ms linear',
+                  transition: 'width 40ms linear',
                 }}
               />
             </div>

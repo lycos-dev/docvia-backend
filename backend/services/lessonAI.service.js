@@ -178,21 +178,19 @@ async function generateLessonsFromText(fullText, pdfId, userId) {
   console.log(`[LessonAI] Split into ${chunks.length} chunks`);
 
   const allRawLessons = [];
-  const CONCURRENCY = 3;
 
-  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-    const batch = chunks.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(
-      batch.map((chunk, bIdx) =>
-        generateLessonsForChunk(chunk, i + bIdx, chunks.length, meta.title, userId)
-          .catch(err => {
-            console.warn(`[LessonAI] Chunk ${i + bIdx} failed:`, err.message);
-            return [];
-          })
-      )
-    );
-    results.forEach(r => allRawLessons.push(...r));
-    console.log(`[LessonAI] Processed chunks ${i + 1}–${Math.min(i + CONCURRENCY, chunks.length)} / ${chunks.length}`);
+  // Process one chunk at a time so makeGroqCall can cycle through ALL keys
+  // before moving to the next chunk. Concurrent processing would hammer keys
+  // simultaneously and leave none available for subsequent chunks.
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      const lessons = await generateLessonsForChunk(chunks[i], i, chunks.length, meta.title, userId);
+      allRawLessons.push(...lessons);
+      console.log(`[LessonAI] Processed chunk ${i + 1} / ${chunks.length} (${lessons.length} lessons)`);
+    } catch (err) {
+      // All keys were cycled and still failed for this chunk — skip it, keep going
+      console.warn(`[LessonAI] Chunk ${i + 1} failed after cycling all keys: ${err.message}`);
+    }
   }
 
   const lessons = mergeLessons(allRawLessons);
