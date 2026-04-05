@@ -89,7 +89,7 @@ export default function ReaderToolbar({
           </div>
           <span
             className="text-sm font-bold tabular-nums shrink-0"
-            style={{ color: '#22C55E' }}
+            style={{ color: pct === 100 ? "#22C55E" : "#4F7CDD" }}
           >
             {pct}%
           </span>
