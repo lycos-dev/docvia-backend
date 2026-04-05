@@ -384,6 +384,19 @@ export default function RoadmapLoadingPage({
     onRetry?.();
   };
 
+  // ── Automatic retry on timeout ───────────────────────────────────────────
+  useEffect(() => {
+    if (!timedOut) return;
+
+    // After 3 seconds of timeout, automatically retry
+    const retryTimer = setTimeout(() => {
+      handleRetry();
+    }, 3000);
+
+    return () => clearTimeout(retryTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timedOut]);
+
   // ── Message cycling ──────────────────────────────────────────────────────
   useEffect(() => {
     if (timedOut) return;
@@ -413,32 +426,34 @@ export default function RoadmapLoadingPage({
             This is taking a bit longer…
           </p>
           <p className="text-sm text-center max-w-xs" style={{ color: textMuted }}>
-            AI lesson generation can take some time. You can wait or try again.
+            AI lesson generation can take some time. Retrying automatically…
           </p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => { setTimedOut(false); setAt95(false); }}
-              className="px-5 py-2.5 rounded-2xl font-semibold transition hover:opacity-80 cursor-pointer"
-              style={{
-                background:  'transparent',
-                border:      `1px solid ${borderCol}`,
-                color:       textMuted,
-                fontFamily:  'Poppins, sans-serif',
-              }}
-            >
-              Keep waiting
-            </button>
-            <button
-              onClick={handleRetry}
-              className="px-5 py-2.5 rounded-2xl font-semibold text-white transition hover:opacity-90 cursor-pointer"
-              style={{
-                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                fontFamily: 'Poppins, sans-serif',
-              }}
-            >
-              Try Again
-            </button>
+          <div className="flex gap-2 justify-center">
+            <div
+              className="w-2 h-2 rounded-full animate-bounce"
+              style={{ background: '#3B82F6', animationDelay: '0ms' }}
+            />
+            <div
+              className="w-2 h-2 rounded-full animate-bounce"
+              style={{ background: '#3B82F6', animationDelay: '150ms' }}
+            />
+            <div
+              className="w-2 h-2 rounded-full animate-bounce"
+              style={{ background: '#3B82F6', animationDelay: '300ms' }}
+            />
           </div>
+          <button
+            onClick={() => { setTimedOut(false); setAt95(false); }}
+            className="px-4 py-2 rounded-2xl font-semibold text-sm transition hover:opacity-80 cursor-pointer mt-2"
+            style={{
+              background:  'transparent',
+              border:      `1px solid ${borderCol}`,
+              color:       textMuted,
+              fontFamily:  'Poppins, sans-serif',
+            }}
+          >
+            Keep waiting or go back
+          </button>
         </div>
       );
     }
