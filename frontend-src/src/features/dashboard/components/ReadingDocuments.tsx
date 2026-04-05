@@ -133,7 +133,7 @@ export const ReadingDocuments: React.FC<ReadingDocumentsProps> = ({ searchTerm }
                 <p className="text-[32px] leading-none font-semibold text-[#454545]">{doc.title}</p>
                 <p className="mt-1 text-[14px] text-[#7c7c7c]">{doc.subtitle}</p>
               </div>
-              <button type="button" className="rounded-md p-1 hover:bg-[#f2f2f2]">
+              <button type="button" className="rounded-md p-1 hover:bg-[#f2f2f2] cursor-pointer">
                 <EllipsisVertical className="text-[#606060]" size={18} />
               </button>
             </div>

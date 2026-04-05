@@ -240,7 +240,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                 <button
                   onClick={() => onClose(uploadComplete)}
                   disabled={isUploading || isCheckingDuplicates}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition disabled:opacity-50"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
                 >
                   <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M18 6L6 18M6 6l12 12" />
@@ -272,7 +272,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                         onClose(true);
                         navigate('/dashboard');
                       }}
-                      className="flex items-center gap-2 px-6 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-xl font-medium transition"
+                      className="flex items-center gap-2 px-6 py-3 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-xl font-medium transition cursor-pointer"
                     >
                       <ArrowLeft size={18} />
                       Back to Dashboard
@@ -282,7 +282,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
                         onClose(true);
                         navigate(`/roadmap/${uploadedFile.filename}`);
                       }}
-                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition"
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition cursor-pointer" 
                     >
                       View Roadmap
                     </button>

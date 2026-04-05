@@ -237,7 +237,7 @@ export default function ProgressPage() {
           <ProgressStats />
         </aside>
 
-        <section className="flex flex-col gap-6">
+        <section className="flex flex-col gap-3">
           <LessonProgressChart />
           <LongestStreakBanner />
         </section>
@@ -264,10 +264,11 @@ function LongestStreakBanner() {
       transition={{ duration: 0.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
       whileHover={{ scale: 1.01 }}
       className={cn(
-        "bg-white dark:bg-[#1e293b] rounded-2xl p-5",
+        "bg-white dark:bg-[#1e293b] rounded-2xl p-4", 
         "border border-black/5 dark:border-white/10",
         "flex items-center gap-4",
         "shadow-sm dark:shadow-none",
+        "w-auto", 
       )}
     >
       <motion.div
