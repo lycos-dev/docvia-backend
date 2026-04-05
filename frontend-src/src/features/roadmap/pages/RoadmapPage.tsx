@@ -1740,15 +1740,14 @@ export default function RoadmapPage() {
   const { getDocumentProgress } = useProgressContext();
   const pdfId = documentId ?? null;
 
-  const [modules, setModules] = useState<Module[]>(MODULES);
+  const [modules, setModules] = useState<Module[]>([]);
   const [docTitle, setDocTitle] = useState("");
   const [loadingState, setLoadingState] = useState<"loading" | "ready">(
     "loading",
   );
   const [apiResolved, setApiResolved] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
-  const [usingFallback, setUsingFallback] = useState(false);
-  const [fallbackDismissed, setFallbackDismissed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Get completed lesson IDs from progress context
   const docProgress = pdfId ? getDocumentProgress(pdfId) : null;
@@ -1781,18 +1780,32 @@ export default function RoadmapPage() {
             result.data.title,
           ),
         );
-        setUsingFallback(false);
+        setErrorMessage(null);
       } else {
-        setModules(MODULES);
-        setUsingFallback(true);
+        // Delete stale/bad cached entry so retrying will re-generate cleanly
+        await pdfService.deleteLessons(pdfId, user?.id ?? "", token ?? undefined).catch(() => {});
+        const msg =
+          (result as { error?: string; message?: string }).message ||
+          (result as { error?: string }).error ||
+          "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
+        setErrorMessage(msg);
+        setModules([]);
       }
       setApiResolved(true);
       setLoadingState("ready");
     };
-    fetchLessons().catch(() => {
+    fetchLessons().catch((err: unknown) => {
       if (!cancelled) {
-        setModules(MODULES);
-        setUsingFallback(true);
+        // Also clear cache on unexpected errors
+        if (pdfId && user?.id) {
+          pdfService.deleteLessons(pdfId, user.id, token ?? undefined).catch(() => {});
+        }
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "An unexpected error occurred while generating lessons.";
+        setErrorMessage(msg);
+        setModules([]);
         setApiResolved(true);
         setLoadingState("ready");
       }
@@ -1805,7 +1818,7 @@ export default function RoadmapPage() {
   // Re-sync modules when completedLessonIds change (lesson marked complete in reader)
   useEffect(() => {
     setModules((prev) => {
-      if (usingFallback) return prev;
+      if (prev.length === 0) return prev;
       return prev.map((mod, idx) => {
         const lessonId = mod.lessons[0]?.id;
         if (!lessonId) return mod;
@@ -1839,7 +1852,7 @@ export default function RoadmapPage() {
         };
       });
     });
-  }, [completedLessonIds.join(","), usingFallback]);
+  }, [completedLessonIds.join(",")]);
 
   if (loadingState === "loading") {
     return (
@@ -1851,6 +1864,85 @@ export default function RoadmapPage() {
     );
   }
 
+  // ── Error state: generation failed ───────────────────────────────────────
+  if (errorMessage) {
+    const pageBgErr = isDark ? "#0f172a" : "#F0F2F5";
+    const borderColErr = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
+    const textMutedErr = isDark ? "#94A3B8" : "#6B7280";
+    return (
+      <div
+        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-6"
+        style={{ background: pageBgErr, fontFamily: "Poppins, sans-serif" }}
+      >
+        {/* Close button */}
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="absolute top-5 left-5 h-9 w-9 rounded-full flex items-center justify-center transition hover:scale-105 cursor-pointer"
+          style={{ background: pageBgErr, border: `1px solid ${borderColErr}` }}
+        >
+          <X size={15} style={{ color: textMutedErr }} />
+        </button>
+
+        {/* Error card */}
+        <div
+          className="w-full max-w-md rounded-3xl p-8 flex flex-col items-center text-center gap-4"
+          style={{
+            background: isDark ? "#1e293b" : "#FFFFFF",
+            border: `1px solid ${borderColErr}`,
+            boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.5)" : "0 8px 32px rgba(0,0,0,0.08)",
+          }}
+        >
+          <div
+            className="h-16 w-16 rounded-full flex items-center justify-center text-3xl"
+            style={{ background: isDark ? "#7f1d1d33" : "#FEF2F2" }}
+          >
+            📄
+          </div>
+
+          <div>
+            <h2
+              className="text-lg font-bold mb-1"
+              style={{ color: isDark ? "#F1F5F9" : "#111827" }}
+            >
+              Couldn't Generate Lessons
+            </h2>
+            <p
+              className="text-sm leading-relaxed"
+              style={{ color: textMutedErr }}
+            >
+              {errorMessage}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2 w-full pt-2">
+            <button
+              onClick={() => {
+                setErrorMessage(null);
+                setLoadingState("loading");
+                setApiResolved(false);
+                setRetryKey((k) => k + 1);
+              }}
+              className="w-full py-3 rounded-2xl text-sm font-semibold text-white transition hover:opacity-90 cursor-pointer"
+              style={{ background: "linear-gradient(135deg,#2563EB,#4F46E5)" }}
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="w-full py-3 rounded-2xl text-sm font-semibold transition hover:opacity-80 cursor-pointer"
+              style={{
+                background: isDark ? "#334155" : "#F3F4F6",
+                color: textMutedErr,
+              }}
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const pageBg = isDark ? "#0f172a" : "#F0F2F5";
   const borderCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const textPri = isDark ? "#F1F5F9" : "#111827";
@@ -1859,8 +1951,7 @@ export default function RoadmapPage() {
   const totalLessons = modules.length;
   const progressPct =
     totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
-  const displayTitle =
-    docTitle || (usingFallback ? "Sample Roadmap" : "Loading…");
+  const displayTitle = docTitle || "Loading…";
 
   const handleStart = (lessonId: string) => {
     navigate(`/reader/${pdfId ?? "unknown"}/${lessonId}`);
@@ -1969,38 +2060,6 @@ export default function RoadmapPage() {
             </span>
           </button>
         </header>
-
-        {/* Fallback banner */}
-        {usingFallback && !fallbackDismissed && (
-          <div
-            className="shrink-0 flex items-center gap-3 px-5 py-2.5 text-sm"
-            style={{
-              background: isDark ? "#1e3a5f" : "#EFF6FF",
-              borderBottom: `1px solid ${isDark ? "#2563EB55" : "#BFDBFE"}`,
-              color: isDark ? "#93C5FD" : "#1D4ED8",
-            }}
-          >
-            <span>⚠️ Lesson data unavailable — showing demo roadmap.</span>
-            <button
-              onClick={() => {
-                setLoadingState("loading");
-                setApiResolved(false);
-                setUsingFallback(false);
-                setRetryKey((k) => k + 1);
-              }}
-              className="underline font-medium hover:opacity-80 transition-opacity"
-            >
-              Retry
-            </button>
-            <button
-              onClick={() => setFallbackDismissed(true)}
-              className="ml-auto hover:opacity-80 transition-opacity"
-              aria-label="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-        )}
 
         {/* Desktop roadmap */}
         <div className="hidden md:flex flex-1 overflow-hidden">

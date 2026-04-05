@@ -139,3 +139,13 @@ export async function getLessons(pdfId: string, userId: string, token?: string):
   });
   return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
 }
+
+export async function deleteLessons(pdfId: string, userId: string, token?: string): Promise<{ success: boolean }> {
+  const res = await fetch(`${BASE}/lessons/${encodeURIComponent(pdfId)}?userId=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  return safeJson<{ success: boolean }>(res, { success: false });
+}

@@ -8,25 +8,104 @@
  */
 
 const pdfParse = require('pdf-parse');
+const Anthropic = require('@anthropic-ai/sdk');
 const { supabase } = require('../config/supabase');
 const { generateLessonsFromText, deepExplainLesson } = require('../services/lessonAI.service');
 
+// ─── OCR FALLBACK (Anthropic claude-haiku-4-5 vision) ──────────────────────────────
+
+/**
+ * Uses Anthropic's Claude claude-haiku-4-5 to extract text from a PDF buffer when
+ * pdf-parse returns little/no selectable text (i.e., image-based / scanned PDF).
+ */
+async function extractTextViaOCR(pdfBuffer) {
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
+
+  const base64PDF = pdfBuffer.toString('base64');
+
+  console.log('[Lessons] Running OCR via Anthropic claude-haiku-4-5 vision...');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 4096,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: {
+              type: 'base64',
+              media_type: 'application/pdf',
+              data: base64PDF,
+            },
+          },
+          {
+            type: 'text',
+            text: 'Extract ALL text from this PDF document. Output only the raw extracted text, preserving the logical reading order and paragraph breaks. Do not summarize, interpret, or add any commentary — just the text as it appears in the document.',
+          },
+        ],
+      },
+    ],
+  });
+
+  const extracted = response.content
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n')
+    .trim();
+
+  console.log(`[Lessons] OCR extracted ${extracted.length} characters`);
+  return extracted;
+}
+
 // ─── PDF TEXT EXTRACTION ──────────────────────────────────────────────────────
 
+/**
+ * Tries pdf-parse first (fast, for text-based PDFs).
+ * Falls back to Anthropic vision OCR if extracted text is too short.
+ */
 async function extractFullText(pdfBuffer) {
   let result;
+  let rawText = '';
+  let pageCount = 0;
+
   try {
     result = await pdfParse(pdfBuffer);
+    rawText = result.text || '';
+    pageCount = result.numpages;
   } catch (e) {
-    throw new Error(`pdf-parse failed: ${e.message}`);
+    console.warn(`[Lessons] pdf-parse failed: ${e.message} — will attempt OCR`);
   }
 
-  const rawText = result.text || '';
   const cleaned = rawText.replace(/\s+/g, ' ').trim();
+  console.log(`[Lessons] Raw text length: ${rawText.length}, cleaned: ${cleaned.length}, pages: ${pageCount}`);
 
-  console.log(`[Lessons] Raw text length: ${rawText.length}, cleaned: ${cleaned.length}, pages: ${result.numpages}`);
+  // If we got meaningful text, use it
+  const MIN_CHARS_PER_PAGE = 80;
+  const expectedMin = Math.max(100, (pageCount || 1) * MIN_CHARS_PER_PAGE);
+  if (cleaned.length >= expectedMin) {
+    return { fullText: cleaned, pageCount, usedOCR: false };
+  }
 
-  return { fullText: cleaned, pageCount: result.numpages };
+  // Text too short — PDF is likely image-based; use OCR
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error(
+      'PDF appears to be image-based but ANTHROPIC_API_KEY is not set. ' +
+      'Please upload a text-based PDF or configure the Anthropic API key for OCR support.'
+    );
+  }
+
+  console.log(`[Lessons] Text too short (${cleaned.length} chars) — falling back to OCR...`);
+  const ocrText = await extractTextViaOCR(pdfBuffer);
+
+  if (!ocrText || ocrText.length < 50) {
+    throw new Error('OCR could not extract text from this PDF. The document may be blank, corrupted, or password-protected.');
+  }
+
+  return { fullText: ocrText, pageCount, usedOCR: true };
 }
 
 // ─── DB HELPERS ───────────────────────────────────────────────────────────────
@@ -110,30 +189,26 @@ async function generateLessonsEndpoint(req, res) {
       return res.status(404).json({ success: false, error: 'PDF not found in storage', details: dlErr.message });
     }
 
-    // Extract text
+    // Extract text (with OCR fallback for image-based PDFs)
     console.log('[Lessons] Extracting text from PDF...');
     const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer());
     let extraction;
     try {
       extraction = await extractFullText(pdfBuffer);
     } catch (extractErr) {
-      console.error('[Lessons] Extraction threw:', extractErr.message);
+      console.error('[Lessons] Extraction failed:', extractErr.message);
       return res.status(422).json({
         success: false,
         error: 'Could not read this PDF',
-        message: `Text extraction failed: ${extractErr.message}. Make sure the PDF contains selectable text (not a scanned image).`,
+        message: extractErr.message,
       });
     }
 
-    if (!extraction.fullText || extraction.fullText.length < 30) {
-      return res.status(422).json({
-        success: false,
-        error: 'PDF has no extractable text',
-        message: `Only ${extraction.fullText.length} characters were extracted. This usually means the PDF is a scanned image. Please upload a text-based PDF.`,
-      });
+    if (extraction.usedOCR) {
+      console.log('[Lessons] Using OCR-extracted text for lesson generation');
     }
 
-    // Run AI pipeline — passes userId so makeGroqCall can cycle keys automatically
+    // Run AI lesson pipeline
     console.log('[Lessons] Running AI lesson pipeline...');
     const lessonData = await generateLessonsFromText(extraction.fullText, pdfId, userId);
 
@@ -217,7 +292,6 @@ async function deepExplainEndpoint(req, res) {
   console.log(`[Lessons] Deep explain: "${title}"`);
 
   try {
-    // Pass userId so makeGroqCall can cycle keys if needed
     const result = await deepExplainLesson({ title, explanation, key_points, documentTitle }, userId);
     return res.status(200).json({ success: true, data: result });
   } catch (err) {
