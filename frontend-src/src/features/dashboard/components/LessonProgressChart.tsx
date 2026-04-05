@@ -43,7 +43,7 @@ export default function LessonProgressChart() {
         Days you completed at least one lesson
       </p>
 
-      <div className="flex items-end justify-between gap-2 h-[72px]">
+      <div className="flex items-end justify-between gap-2 h-18">
         {weekActivity.map((active, i) => {
           const isToday = i === todayIndex;
           const barHeight = active ? BAR_MAX_HEIGHT : BAR_MIN_HEIGHT;

@@ -68,11 +68,7 @@ export default function ProgressStats() {
   const currentStreak = streak.currentStreak;
 
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide px-1">
-        Your Stats
-      </h2>
-
+    <div className="flex flex-col gap-3 h-full">
       <StatCard
         icon="✅"
         label="Lessons completed"

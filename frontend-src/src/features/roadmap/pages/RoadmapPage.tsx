@@ -1338,6 +1338,7 @@ function DesktopRoadmap({
   const [selected, setSelected] = useState<Module | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [isRecentering, setIsRecentering] = useState(false);
   const [grabbing, setGrab] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panRef = useRef({ dragging: false, sx: 0, sy: 0, px: 0, py: 0 });
@@ -1430,6 +1431,9 @@ function DesktopRoadmap({
             transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
             transformOrigin: "center center",
             willChange: "transform",
+            transition: isRecentering
+              ? "transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)"
+              : "none",
           }}
         >
           <svg
@@ -1609,13 +1613,14 @@ function DesktopRoadmap({
 
       {/* Zoom controls */}
       <div
-        className="absolute bottom-10 right-8 flex items-center rounded-2xl z-20"
+        className="absolute bottom-5 right-8 flex items-center rounded-2xl z-20"
         style={{
           background: surfaceBg,
           border: `1px solid ${borderCol}`,
           boxShadow: isDark
             ? "0 4px 20px rgba(0,0,0,0.5)"
             : "0 4px 20px rgba(0,0,0,0.1)",
+          userSelect: "none",
         }}
       >
         {[
@@ -1628,8 +1633,22 @@ function DesktopRoadmap({
           {
             label: <Maximize2 size={15} />,
             onClick: () => {
+              setIsRecentering(true);
               setZoom(1);
-              setPan({ x: 0, y: 0 });
+              const curIdx = modules.findIndex((m) => m.isCurrent);
+              const targetIdx =
+                curIdx !== -1
+                  ? curIdx
+                  : modules.findIndex((m) => !m.isCompleted && !m.isLocked);
+              if (targetIdx !== -1 && pins[targetIdx]) {
+                const pin = pins[targetIdx];
+                const svgMidX = svgCanvasWidth(modules.length) / 2;
+                const svgMidY = (C_H + 500 + SVG_ROAD_Y_PAD) / 2;
+                setPan({ x: -(pin.x - svgMidX), y: -(pin.y - svgMidY) });
+              } else {
+                setPan({ x: 0, y: 0 });
+              }
+              setTimeout(() => setIsRecentering(false), 600);
             },
             title: "Reset",
           },
@@ -1888,7 +1907,7 @@ export default function RoadmapPage() {
         style={{ background: pageBg, fontFamily: "Poppins, sans-serif" }}
       >
         {/* Header */}
-        <header className="shrink-0 flex items-center px-5 py-8 gap-4 relative">
+        <header className="absolute top-0 left-0 right-0 z-30 flex items-center px-5 py-8 gap-4">
           <button
             onClick={() => navigate("/dashboard")}
             className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition hover:scale-105 cursor-pointer"
@@ -1910,11 +1929,12 @@ export default function RoadmapPage() {
                 boxShadow: isDark
                   ? "0 4px 20px rgba(0,0,0,0.4)"
                   : "0 4px 20px rgba(0,0,0,0.06)",
+                userSelect: "none",
               }}
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <span
-                  className="text-[13px] font-semibold truncate max-w-[180px]"
+                  className="text-[13px] font-semibold truncate max-w-45"
                   style={{ color: textPri }}
                 >
                   {displayTitle}
@@ -1954,7 +1974,7 @@ export default function RoadmapPage() {
           <button
             onClick={toggleTheme}
             className="flex items-center gap-2 px-3 py-2 rounded-xl transition hover:bg-opacity-80 shrink-0 cursor-pointer"
-            style={{ background: pageBg, border: `1px solid ${borderCol}` }}
+            style={{ background: pageBg, border: `1px solid ${borderCol}`, userSelect: "none" }}
           >
             {isDark ? (
               <Sun size={15} className="text-yellow-400" />
