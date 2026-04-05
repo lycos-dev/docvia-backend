@@ -978,9 +978,9 @@ function LessonLabel({
           : "#374151";
 
   const titleTop = PILL_Y + 36;
-  const clipPad = 2;
+  const clipPad = -2;
   const clipX = PILL_X + PILL_PAD_X;
-  const clipY = PILL_Y + 12;
+  const clipY = PILL_Y + 16;
   const clipW = Math.max(0, PILL_W - 2 * PILL_PAD_X - clipPad);
   const clipH = Math.max(0, PILL_H - 46);
 
@@ -2730,7 +2730,7 @@ export default function RoadmapPage() {
               }}
               className="w-full py-3 rounded-2xl text-sm font-semibold text-white transition hover:opacity-90 cursor-pointer"
               style={{
-                background: "linear-gradient(135deg, #6366F1, #4F46E5)",
+                background: "#80AAE8",
               }}
             >
               Try Again
@@ -2739,7 +2739,7 @@ export default function RoadmapPage() {
               onClick={() => navigate("/dashboard")}
               className="w-full py-3 rounded-2xl text-sm font-semibold transition hover:opacity-80 cursor-pointer"
               style={{
-                background: isDark ? "#1e293b" : "#F3F4F6",
+                background: isDark ? "#1e293b" : "#80AAE8",
                 color: textMutedErr,
               }}
             >
