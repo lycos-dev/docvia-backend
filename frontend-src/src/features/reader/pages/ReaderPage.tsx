@@ -18,6 +18,7 @@ import DeepDivePanel from "../components/DeepDivePanel";
 import TextSelectionTooltip from "../components/TextSelectionTooltip";
 import ConfettiOverlay from "../../roadmap/components/ConfettiOverlay";
 import { cn } from "../../../shared/utils/cn";
+import { markLessonContentVisited } from "../../../shared/utils/lessonVisitStorage";
 
 type ActiveTab = "chat" | "notes";
 type MainView = "lesson" | "pdf";
@@ -181,6 +182,7 @@ export default function ReaderPage() {
     const tl = lessonSet.totalLessons || lessonSet.lessons.length;
     if (tl < 1) return;
     setCurrentLesson(documentId, lessonId, tl);
+    markLessonContentVisited(documentId, lessonId);
   }, [documentId, lessonId, lessonLoadState, lessonSet, setCurrentLesson]);
 
   // ── Page title ────────────────────────────────────────────────────────────
@@ -207,10 +209,7 @@ export default function ReaderPage() {
     markLessonComplete(documentId, lessonId, totalLessons);
     setConfettiOrigin({ x: window.innerWidth / 2, y: window.innerHeight / 3 });
     setShowConfetti(true);
-    setTimeout(() => {
-      setShowConfetti(false);
-      navigate(`/roadmap/${documentId}`);
-    }, 1500);
+    setTimeout(() => setShowConfetti(false), 1500);
   };
 
   const handleGoDeeper = () => setShowDeepDive((v) => !v);

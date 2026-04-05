@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
 import { cn } from '../../../shared/utils/cn';
+import { formatStudyDurationSeconds } from '../../../shared/utils/formatStudyDuration';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,13 +30,8 @@ function getLast7Days(): Array<{ iso: string; short: string; full: string; isTod
 }
 
 function formatTime(s: number): string {
-  if (s <= 0)  return '—';
-  if (s < 60)  return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60)  return `${m}m`;
-  const h = Math.floor(m / 60);
-  const rm = m % 60;
-  return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+  if (s <= 0) return '—';
+  return formatStudyDurationSeconds(s);
 }
 
 function getMilestoneMessage(streak: number): string {

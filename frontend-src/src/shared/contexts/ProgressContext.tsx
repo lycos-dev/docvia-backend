@@ -59,6 +59,8 @@ interface ProgressContextValue {
   addTimeSpent: (documentId: string, lessonId: string, seconds: number) => void;
   /** YYYY-MM-DD → seconds studied; used for 7-day activity detail */
   dailyTimeSeconds: Record<string, number>;
+  /** YYYY-MM-DD → lesson completions that day (streak / week UI) */
+  dailyCompletions: Record<string, number>;
   /** Call this after the user dismisses the streak-lost modal so it doesn't reappear */
   acknowledgeStreakLost: () => void;
 }
@@ -359,6 +361,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         getDocumentProgress,
         addTimeSpent,
         dailyTimeSeconds: store.dailyTimeSeconds ?? {},
+        dailyCompletions: store.dailyCompletions ?? {},
         acknowledgeStreakLost,
       }}
     >

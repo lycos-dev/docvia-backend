@@ -18,7 +18,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useProgressContext } from '../contexts/ProgressContext';
 
 const TICK_MS         = 1_000;   // granularity: 1 s
-const FLUSH_INTERVAL_MS = 10_000; // write to context every 10 s
+const FLUSH_INTERVAL_MS = 5_000; // write to context every 5 s (balances accuracy vs re-renders)
 
 interface Options {
   /** documentId owning the lesson — pass null/undefined to pause tracking */

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import RoadmapLoadingPage from "./RoadmapLoadingPage";
 import { useAuth } from "../../../shared/contexts/AuthContext";
@@ -10,11 +10,15 @@ import {
   Moon,
   Sun,
   Play,
-  Check,
   ChevronRight,
   Maximize2,
+  Check,
+  Circle,
+  Loader2,
 } from "lucide-react";
 import { useTheme } from "../../../shared/contexts/ThemeContext";
+import { getVisitedLessonIds } from "../../../shared/utils/lessonVisitStorage";
+import { useTimeTracker } from "../../../shared/hooks/useTimeTracker";
 
 // ─── Embedded image assets ──────────────────────────────────────────────────
 const CAR_IMG = "/assets/images/mobilecar.png";
@@ -33,8 +37,12 @@ interface Module {
   id: string;
   title: string;
   segment: number;
+  /** One short line: what this segment will cover (from AI explanation, shortened). */
+  overview: string;
   isCompleted: boolean;
   isCurrent: boolean;
+  /** True after the user has opened this lesson in the reader at least once. */
+  hasVisitedContent: boolean;
   isLocked: boolean;
   percentage: number;
   lessonsCompleted: number;
@@ -48,16 +56,73 @@ interface Module {
 const PIN_COLORS_LIST = ["#EF4444", "#F97316", "#22C55E", "#3B82F6", "#8B5CF6"];
 const PIN_EMOJIS_LIST = ["🎯", "📦", "⚡", "🔍", "🏆"];
 
+const SEEN_SEGMENT_MODAL_KEY = (docId: string) =>
+  `docvia-segment-modal-seen:${docId}`;
+
+function readSeenLessonIdsForDoc(docId: string): Set<string> {
+  if (!docId) return new Set();
+  try {
+    const raw = localStorage.getItem(SEEN_SEGMENT_MODAL_KEY(docId));
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown[];
+    return new Set(arr.map((id) => String(id)));
+  } catch {
+    return new Set();
+  }
+}
+
+function markLessonSegmentModalSeen(docId: string, lessonId: string): void {
+  if (!docId || !lessonId) return;
+  const s = readSeenLessonIdsForDoc(docId);
+  s.add(String(lessonId));
+  localStorage.setItem(
+    SEEN_SEGMENT_MODAL_KEY(docId),
+    JSON.stringify([...s]),
+  );
+}
+
+/** Full overview sentence shown in the modal. */
+function formatLessonOverviewParagraph(overviewRaw: string): string {
+  const t = overviewRaw.trim();
+  if (!t) {
+    return "This lesson will tackle the content for this segment once it is ready.";
+  }
+  const lower = t.toLowerCase();
+  if (lower.startsWith("this lesson will tackle")) {
+    return t.endsWith(".") ? t : `${t}.`;
+  }
+  const body = t.endsWith(".") ? t.slice(0, -1) : t;
+  return `This lesson will tackle ${body}.`;
+}
+
+/** One short line: what this segment covers (first sentence, capped for the modal). */
+function shortSegmentOverview(raw: string, maxLen = 160): string {
+  const t = raw.trim();
+  if (!t) return "";
+  const end = t.search(/[.!?](\s|$)/);
+  let s = end >= 0 ? t.slice(0, end + 1).trim() : t;
+  if (s.length > maxLen) {
+    const cut = s.lastIndexOf(" ", maxLen - 1);
+    s = `${cut > 24 ? s.slice(0, cut) : s.slice(0, maxLen - 1)}…`;
+  }
+  return s;
+}
+
 function mapLessonsToModules(
   lessons: BackendLesson[],
   completedLessonIds: string[],
   _docTitle: string,
+  visitedLessonIds: Set<string>,
 ): Module[] {
-  const completedSet = new Set(completedLessonIds.map(String));
+  const completedSet = new Set(
+    completedLessonIds.map((id) => String(id).trim()),
+  );
 
   return lessons.map((lesson, idx) => {
     const lessonIdStr = String(lesson.id);
     const isCompleted = completedSet.has(lessonIdStr);
+    const hasVisitedContent =
+      visitedLessonIds.has(lessonIdStr) || isCompleted;
 
     // First incomplete lesson is "current"
     const firstIncompleteIdx = lessons.findIndex(
@@ -77,12 +142,19 @@ function mapLessonsToModules(
     })();
     const isLocked = idx > lastCompletedIdx + 1;
 
+    const overview =
+      typeof lesson.explanation === "string"
+        ? shortSegmentOverview(lesson.explanation)
+        : "";
+
     return {
       id: `m${idx + 1}`,
       title: lesson.title,
       segment: idx + 1,
+      overview,
       isCompleted,
       isCurrent,
+      hasVisitedContent,
       isLocked,
       percentage: isCompleted ? 100 : 0,
       lessonsCompleted: isCompleted ? 1 : 0,
@@ -108,8 +180,10 @@ const MODULES: Module[] = [
     id: "m1",
     title: "What is Software Testing?",
     segment: 1,
+    overview: "What software testing is and why it matters.",
     isCompleted: true,
     isCurrent: false,
+    hasVisitedContent: true,
     isLocked: false,
     percentage: 100,
     lessonsCompleted: 1,
@@ -130,8 +204,10 @@ const MODULES: Module[] = [
     id: "m2",
     title: "Boundary Value Analysis",
     segment: 2,
+    overview: "Boundary values and edge cases for inputs.",
     isCompleted: true,
     isCurrent: false,
+    hasVisitedContent: true,
     isLocked: false,
     percentage: 100,
     lessonsCompleted: 1,
@@ -152,8 +228,10 @@ const MODULES: Module[] = [
     id: "m3",
     title: "Use Case Testing",
     segment: 3,
+    overview: "Tests built from use cases and real user flows.",
     isCompleted: false,
     isCurrent: true,
+    hasVisitedContent: false,
     isLocked: false,
     percentage: 0,
     lessonsCompleted: 0,
@@ -174,8 +252,10 @@ const MODULES: Module[] = [
     id: "m4",
     title: "Branch Coverage",
     segment: 4,
+    overview: "Branch coverage and covering decision paths.",
     isCompleted: false,
     isCurrent: false,
+    hasVisitedContent: false,
     isLocked: false,
     percentage: 0,
     lessonsCompleted: 0,
@@ -196,8 +276,10 @@ const MODULES: Module[] = [
     id: "m5",
     title: "Certification Test",
     segment: 5,
+    overview: "Quick review of the main ideas from earlier segments.",
     isCompleted: false,
     isCurrent: false,
+    hasVisitedContent: false,
     isLocked: true,
     percentage: 0,
     lessonsCompleted: 0,
@@ -330,6 +412,7 @@ function NumberNode({
   title,
   isCompleted,
   isCurrent,
+  hasVisitedContent,
   isLocked,
   isFinal,
   color,
@@ -342,6 +425,7 @@ function NumberNode({
   title: string;
   isCompleted: boolean;
   isCurrent: boolean;
+  hasVisitedContent: boolean;
   isLocked: boolean;
   isFinal: boolean;
   color: string;
@@ -643,11 +727,13 @@ function NumberNode({
       >
         {isCompleted
           ? "✓ Completed"
-          : isCurrent
+          : isCurrent && hasVisitedContent
             ? "▶ In Progress"
-            : isLocked
-              ? "Locked"
-              : "Not started"}
+            : isCurrent
+              ? "Not started"
+              : isLocked
+                ? "Locked"
+                : "Not started"}
       </text>
     </g>
   );
@@ -725,28 +811,43 @@ function LessonLabel({
 function LessonModal({
   mod,
   isDark,
+  pdfId,
   onClose,
   onStart,
   onSkip,
-  totalCompleted,
-  total,
 }: {
   mod: Module;
   isDark: boolean;
+  pdfId: string | null;
   onClose: () => void;
   onStart: (lessonId: string) => void;
   onSkip: (lessonId: string) => void;
-  totalCompleted: number;
-  total: number;
 }) {
   const surfaceBg = isDark ? "#1e293b" : "#FFFFFF";
   const textPri = isDark ? "#F1F5F9" : "#111827";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
-  const subBg = isDark ? "#0f172a" : "#F8FAFC";
 
   const lesson = mod.lessons[0];
-  const progressPct =
-    total > 0 ? Math.round((totalCompleted / total) * 100) : 0;
+
+  const isFirstOpenOfSegment = Boolean(lesson) &&
+    (pdfId
+      ? !readSeenLessonIdsForDoc(pdfId).has(String(lesson.id))
+      : true);
+
+  const overviewParagraph = formatLessonOverviewParagraph(mod.overview);
+
+  const primaryCtaLabel = (() => {
+    if (!lesson) return "Start Reading";
+    if (mod.isCompleted) return "Review Lesson";
+    if (isFirstOpenOfSegment) return "Start Reading";
+    return "Continue Reading";
+  })();
+
+  const handlePrimaryCta = (): void => {
+    if (!lesson) return;
+    if (pdfId) markLessonSegmentModalSeen(pdfId, lesson.id);
+    onStart(lesson.id);
+  };
 
   return (
     <div
@@ -758,9 +859,10 @@ function LessonModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           background: surfaceBg,
-          borderRadius: 20,
+          borderRadius: 24,
           padding: "24px",
-          width: 360,
+          width: 400,
+          maxWidth: "calc(100vw - 32px)",
           boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
           animation: "modalPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both",
           position: "relative",
@@ -784,7 +886,7 @@ function LessonModal({
           ×
         </button>
 
-        {/* Progress ring + segment info */}
+        {/* Status icon + segment info (no overall progress %) */}
         <div
           style={{
             display: "flex",
@@ -794,53 +896,30 @@ function LessonModal({
           }}
         >
           <div
+            className="flex items-center justify-center shrink-0 rounded-2xl"
             style={{
-              position: "relative",
-              width: 60,
-              height: 60,
-              flexShrink: 0,
+              width: 56,
+              height: 56,
+              background: isDark ? "#0f172a" : "#F1F5F9",
+              border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}`,
             }}
+            aria-hidden
           >
-            <svg width="60" height="60" viewBox="0 0 60 60">
-              <circle
-                cx="30"
-                cy="30"
-                r="24"
-                fill="none"
-                stroke={isDark ? "#334155" : "#E5E7EB"}
-                strokeWidth="5"
+            {mod.isCompleted ? (
+              <Check size={26} className="text-emerald-500" strokeWidth={2.5} />
+            ) : mod.hasVisitedContent ? (
+              <Loader2
+                size={26}
+                className="text-blue-500 animate-spin"
+                style={{ animationDuration: "2.2s" }}
               />
-              <circle
-                cx="30"
-                cy="30"
-                r="24"
-                fill="none"
-                stroke={
-                  mod.isCompleted
-                    ? "#22C55E"
-                    : mod.isCurrent
-                      ? "#F97316"
-                      : "#9CA3AF"
-                }
-                strokeWidth="5"
-                strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 24}`}
-                strokeDashoffset={`${2 * Math.PI * 24 * (1 - progressPct / 100)}`}
-                transform="rotate(-90 30 30)"
-                style={{ transition: "stroke-dashoffset 0.5s ease" }}
+            ) : (
+              <Circle
+                size={26}
+                className={isDark ? "text-slate-500" : "text-slate-400"}
+                strokeWidth={2}
               />
-              <text
-                x="30"
-                y="35"
-                textAnchor="middle"
-                fontSize="13"
-                fontWeight="700"
-                fill={isDark ? "#F1F5F9" : "#111827"}
-                fontFamily="Poppins,sans-serif"
-              >
-                {progressPct}
-              </text>
-            </svg>
+            )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p
@@ -868,119 +947,68 @@ function LessonModal({
           </div>
         </div>
 
-        {/* Progress bar */}
-        {!mod.isLocked && (
-          <div className="mb-4">
-            <div
-              className="w-full rounded-full overflow-hidden"
-              style={{ height: 5, background: isDark ? "#334155" : "#E5E7EB" }}
-            >
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{
-                  width: `${mod.percentage}%`,
-                  background: mod.isCompleted
-                    ? "linear-gradient(90deg,#16A34A,#22C55E)"
-                    : "linear-gradient(90deg,#2563EB,#6366F1)",
-                }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Lessons list */}
-        {!mod.isLocked ? (
-          <div className="space-y-1.5 mb-4">
-            {mod.lessons.map((l) => (
-              <div
-                key={l.id}
-                className="flex items-center gap-2.5 rounded-xl px-3 py-2"
-                style={{
-                  background: l.isCurrent
-                    ? isDark
-                      ? "#1e3a5f"
-                      : "#EFF6FF"
-                    : subBg,
-                  border: `1px solid ${l.isCurrent ? (isDark ? "#2563EB50" : "#BFDBFE") : "transparent"}`,
-                }}
-              >
-                <div
-                  className="h-6 w-6 rounded-full flex items-center justify-center shrink-0"
-                  style={{
-                    background: l.isCompleted
-                      ? "#16A34A"
-                      : l.isCurrent
-                        ? "#2563EB"
-                        : isDark
-                          ? "#334155"
-                          : "#E5E7EB",
-                  }}
-                >
-                  {l.isCompleted && <Check size={11} className="text-white" />}
-                  {l.isCurrent && !l.isCompleted && (
-                    <Play size={9} className="text-white" fill="white" />
-                  )}
-                  {!l.isCompleted && !l.isCurrent && (
-                    <div
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={{ background: isDark ? "#475569" : "#9CA3AF" }}
-                    />
-                  )}
-                </div>
-                <span
-                  className="flex-1 text-[12px]"
-                  style={{
-                    color: l.isCompleted
-                      ? isDark
-                        ? "#4ADE80"
-                        : "#16A34A"
-                      : l.isCurrent
-                        ? isDark
-                          ? "#93C5FD"
-                          : "#2563EB"
-                        : textMuted,
-                    fontWeight: l.isCurrent ? 600 : 400,
-                  }}
-                >
-                  {l.title}
-                  {l.isOptional && (
-                    <span
-                      className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full"
-                      style={{ background: "#7C3AED22", color: "#7C3AED" }}
-                    >
-                      optional
-                    </span>
-                  )}
-                </span>
-                <span
-                  className="text-[10px] shrink-0"
-                  style={{ color: isDark ? "#475569" : "#9CA3AF" }}
-                >
-                  {l.durationMin}m
-                </span>
-                {l.isCurrent && (
-                  <span
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
-                    style={{ background: "#2563EB", color: "white" }}
-                  >
-                    NOW
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div
-            className="mb-4 rounded-xl px-4 py-3 text-center"
-            style={{ background: subBg }}
+        {/* Lesson overview (per segment) */}
+        <div
+          className="mb-4"
+          style={{
+            borderRadius: 12,
+            padding: "14px 16px",
+            textAlign: "center",
+            background: isDark ? "rgba(37, 99, 235, 0.14)" : "#EFF6FF",
+            border: `1px solid ${isDark ? "rgba(96, 165, 250, 0.45)" : "#93C5FD"}`,
+          }}
+        >
+          <p
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: isDark ? "#93C5FD" : "#2563EB",
+              margin: "0 0 10px",
+              fontFamily: "Poppins,sans-serif",
+            }}
           >
-            <p className="text-[12px]" style={{ color: textMuted }}>
-              Complete previous segments to unlock this lesson
-            </p>
-          </div>
+            Lesson Overview
+          </p>
+          <p
+            style={{
+              fontSize: 12,
+              lineHeight: 1.55,
+              color: isDark ? "#7DD3FC" : "#1D4ED8",
+              margin: 0,
+              fontFamily: "Poppins,sans-serif",
+              fontWeight: 400,
+            }}
+          >
+            {overviewParagraph}
+          </p>
+        </div>
+
+        {!mod.isLocked && lesson && (
+          <button
+            type="button"
+            onClick={handlePrimaryCta}
+            style={{
+              width: "100%",
+              marginTop: 4,
+              background: mod.isCompleted
+                ? "linear-gradient(135deg,#16A34A,#15803D)"
+                : "linear-gradient(135deg,#2563EB,#4F46E5)",
+              border: "none",
+              borderRadius: 50,
+              padding: "14px 24px",
+              cursor: "pointer",
+              boxShadow: "0 6px 20px rgba(59,130,246,0.35)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 15,
+              fontFamily: "Poppins,sans-serif",
+            }}
+            aria-label={primaryCtaLabel}
+          >
+            {primaryCtaLabel}
+          </button>
         )}
 
-        {/* Locked notice with Skip option */}
         {mod.isLocked && (
           <div
             style={{
@@ -1001,7 +1029,11 @@ function LessonModal({
               🔒 This segment is locked. Complete previous segments first.
             </p>
             <button
-              onClick={() => lesson && onSkip(lesson.id)}
+              type="button"
+              onClick={() => {
+                if (lesson && pdfId) markLessonSegmentModalSeen(pdfId, lesson.id);
+                if (lesson) onSkip(lesson.id);
+              }}
               style={{
                 background: "none",
                 border: "none",
@@ -1011,109 +1043,12 @@ function LessonModal({
                 fontWeight: 600,
                 padding: 0,
                 textDecoration: "underline",
+                fontFamily: "Poppins,sans-serif",
               }}
             >
-              Skip lock and access anyway →
+              Skip lock and open anyway →
             </button>
           </div>
-        )}
-
-        {/* CTA button */}
-        {!mod.isLocked ? (
-          <button
-            onClick={() => lesson && onStart(lesson.id)}
-            style={{
-              width: "100%",
-              background: mod.isCompleted
-                ? "linear-gradient(135deg,#16A34A,#15803D)"
-                : "linear-gradient(135deg,#2563EB,#4F46E5)",
-              border: "none",
-              borderRadius: 50,
-              padding: "14px 24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
-              cursor: "pointer",
-              boxShadow: "0 6px 20px rgba(59,130,246,0.4)",
-            }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.25)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Play
-                size={14}
-                fill="white"
-                className="text-white"
-                style={{ marginLeft: 2 }}
-              />
-            </div>
-            <span
-              style={{
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: 15,
-                fontFamily: "Poppins,sans-serif",
-              }}
-            >
-              {mod.isCompleted ? "Review Lesson" : "Continue Learning"}
-            </span>
-          </button>
-        ) : (
-          <button
-            onClick={() => lesson && onSkip(lesson.id)}
-            style={{
-              width: "100%",
-              background: "linear-gradient(135deg, #4F8EF7, #3B82F6)",
-              border: "none",
-              borderRadius: 50,
-              padding: "14px 24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
-              cursor: "pointer",
-              boxShadow: "0 6px 20px rgba(59,130,246,0.3)",
-              opacity: 0.85,
-            }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.25)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Play
-                size={14}
-                fill="white"
-                className="text-white"
-                style={{ marginLeft: 2 }}
-              />
-            </div>
-            <span
-              style={{
-                color: "#fff",
-                fontWeight: 700,
-                fontSize: 15,
-                fontFamily: "Poppins,sans-serif",
-              }}
-            >
-              Skip &amp; Continue
-            </span>
-          </button>
         )}
       </div>
     </div>
@@ -1124,12 +1059,14 @@ function LessonModal({
 function MobileRoadmap({
   isDark,
   modules,
+  pdfId,
   onStart,
   onSkip,
   totalCompleted,
 }: {
   isDark: boolean;
   modules: Module[];
+  pdfId: string | null;
   onStart: (lessonId: string) => void;
   onSkip: (lessonId: string) => void;
   totalCompleted: number;
@@ -1140,8 +1077,16 @@ function MobileRoadmap({
   const textPri = isDark ? "#F1F5F9" : "#111827";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";
 
+  const allLessonsDone =
+    modules.length > 0 && totalCompleted >= modules.length;
+  const curMod =
+    modules.find((m) => m.isCurrent) ??
+    modules.find((m) => !m.isCompleted && !m.isLocked);
+  const nextLesson = curMod?.lessons[0];
+
   return (
-    <div className="px-4 py-6">
+    <>
+      <div className="px-4 py-6 pb-24">
       {modules.map((mod, i) => (
         <div key={mod.id} className="flex gap-4">
           <div className="flex flex-col items-center">
@@ -1289,11 +1234,13 @@ function MobileRoadmap({
               <p className="text-[11px]" style={{ color: textMuted }}>
                 {mod.isCompleted
                   ? "Completed"
-                  : mod.isCurrent
+                  : mod.isCurrent && mod.hasVisitedContent
                     ? "In Progress"
-                    : mod.isLocked
-                      ? "Locked"
-                      : "Not started"}
+                    : mod.isCurrent
+                      ? "Not started"
+                      : mod.isLocked
+                        ? "Locked"
+                        : "Not started"}
               </p>
             </button>
           </div>
@@ -1304,6 +1251,7 @@ function MobileRoadmap({
         <LessonModal
           mod={selected}
           isDark={isDark}
+          pdfId={pdfId}
           onClose={() => setSelected(null)}
           onStart={(lid) => {
             setSelected(null);
@@ -1313,11 +1261,45 @@ function MobileRoadmap({
             setSelected(null);
             onSkip(lid);
           }}
-          totalCompleted={totalCompleted}
-          total={modules.length}
         />
       )}
-    </div>
+      </div>
+
+      {curMod && nextLesson && !allLessonsDone && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-20 w-[min(100%,calc(100vw-2rem))]">
+          <button
+            type="button"
+            onClick={() => onStart(nextLesson.id)}
+            className="flex items-center gap-3 rounded-full px-4 py-2.5 w-full transition-transform active:scale-[0.98] cursor-pointer"
+            style={{
+              background: isDark ? "#1C1C1E" : "#1F2937",
+              boxShadow: "0 6px 28px rgba(0,0,0,0.35)",
+            }}
+            aria-label={
+              totalCompleted === 0
+                ? `Start reading: ${nextLesson.title}`
+                : `Continue to: ${nextLesson.title}`
+            }
+          >
+            <div
+              className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: "#2563EB" }}
+            >
+              <Play size={13} className="text-white" fill="white" />
+            </div>
+            <div className="text-left min-w-0 flex-1">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
+                {totalCompleted === 0 ? "Start reading" : "Up next"}
+              </p>
+              <p className="text-[12px] font-bold text-white truncate">
+                {nextLesson.title}
+              </p>
+            </div>
+            <ChevronRight size={14} className="text-gray-500 shrink-0" />
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1325,12 +1307,14 @@ function MobileRoadmap({
 function DesktopRoadmap({
   isDark,
   modules,
+  pdfId,
   onStart,
   onSkip,
   totalCompleted,
 }: {
   isDark: boolean;
   modules: Module[];
+  pdfId: string | null;
   onStart: (lessonId: string) => void;
   onSkip: (lessonId: string) => void;
   totalCompleted: number;
@@ -1408,7 +1392,10 @@ function DesktopRoadmap({
   const roadPath = buildRoadPath(pins);
   const svgH = C_H + 280 + SVG_ROAD_Y_PAD;
 
-  // Current lesson for "UP NEXT" banner
+  const allLessonsDone =
+    modules.length > 0 && totalCompleted >= modules.length;
+
+  // Next / current lesson for the floating banner (hidden when everything is done)
   const curMod =
     modules.find((m) => m.isCurrent) ??
     modules.find((m) => !m.isCompleted && !m.isLocked);
@@ -1581,6 +1568,7 @@ function DesktopRoadmap({
                 title={mod.title}
                 isCompleted={mod.isCompleted}
                 isCurrent={mod.isCurrent}
+                hasVisitedContent={mod.hasVisitedContent}
                 isLocked={mod.isLocked}
                 isFinal={i === modules.length - 1}
                 color={mod.pinColor}
@@ -1679,31 +1667,37 @@ function DesktopRoadmap({
       </div>
 
       {/* UP NEXT banner */}
-      {curMod && nextLesson && (
+      {curMod && nextLesson && !allLessonsDone && (
         <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20">
           <button
+            type="button"
             onClick={() => onStart(nextLesson.id)}
             className="flex items-center gap-3 rounded-full px-4 py-2.5 transition-transform hover:scale-105 cursor-pointer"
             style={{
               background: isDark ? "#1C1C1E" : "#1F2937",
               boxShadow: "0 6px 28px rgba(0,0,0,0.35)",
             }}
+            aria-label={
+              totalCompleted === 0
+                ? `Start reading: ${nextLesson.title}`
+                : `Continue to: ${nextLesson.title}`
+            }
           >
             <div
               className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: "#EF4444" }}
+              style={{ background: "#2563EB" }}
             >
               <Play size={13} className="text-white" fill="white" />
             </div>
             <div className="text-left">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400">
-                Up Next: Learn
+                {totalCompleted === 0 ? "Start reading" : "Up next"}
               </p>
-              <p className="text-[12px] font-bold text-white">
+              <p className="text-[12px] font-bold text-white max-w-[220px] truncate">
                 {nextLesson.title}
               </p>
             </div>
-            <ChevronRight size={14} className="text-gray-500" />
+            <ChevronRight size={14} className="text-gray-500 shrink-0" />
           </button>
         </div>
       )}
@@ -1713,6 +1707,7 @@ function DesktopRoadmap({
         <LessonModal
           mod={selected}
           isDark={isDark}
+          pdfId={pdfId}
           onClose={() => setSelected(null)}
           onStart={(lid) => {
             setSelected(null);
@@ -1722,8 +1717,6 @@ function DesktopRoadmap({
             setSelected(null);
             onSkip(lid);
           }}
-          totalCompleted={totalCompleted}
-          total={modules.length}
         />
       )}
     </div>
@@ -1748,6 +1741,14 @@ export default function RoadmapPage() {
   const [apiResolved, setApiResolved] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [visitBump, setVisitBump] = useState(0);
+
+  useEffect(() => {
+    const onVisit = () => setVisitBump((n) => n + 1);
+    window.addEventListener("docvia-lesson-content-visited", onVisit);
+    return () =>
+      window.removeEventListener("docvia-lesson-content-visited", onVisit);
+  }, []);
 
   // Get completed lesson IDs from progress context
   const docProgress = pdfId ? getDocumentProgress(pdfId) : null;
@@ -1778,6 +1779,7 @@ export default function RoadmapPage() {
             result.data.lessons,
             completedLessonIds,
             result.data.title,
+            pdfId ? getVisitedLessonIds(pdfId) : new Set<string>(),
           ),
         );
         setErrorMessage(null);
@@ -1815,16 +1817,20 @@ export default function RoadmapPage() {
     };
   }, [pdfId, user?.id, token, retryKey]);
 
-  // Re-sync modules when completedLessonIds change (lesson marked complete in reader)
+  // Re-sync modules when progress or lesson visits change (reader opened a lesson, etc.)
   useEffect(() => {
+    const done = new Set(completedLessonIds.map((id) => String(id).trim()));
+    const visited = pdfId ? getVisitedLessonIds(pdfId) : new Set<string>();
     setModules((prev) => {
       if (prev.length === 0) return prev;
       return prev.map((mod, idx) => {
         const lessonId = mod.lessons[0]?.id;
         if (!lessonId) return mod;
-        const isCompleted = completedLessonIds.includes(lessonId);
+        const isCompleted = done.has(String(lessonId));
+        const hasVisitedContent =
+          visited.has(String(lessonId)) || isCompleted;
         const firstIncompleteIdx = prev.findIndex(
-          (m) => !completedLessonIds.includes(m.lessons[0]?.id ?? ""),
+          (m) => !done.has(String(m.lessons[0]?.id ?? "")),
         );
         const isCurrent =
           idx ===
@@ -1832,7 +1838,7 @@ export default function RoadmapPage() {
         const lastCompletedIdx = (() => {
           let last = -1;
           prev.forEach((m, i) => {
-            if (completedLessonIds.includes(m.lessons[0]?.id ?? "")) last = i;
+            if (done.has(String(m.lessons[0]?.id ?? ""))) last = i;
           });
           return last;
         })();
@@ -1841,18 +1847,28 @@ export default function RoadmapPage() {
           ...mod,
           isCompleted,
           isCurrent,
+          hasVisitedContent,
           isLocked,
           percentage: isCompleted ? 100 : 0,
           lessonsCompleted: isCompleted ? 1 : 0,
           lessons: mod.lessons.map((l) => ({
             ...l,
-            isCompleted: completedLessonIds.includes(l.id),
+            isCompleted: done.has(String(l.id)),
             isCurrent,
           })),
         };
       });
     });
-  }, [completedLessonIds.join(",")]);
+  }, [completedLessonIds.join(","), visitBump, pdfId]);
+
+  const roadmapTimerLessonId = useMemo(() => {
+    if (modules.length === 0) return null;
+    const current = modules.find((m) => m.isCurrent);
+    const id = current?.lessons[0]?.id ?? modules[0]?.lessons[0]?.id;
+    return id ? String(id) : null;
+  }, [modules]);
+
+  useTimeTracker({ documentId: pdfId, lessonId: roadmapTimerLessonId });
 
   if (loadingState === "loading") {
     return (
@@ -2066,6 +2082,7 @@ export default function RoadmapPage() {
           <DesktopRoadmap
             isDark={isDark}
             modules={modules}
+            pdfId={pdfId}
             onStart={handleStart}
             onSkip={handleSkip}
             totalCompleted={totalCompleted}
@@ -2078,6 +2095,7 @@ export default function RoadmapPage() {
             <MobileRoadmap
               isDark={isDark}
               modules={modules}
+              pdfId={pdfId}
               onStart={handleStart}
               onSkip={handleSkip}
               totalCompleted={totalCompleted}
