@@ -4,8 +4,8 @@
  * Reads all keys from GROQ_API_KEY (comma-separated) in .env.
  * Assigns one key per user on registration (round-robin).
  * On every AI call, starts from the user's assigned key and automatically
- * cycles to the next key if a 429 rate-limit error is encountered,
- * trying all available keys before giving up.
+ * cycles to the next key if the key is exhausted, rate-limited, deactivated,
+ * or otherwise unusable — trying all available keys before giving up.
  *
  * .env format:
  *   GROQ_API_KEY=key1,key2,key3,...
@@ -91,25 +91,52 @@ async function getKeyForUser(userId) {
   return GROQ_KEYS[index];
 }
 
-// ─── Rate-limit detection ─────────────────────────────────────────────────────
+// ─── Key-level failure detection ──────────────────────────────────────────────
+// Returns true for ANY error that means THIS specific key can't be used,
+// so the manager should cycle to the next key instead of throwing immediately.
 
-function isRateLimitError(err) {
-  const msg = (err?.message || '').toLowerCase();
-  return (
+function isKeyExhaustedError(err) {
+  const msg    = (err?.message || '').toLowerCase();
+  const status = err?.status ?? err?.statusCode ?? err?.response?.status ?? 0;
+
+  // Rate-limit / quota patterns
+  const isRateLimit = (
     msg.includes('429') ||
     msg.includes('rate_limit_exceeded') ||
     msg.includes('rate limit') ||
     msg.includes('tokens per day') ||
-    msg.includes('tokens per minute')
+    msg.includes('tokens per minute') ||
+    msg.includes('requests per day') ||
+    msg.includes('requests per minute') ||
+    status === 429
   );
+
+  // Key-level failures — key is deactivated, invalid, or over its quota
+  const isKeyFailure = (
+    msg.includes('invalid_api_key') ||
+    msg.includes('invalid api key') ||
+    msg.includes('deactivated') ||
+    msg.includes('insufficient_quota') ||
+    msg.includes('insufficient quota') ||
+    msg.includes('account is not active') ||
+    msg.includes('no such api key') ||
+    status === 401 ||
+    status === 403
+  );
+
+  return isRateLimit || isKeyFailure;
 }
 
-// ─── Main: call Groq with automatic key cycling on 429 ───────────────────────
+// Keep old name as alias so nothing else that imports it breaks
+const isRateLimitError = isKeyExhaustedError;
+
+// ─── Main: call Groq with automatic key cycling ───────────────────────────────
 
 /**
- * Executes callFn(apiKey) using the user's assigned key.
- * If that key returns a 429 rate-limit error, automatically tries the next
- * key in the pool, cycling through all available keys before throwing.
+ * Executes callFn(apiKey) using the user's assigned starting key.
+ * If that key returns any rate-limit, quota, deactivation, or auth error,
+ * automatically tries the next key in the pool, cycling through ALL available
+ * keys before giving up.
  *
  * Usage:
  *   const result = await makeGroqCall(userId, key =>
@@ -134,18 +161,19 @@ async function makeGroqCall(userId, callFn) {
       }
       return result;
     } catch (err) {
-      if (isRateLimitError(err)) {
+      if (isKeyExhaustedError(err)) {
         if (i < GROQ_KEYS.length - 1) {
-          console.warn(`[GroqKeyManager] ⚠️  Key index ${index} rate-limited — cycling to next key...`);
+          console.warn(`[GroqKeyManager] ⚠️  Key index ${index} unusable (${err.message?.slice(0, 60)}) — cycling to next key...`);
           continue;
         } else {
-          console.error('[GroqKeyManager] ❌ All keys are rate-limited.');
-          throw new Error('All Groq API keys are currently rate-limited. Please try again later.');
+          console.error('[GroqKeyManager] ❌ All keys are exhausted or unusable.');
+          throw new Error('All Groq API keys are currently exhausted or rate-limited. Please try again later.');
         }
       }
+      // Non-key error (network, bad prompt, etc.) — throw immediately
       throw err;
     }
   }
 }
 
-module.exports = { assignKeyToUser, getKeyForUser, makeGroqCall, GROQ_KEYS };
+module.exports = { assignKeyToUser, getKeyForUser, makeGroqCall, isRateLimitError, GROQ_KEYS };

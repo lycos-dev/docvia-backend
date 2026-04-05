@@ -140,14 +140,10 @@ function markLessonSegmentModalSeen(docId: string, lessonId: string): void {
 function formatLessonOverviewParagraph(overviewRaw: string): string {
   const t = overviewRaw.trim();
   if (!t) {
-    return "This lesson will tackle the content for this segment once it is ready.";
+    return "";
   }
-  const lower = t.toLowerCase();
-  if (lower.startsWith("this lesson will tackle")) {
-    return t.endsWith(".") ? t : `${t}.`;
-  }
-  const body = t.endsWith(".") ? t.slice(0, -1) : t;
-  return `This lesson will tackle ${body}.`;
+  // Return full overview text (don't extract first sentence)
+  return t.endsWith(".") ? t : `${t}.`;
 }
 
 function shortSegmentOverview(raw: string, maxLen = 160): string {
@@ -167,6 +163,7 @@ function mapLessonsToModules(
   completedLessonIds: string[],
   _docTitle: string,
   visitedLessonIds: Set<string>,
+  moduleOverview: string = "",
 ): Module[] {
   const completedSet = new Set(
     completedLessonIds.map((id) => String(id).trim()),
@@ -194,9 +191,11 @@ function mapLessonsToModules(
     const isLocked = idx > lastCompletedIdx + 1;
 
     const overview =
-      typeof lesson.explanation === "string"
-        ? shortSegmentOverview(lesson.explanation)
-        : "";
+      idx === 0 && typeof moduleOverview === "string" && moduleOverview.length > 0
+        ? shortSegmentOverview(moduleOverview)
+        : typeof lesson.explanation === "string"
+          ? shortSegmentOverview(lesson.explanation)
+          : "";
 
     return {
       id: `m${idx + 1}`,
@@ -2573,6 +2572,7 @@ export default function RoadmapPage() {
               completedLessonIds,
               result.data.title,
               pdfId ? getVisitedLessonIds(pdfId) : new Set<string>(),
+              result.data.overview,
             ),
           );
           setErrorMessage(null);
