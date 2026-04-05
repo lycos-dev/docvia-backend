@@ -143,14 +143,9 @@ function markLessonSegmentModalSeen(docId: string, lessonId: string): void {
 function formatLessonOverviewParagraph(overviewRaw: string): string {
   const t = overviewRaw.trim();
   if (!t) {
-    return "This lesson will tackle the content for this segment once it is ready.";
+    return "";
   }
-  const lower = t.toLowerCase();
-  if (lower.startsWith("this lesson will tackle")) {
-    return t.endsWith(".") ? t : `${t}.`;
-  }
-  const body = t.endsWith(".") ? t.slice(0, -1) : t;
-  return `This lesson will tackle ${body}.`;
+  return t.endsWith(".") ? t : `${t}.`;
 }
 
 function shortSegmentOverview(raw: string, maxLen = 160): string {

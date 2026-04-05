@@ -104,7 +104,7 @@ export default function RoadmapLoadingPage({
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl transition hover:bg-opacity-80 shrink-0 cursor-pointer"
+          className="flex items-center gap-2 px-3 py-2 rounded-xl transition hover:bg-opacity-80 shrink-0 cursor-pointer select-none"
           style={{ background: pageBg, border: `1px solid ${borderCol}` }}
         >
           {isDark

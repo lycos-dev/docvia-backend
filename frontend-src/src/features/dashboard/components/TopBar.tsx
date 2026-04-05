@@ -56,7 +56,7 @@ export default function TopBar({ searchTerm, onSearchChange }: TopBarProps) {
       <div className="ml-4">
         <button
           onClick={toggleTheme}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors select-none"
         >
           {theme === 'light' ? (
             <>
