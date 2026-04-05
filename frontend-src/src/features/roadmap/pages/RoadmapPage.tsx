@@ -308,86 +308,33 @@ function lastContiguousCompletedIndex(modules: Module[]): number {
 const NODE_R = 28;
 const NODE_ELEVATION_ABOVE_ROAD = 118;
 
-/**
- * Goal graphic **past** the path end: anchor is offset along travel direction beyond the last pin,
- * then shifted perpendicular so the art sits beside the road (not on the asphalt).
- */
-function schoolRectOnRoad(
-  pinX: number,
-  roadY: number,
-  approach: { dx: number; dy: number } | undefined,
-  canvasW?: number,
-): { x: number; y: number; w: number; h: number; anchorX: number; anchorY: number } {
-  const dx = approach?.dx ?? 1;
-  const dy = approach?.dy ?? 0;
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len;
-  const uy = dy / len;
-  const w = 310;
-  const h = 242;
-  const pastEnd = 118;
-  const offRoad = 96;
-  const tipX = pinX + ux * pastEnd;
-  const tipY = roadY + uy * pastEnd;
-  let anchorX = tipX - uy * offRoad;
-  let anchorY = tipY + ux * offRoad;
-  const groundBlend = 40;
-  const pad = 6;
-  const half = w / 2;
-  if (canvasW !== undefined) {
-    const minX = pinX + ux * Math.min(pastEnd, 40) - half;
-    anchorX = Math.min(anchorX, canvasW - pad - half);
-    anchorX = Math.max(anchorX, Math.max(pad + half, minX));
-  }
-  return {
-    x: anchorX - w / 2,
-    y: anchorY - h + groundBlend,
-    w,
-    h,
-    anchorX,
-    anchorY,
-  };
-}
-
-function RoadmapSchoolLayer({
+/** School image sitting above the last segment node, perfectly sized to match the node. */
+function SchoolOnLastNode({
   pins,
-  canvasW,
   isDark,
 }: {
   pins: Array<{ x: number; y: number }>;
-  canvasW: number;
   isDark: boolean;
 }) {
   if (pins.length === 0) return null;
-  const last = pins.length - 1;
-  const approach =
-    last > 0
-      ? { dx: pins[last].x - pins[last - 1].x, dy: pins[last].y - pins[last - 1].y }
-      : { dx: 1, dy: 0 };
-  const s = schoolRectOnRoad(pins[last].x, pins[last].y, approach, canvasW);
+  const last = pins[pins.length - 1];
+  const nodeY = last.y - NODE_ELEVATION_ABOVE_ROAD;
+  const w = 160;
+  const h = 124;
   return (
     <g style={{ pointerEvents: "none" }} aria-hidden>
-      <ellipse
-        cx={s.anchorX}
-        cy={s.anchorY + 12}
-        rx={s.w * 0.36}
-        ry={16}
-        fill={isDark ? "rgba(0,0,0,0.5)" : "rgba(15,23,42,0.2)"}
-        opacity={0.7}
-        style={{ filter: "blur(14px)" }}
-      />
       <image
         href={SCHOOL_IMG}
         xlinkHref={SCHOOL_IMG}
-        x={s.x}
-        y={s.y}
-        width={s.w}
-        height={s.h}
+        x={last.x - w / 2}
+        y={nodeY - NODE_R - h - 6}
+        width={w}
+        height={h}
         preserveAspectRatio="xMidYMax meet"
         style={{
           filter: isDark
-            ? "drop-shadow(0 14px 36px rgba(0,0,0,0.65)) drop-shadow(0 2px 10px rgba(0,0,0,0.5))"
-            : "drop-shadow(0 16px 36px rgba(15,23,42,0.22)) drop-shadow(0 4px 14px rgba(30,58,95,0.2))",
+            ? "drop-shadow(0 6px 18px rgba(0,0,0,0.6))"
+            : "drop-shadow(0 6px 16px rgba(15,23,42,0.22))",
         }}
       />
     </g>
@@ -1854,9 +1801,6 @@ function DesktopRoadmap({
               strokeDasharray="24 18"
               strokeDashoffset="21" />
 
-            {/* Goal school: SVG-root layer after road, before nodes (past path end, off asphalt) */}
-            <RoadmapSchoolLayer pins={pins} canvasW={cW} isDark={isDark} />
-
             {/* === NODES === */}
             {modules.map((mod, i) => (
               <NumberNode
@@ -1888,6 +1832,9 @@ function DesktopRoadmap({
                 isDark={isDark}
               />
             ))}
+
+            {/* School above last node — rendered last so it's on top */}
+            <SchoolOnLastNode pins={pins} isDark={isDark} />
           </svg>
         </div>
       </div>
