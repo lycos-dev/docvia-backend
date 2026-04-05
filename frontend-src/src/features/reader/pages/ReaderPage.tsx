@@ -42,6 +42,98 @@ function formatTimestamp(isoString: string): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function CompletionModal({
+  isDark,
+  lessonTitle,
+  onNext,
+  onStay,
+}: {
+  isDark: boolean;
+  lessonTitle: string;
+  onNext: () => void;
+  onStay: () => void;
+}) {
+  return (
+    <>
+      <style>{`
+        @keyframes modalPop {
+          0%   { transform: scale(0.88) translateY(12px); opacity: 0; }
+          70%  { transform: scale(1.02); opacity: 1; }
+          100% { transform: scale(1) translateY(0); }
+        }
+      `}</style>
+      <div
+        className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+        style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+          style={{
+            background: isDark ? "#1e293b" : "#FFFFFF",
+            border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"}`,
+            animation: "modalPop 0.25s cubic-bezier(0.34,1.56,0.64,1) both",
+          }}
+        >
+          {/* Icon */}
+          <div className="flex justify-center mb-4">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center text-2xl"
+              style={{ background: isDark ? "rgba(34,197,94,0.15)" : "#F0FDF4" }}
+            >
+              ✅
+            </div>
+          </div>
+
+          {/* Heading */}
+          <h3
+            className="text-center text-lg font-bold mb-1"
+            style={{ color: isDark ? "#F1F5F9" : "#111827" }}
+          >
+            Lesson Complete!
+          </h3>
+
+          {/* Sub-text */}
+          <p
+            className="text-center text-sm mb-6 leading-relaxed"
+            style={{ color: isDark ? "#94A3B8" : "#6B7280" }}
+          >
+            Great job finishing{" "}
+            <span className="font-semibold" style={{ color: isDark ? "#4F7CDD" : "#4F7CDD" }}>
+              "{lessonTitle}"
+            </span>
+            . What would you like to do next?
+          </p>
+
+          {/* Actions */}
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={onNext}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95 cursor-pointer"
+              style={{
+                background: "linear-gradient(135deg, #4F7CDD 0%, #6094e0 100%)",
+                boxShadow: "0 4px 12px rgba(96,148,224,0.35)",
+              }}
+            >
+              Proceed to Next Lesson →
+            </button>
+            <button
+              onClick={onStay}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all hover:-translate-y-0.5 active:scale-95 cursor-pointer"
+              style={{
+                background: isDark ? "rgba(255,255,255,0.05)" : "#F8FAFC",
+                color: isDark ? "#94A3B8" : "#6B7280",
+                border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)"}`,
+              }}
+            >
+              Continue Reading
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function ReaderPage() {
   const { documentId = "", lessonId = "" } = useParams<{
     documentId: string;
@@ -160,6 +252,7 @@ export default function ReaderPage() {
   // ── Confetti ──────────────────────────────────────────────────────────────
   const [showConfetti, setShowConfetti] = useState(false);
   const [confettiOrigin, setConfettiOrigin] = useState({ x: 0, y: 0 });
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   // ── Text selection → AI Chat injection ───────────────────────────────────
   const [injectMessage, setInjectMessage] = useState<string | null>(null);
@@ -204,13 +297,52 @@ export default function ReaderPage() {
   const handlePrevLesson = () => goToLesson(lessonIndex - 1);
   const handleNextLesson = () => goToLesson(lessonIndex + 1);
 
-  const handleMarkComplete = () => {
-    if (isCompleted || totalLessons < 1) return;
-    markLessonComplete(documentId, lessonId, totalLessons);
-    setConfettiOrigin({ x: window.innerWidth / 2, y: window.innerHeight / 3 });
-    setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 1500);
-  };
+const handleMarkComplete = () => {
+  if (isCompleted) {
+    // ── Mark as INCOMPLETE ──
+    // Call markLessonComplete won't un-complete, so we need unmarkLessonComplete.
+    // Since ProgressContext uses localStorage, mutate it directly then reload:
+    const key = `${documentId}:${lessonId}`;
+    const stored = localStorage.getItem("docvia-progress");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // Remove from lessonProgress
+        if (parsed.lessonProgress?.[key]) {
+          parsed.lessonProgress[key].isCompleted = false;
+          parsed.lessonProgress[key].completedAt = null;
+        }
+        // Remove from documentProgress completedLessons array
+        if (parsed.documentProgress?.[documentId]?.completedLessons) {
+          parsed.documentProgress[documentId].completedLessons =
+            parsed.documentProgress[documentId].completedLessons.filter(
+              (id: string) => id !== lessonId,
+            );
+          // Recalculate percentage
+          const cl = parsed.documentProgress[documentId].completedLessons.length;
+          const tl = parsed.documentProgress[documentId].totalLessons || totalLessons;
+          parsed.documentProgress[documentId].percentage =
+            tl > 0 ? Math.round((cl / tl) * 100) : 0;
+        }
+        localStorage.setItem("docvia-progress", JSON.stringify(parsed));
+        // Force a page reload to re-sync all context state
+        window.location.reload();
+      } catch {
+        window.location.reload();
+      }
+    }
+    return;
+  }
+
+  // ── Mark as COMPLETE ──
+  if (totalLessons < 1) return;
+  markLessonComplete(documentId, lessonId, totalLessons);
+  setConfettiOrigin({ x: window.innerWidth / 2, y: window.innerHeight / 3 });
+  setShowConfetti(true);
+  setTimeout(() => setShowConfetti(false), 1500);
+  // Show the confirmation modal instead of auto-navigating
+  setShowCompletionModal(true);
+};
 
   const handleGoDeeper = () => setShowDeepDive((v) => !v);
 
@@ -244,12 +376,13 @@ export default function ReaderPage() {
     lesson?.title ?? (lessonLoadState === "loading" ? "Loading…" : "Lesson");
 
   return (
+    
     <div
       className={cn(
         "fixed inset-0 flex flex-col",
         isDark ? "bg-[#0f172a]" : "bg-[#F4F4F8]",
       )}
-      style={{ fontFamily: "Poppins, sans-serif" }}
+      style={{ fontFamily: "Inter, sans-serif" }}
     >
       <TextSelectionTooltip
         containerId="lessonContentArea"
@@ -406,14 +539,13 @@ export default function ReaderPage() {
               <div className="flex gap-3 items-center">
                 <button
                   onClick={handleMarkComplete}
-                  disabled={isCompleted}
                   className={cn(
                     "flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all cursor-pointer",
                     isCompleted
                       ? isDark
-                        ? "bg-white/10 text-[#94A3B8] cursor-default" // Muted gray for completed (Dark)
-                        : "bg-gray-100 text-[#6B7280] cursor-default" // Muted gray for completed (Light)
-                      : "bg-[#FAFAFA] text-[#727272] border border-[#bbbdbf] shadow-md " +
+                        ? "bg-white/10 text-[#94A3B8] cursor-pointer" 
+                        : "bg-gray-100 text-[#6B7280] cursor-pointer"
+                      : "bg-[#FAFAFA] text-gray-600 border border-[#bbbdbf] shadow-md " +
                           // --- ADDED HOVER EFFECTS BELOW ---
                           "hover:-translate-y-0.5 hover:shadow-lg hover:bg-white " +
                           "hover:border-[#80AAE8] hover:text-[#80AAE8] " +
@@ -446,7 +578,7 @@ export default function ReaderPage() {
                       setQuizRestartSignal((v) => v + 1);
                       setShowQuiz(true);
                     }}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-[#f59e0b]/40 text-[#b45309] dark:text-[#fbbf24] hover:bg-[#f59e0b]/10 transition-colors cursor-pointer"
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-[#74D7F0]/60 text-[#4fcae8] dark:text-[#74D7F0]] hover:bg-[#74D7F0]/20 transition-colors cursor-pointer"
                     title="Start a fresh quiz session"
                   >
                     Start New
@@ -458,13 +590,28 @@ export default function ReaderPage() {
                   onClick={handlePrevLesson}
                   disabled={lessonIndex === 0}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer",
+                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer flex flex-col items-start",
                     isDark
                       ? "border-white/10 text-[#94A3B8] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed"
-                      : "border-black/10 text-[#6B7280] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed",
+                      : "border-black/10 text-gray-600 hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed",
                   )}
                 >
-                  ← Previous
+                  {lessonIndex > 0 && lessonSet && (
+                    <span className="text-[9px] font-normal opacity-50 uppercase tracking-wide leading-none mb-0.5">
+                      
+                    </span>
+                  )}
+                  <span>
+                    ← Previous:{" "}
+                    {lessonIndex > 0 && lessonSet
+                      ? lessonSet.lessons[lessonIndex - 1].title.length > 15
+                        ? lessonSet.lessons[lessonIndex - 1].title.slice(
+                            0,
+                            15,
+                          ) + "…"
+                        : lessonSet.lessons[lessonIndex - 1].title
+                      : "Chapter"}
+                  </span>
                 </button>
                 <button
                   onClick={handleNextLesson}
@@ -472,13 +619,24 @@ export default function ReaderPage() {
                     !lessonSet || lessonIndex >= lessonSet.lessons.length - 1
                   }
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer",
+                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors cursor-pointer flex flex-col items-end",
                     isDark
                       ? "border-white/10 text-[#94A3B8] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed"
-                      : "border-black/10 text-[#6B7280] hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed",
+                      : "border-black/10 text-gray-600 hover:border-[#3B82F6] hover:text-[#3B82F6] disabled:opacity-30 disabled:cursor-not-allowed",
                   )}
                 >
-                  Next →
+                  <span>
+                    Next:{" "}
+                    {lessonSet && lessonIndex < lessonSet.lessons.length - 1
+                      ? lessonSet.lessons[lessonIndex + 1].title.length > 15
+                        ? lessonSet.lessons[lessonIndex + 1].title.slice(
+                            0,
+                            15,
+                          ) + "…"
+                        : lessonSet.lessons[lessonIndex + 1].title
+                      : "Chapter"}{" "}
+                    →
+                  </span>
                 </button>
               </div>
             </div>
@@ -510,7 +668,7 @@ export default function ReaderPage() {
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   className={cn(
-                    "shrink-0 px-4 py-3 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer",
+                    "shrink-0 px-4 py-4 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer",
                     activeTab === tab.key
                       ? "text-[#3B82F6] border-b-2 border-[#3B82F6]"
                       : isDark
@@ -529,14 +687,14 @@ export default function ReaderPage() {
                 className={cn(
                   "shrink-0 px-4 py-3 border-b",
                   isDark
-                    ? "bg-[#1e293b] border-white/10"
-                    : "bg-[#F8FAFC] border-black/6",
+                    ? "bg-[#3d6eb736] border-white/10"
+                    : "bg-[#89ade230] border-black/6",
                 )}
               >
                 <p
                   className={cn(
-                    "text-xs font-semibold",
-                    isDark ? "text-[#F1F5F9]" : "text-[#111827]",
+                    "text-xs font-bold",
+                    isDark ? "text-[#F1F5F9]" : "text-[#1b4fc0]",
                   )}
                 >
                   AI Tutor
@@ -544,10 +702,10 @@ export default function ReaderPage() {
                 <p
                   className={cn(
                     "text-[10px] mt-0.5",
-                    isDark ? "text-[#94A3B8]" : "text-[#6B7280]",
+                    isDark ? "text-[#94A3B8]" : "text-[#4971ca]",
                   )}
                 >
-                  Ask anything about this lesson
+                  Your AI study assistant. Ask anything!
                 </p>
               </div>
             )}
@@ -582,7 +740,7 @@ export default function ReaderPage() {
       {mainView === "lesson" && lessonLoadState === "ready" && lesson && (
         <div
           className={cn(
-            "fixed inset-0 z-[70] flex items-center justify-center p-4",
+            "fixed inset-0 z-70 flex items-center justify-center p-4",
             showQuiz
               ? "pointer-events-auto opacity-100"
               : "pointer-events-none opacity-0",
@@ -618,9 +776,26 @@ export default function ReaderPage() {
       <div className="fixed inset-0 pointer-events-none z-50">
         <ConfettiOverlay active={showConfetti} origin={confettiOrigin} />
       </div>
+
+      {/* ✅ Completion modal */}
+      {showCompletionModal && (
+        <CompletionModal
+          isDark={isDark}
+          lessonTitle={lesson?.title ?? "this lesson"}
+          onNext={() => {
+            setShowCompletionModal(false);
+            handleNextLesson();
+          }}
+          onStay={() => setShowCompletionModal(false)}
+        />
+      )}
     </div>
   );
 }
+
+
+
+
 
 // ─── Three-row lesson body (segment-grounded) ────────────────────────────────
 interface LessonRow {
@@ -734,21 +909,23 @@ function LessonContent({
           isDark ? "border-white/10" : "border-black/10",
         )}
       >
-        <div
-          className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold mb-3"
-          style={{
-            background: "linear-gradient(135deg, #3B82F6, #1D4ED8)",
-            boxShadow: "0 3px 10px rgba(59,130,246,0.4)",
-          }}
-        >
-          {lessonIndex + 1}
+        <div className="flex items-center gap-4 mb-4">
+          <div
+            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+            style={{
+              background: "#80AAE8",
+              boxShadow: "0 3px 10px rgba(59,130,246,0.4)",
+            }}
+          >
+            {lessonIndex + 1}
+          </div>
+          <h1
+            className="text-2xl font-bold leading-snug"
+            style={{ color: isDark ? "#F1F5F9" : "#111827" }}
+          >
+            {lesson.title}
+          </h1>
         </div>
-        <h1
-          className="text-2xl font-bold leading-snug mb-2.5"
-          style={{ color: isDark ? "#F1F5F9" : "#111827" }}
-        >
-          {lesson.title}
-        </h1>
         <div className="flex flex-wrap gap-2 mt-2">
           <span
             className="text-xs font-semibold px-2.5 py-1 rounded-full"
@@ -828,16 +1005,20 @@ function LessonContent({
               "rounded-2xl border p-5 md:p-6 transition-shadow",
               isDark
                 ? "border-white/10 bg-[#1e293b]/80 shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
-                : "border-black/[0.06] bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)]",
+                : "border-black/6 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)]",
             )}
           >
             <div className="flex items-start gap-3 mb-3">
               <div
                 className={cn(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold text-white",
-                  i === 0 && "bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8]",
-                  i === 1 && "bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9]",
-                  i === 2 && "bg-gradient-to-br from-[#059669] to-[#0D9488]",
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold",
+                  // We use a light background and a darker version of the same color for the text
+                  i === 0 &&
+                    "bg-[#E0E7FF] text-[#4338CA] dark:bg-[#80AAE8]/20 dark:text-[#80AAE8]", // Pastel Indigo/Blue
+                  i === 1 &&
+                    "bg-[#F5F3FF] text-[#6D28D9] dark:bg-[#8B5CF6]/20 dark:text-[#C4B5FD]", // Pastel Purple
+                  i === 2 &&
+                    "bg-[#ECFDF5] text-[#047857] dark:bg-[#10B981]/20 dark:text-[#6EE7B7]", // Pastel Mint
                 )}
               >
                 {i + 1}

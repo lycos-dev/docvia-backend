@@ -1502,6 +1502,7 @@ function DesktopRoadmap({
   const [lockContinueAcknowledged, setLockContinueAcknowledged] = useState(false);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [isRecentering, setIsRecentering] = useState(false);
   const [grabbing, setGrab] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panRef = useRef({ dragging: false, sx: 0, sy: 0, px: 0, py: 0 });
@@ -1647,14 +1648,19 @@ function DesktopRoadmap({
         style={{ cursor: grabbing ? "grabbing" : "grab" }}
         onMouseDown={onMD}
       >
-        <div style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
-          transformOrigin: "center center",
-          willChange: "transform",
-        }}>
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px)) scale(${zoom})`,
+            transformOrigin: "center center",
+            willChange: "transform",
+            transition: isRecentering
+              ? "transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1)"
+              : "none",
+          }}
+        >
           <svg
             width={cW}
             height={svgH}
@@ -1839,50 +1845,90 @@ function DesktopRoadmap({
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="absolute bottom-10 right-8 z-20 flex flex-col items-end gap-2.5">
-        <div
-          className="px-3.5 py-1.5 rounded-full text-[10.5px] font-semibold tracking-wide"
-          style={{
-            color: textMuted,
-            background: isDark ? "rgba(10,15,26,0.8)" : "rgba(255,255,255,0.88)",
-            border: `1px solid ${borderCol}`,
-            boxShadow: isDark ? "0 2px 12px rgba(0,0,0,0.4)" : "0 2px 10px rgba(0,0,0,0.08)",
-            backdropFilter: "blur(8px)",
-          }}
-        >
-          Drag to pan · Scroll to zoom
-        </div>
-
-        <div className="flex items-center rounded-2xl overflow-hidden"
-          style={{
-            background: surfaceBg,
-            border: `1px solid ${borderCol}`,
-            boxShadow: isDark ? "0 4px 20px rgba(0,0,0,0.55)" : "0 4px 20px rgba(0,0,0,0.1)",
-            backdropFilter: "blur(10px)",
-          }}>
-          {[
-            { label: "+", onClick: () => setZoom((z) => Math.min(MAX_Z, +(z + 0.15).toFixed(2))), title: "Zoom in" },
-            { label: <Maximize2 size={15} />, onClick: () => { setZoom(1); setPan({ x: 0, y: 0 }); }, title: "Reset" },
-            { label: "−", onClick: () => setZoom((z) => Math.max(MIN_Z, +(z - 0.15).toFixed(2))), title: "Zoom out" },
-          ].map((btn, i, arr) => (
-            <div key={i} className="flex items-center">
-              <button
-                onClick={btn.onClick}
-                title={btn.title}
-                className="h-11 w-12 flex items-center justify-center transition-colors cursor-pointer"
-                style={{ color: textMuted }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? "#1e293b" : "#F3F4F6")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                {typeof btn.label === "string" ? (
-                  <span className="text-[22px] font-light leading-none">{btn.label}</span>
-                ) : btn.label}
-              </button>
-              {i < arr.length - 1 && <div style={{ width: 1, height: 22, background: borderCol }} />}
-            </div>
-          ))}
-        </div>
+      {/* Zoom controls */}
+      <div
+        className="absolute bottom-5 right-8 flex items-center rounded-2xl z-20"
+        style={{
+          background: surfaceBg,
+          border: `1px solid ${borderCol}`,
+          boxShadow: isDark
+            ? "0 4px 20px rgba(0,0,0,0.5)"
+            : "0 4px 20px rgba(0,0,0,0.1)",
+          userSelect: "none",
+        }}
+      >
+        {[
+          {
+            label: "+",
+            onClick: () =>
+              setZoom((z) => Math.min(MAX_Z, +(z + 0.15).toFixed(2))),
+            title: "Zoom in",
+          },
+          {
+            label: <Maximize2 size={15} />,
+            onClick: () => {
+              setIsRecentering(true);
+              setZoom(1);
+              const curIdx = modules.findIndex((m) => m.isCurrent);
+              const targetIdx =
+                curIdx !== -1
+                  ? curIdx
+                  : modules.findIndex((m) => !m.isCompleted && !m.isLocked);
+              if (targetIdx !== -1 && pins[targetIdx]) {
+                const pin = pins[targetIdx];
+                const svgMidX = svgCanvasWidth(modules.length) / 2;
+                const svgMidY = (C_H + 500 + SVG_ROAD_Y_PAD) / 2;
+                setPan({ x: -(pin.x - svgMidX), y: -(pin.y - svgMidY) });
+              } else {
+                setPan({ x: 0, y: 0 });
+              }
+              setTimeout(() => setIsRecentering(false), 600);
+            },
+            title: "Reset",
+          },
+          {
+            label: "−",
+            onClick: () =>
+              setZoom((z) => Math.max(MIN_Z, +(z - 0.15).toFixed(2))),
+            title: "Zoom out",
+          },
+        ].map((btn, i, arr) => (
+          <div key={i} className="flex items-center">
+            <button
+              onClick={btn.onClick}
+              title={btn.title}
+              className="h-11 w-12 flex items-center justify-center transition-colors cursor-pointer"
+              style={{
+                color: textMuted,
+                borderRadius:
+                  i === 0
+                    ? "14px 0 0 14px"
+                    : i === arr.length - 1
+                      ? "0 14px 14px 0"
+                      : "0",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = isDark
+                  ? "#334155"
+                  : "#F3F4F6")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
+            >
+              {typeof btn.label === "string" ? (
+                <span className="text-[20px] font-light leading-none">
+                  {btn.label}
+                </span>
+              ) : (
+                btn.label
+              )}
+            </button>
+            {i < arr.length - 1 && (
+              <div style={{ width: 1, height: 22, background: borderCol }} />
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Up Next Banner */}
@@ -2147,7 +2193,7 @@ export default function RoadmapPage() {
         }}
       >
         {/* Header */}
-        <header className="shrink-0 flex items-center px-4 sm:px-5 py-4 md:py-5 gap-3 md:gap-4 relative z-10 min-h-0">
+        <header className="absolute top-0 left-0 right-0 z-30 flex items-center px-5 py-8 gap-4">
           <button
             onClick={() => navigate("/dashboard")}
             className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 transition hover:scale-105 cursor-pointer"
@@ -2170,12 +2216,16 @@ export default function RoadmapPage() {
                 WebkitBackdropFilter: "blur(16px)",
                 border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,0,0,0.06)",
                 boxShadow: isDark
-                  ? "0 0 0 1px rgba(99,102,241,0.15), 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)"
-                  : "0 8px 28px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.95)",
+                  ? "0 4px 20px rgba(0,0,0,0.4)"
+                  : "0 4px 20px rgba(0,0,0,0.06)",
+                userSelect: "none",
               }}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-[13px] font-semibold truncate max-w-[200px]" style={{ color: textPri }}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span
+                  className="text-[13px] font-semibold truncate max-w-45"
+                  style={{ color: textPri }}
+                >
                   {displayTitle}
                 </span>
                 <span className="flex-1" />
@@ -2208,12 +2258,8 @@ export default function RoadmapPage() {
 
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl transition hover:opacity-80 shrink-0 cursor-pointer"
-            style={{
-              background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)",
-              border: `1px solid ${borderCol}`,
-              backdropFilter: "blur(8px)",
-            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl transition hover:bg-opacity-80 shrink-0 cursor-pointer"
+            style={{ background: pageBg, border: `1px solid ${borderCol}`, userSelect: "none" }}
           >
             {isDark ? <Sun size={15} className="text-yellow-400" /> : <Moon size={15} style={{ color: textMuted }} />}
             <span className="text-[12px] font-medium" style={{ color: textMuted }}>

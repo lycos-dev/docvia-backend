@@ -167,7 +167,7 @@ export default function UploadModal({ onClose }: UploadModalProps) {
             <button
               onClick={() => onClose(false)}
               disabled={isUploading}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition disabled:opacity-50"
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition disabled:opacity-50 cursor-pointer"
             >
               <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 6L6 18M6 6l12 12" />
