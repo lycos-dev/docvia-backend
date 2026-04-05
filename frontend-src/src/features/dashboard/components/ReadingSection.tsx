@@ -15,7 +15,7 @@ interface ReadingSectionProps {
 export default function ReadingSection({ searchTerm, onSearchClear }: ReadingSectionProps) {
   const { documents, isLoading } = useDocuments();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [sortMode, setSortMode] = useState<SortMode>('oldest');
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
 

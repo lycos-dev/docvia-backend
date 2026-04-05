@@ -1,6 +1,9 @@
+import { useState, useRef } from 'react';
 import { useProgressContext } from "../../../shared/contexts/ProgressContext";
+import { useTheme } from "../../../shared/contexts/ThemeContext";
 import { cn } from "../../../shared/utils/cn";
 import { Flame, CheckCircle2, Timer } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Ordered by JS getDay(): 0=Sun, 1=Mon, ... 6=Sat
 const DAY_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -32,6 +35,81 @@ function getMilestoneMessage(currentStreak: number): string {
   if (currentStreak >= 7)  return "One week strong! 💪";
   if (currentStreak >= 3)  return "You're on a roll! 🚀";
   return "Keep it up!";
+}
+
+function formatTime(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.round((seconds % 3600) / 60);
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+// ─── Tooltip Component ────────────────────────────────────────────────────────
+
+interface TooltipContentProps {
+  cardLeft: number;
+  arrowLeft: number;
+  dotTop: number;
+  lessons: number;
+  seconds: number;
+  cardWidth: number;
+  gap: number;
+}
+
+function TooltipContent({ cardLeft, arrowLeft, dotTop, lessons, seconds, cardWidth, gap }: TooltipContentProps) {
+  const { theme } = useTheme();
+  
+  const bgColor = theme === 'dark' ? '#0f172a' : '#f8fafc';
+  const arrowColor = theme === 'dark' ? '#0f172a' : '#f8fafc';
+  const textColor = theme === 'dark' ? '#94a3b8' : '#64748b';
+  const borderColor = theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 2, scale: 0.96 }}
+      transition={{ duration: 0.13 }}
+      className="fixed z-[9999] w-40 pointer-events-none rounded-lg p-2.5 shadow-lg"
+      style={{
+        left: cardLeft,
+        bottom: `calc(100vh - ${dotTop - gap}px)`,
+        backgroundColor: bgColor,
+        borderColor: borderColor,
+        borderWidth: '1px',
+      }}
+    >
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] font-medium" style={{ color: textColor }}>
+            Lessons
+          </span>
+          <span className="text-[10px] font-semibold text-green-400">
+            {lessons}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] font-medium" style={{ color: textColor }}>
+            Hours spent
+          </span>
+          <span className="text-[10px] font-semibold text-purple-400">
+            {formatTime(seconds)}
+          </span>
+        </div>
+      </div>
+      <div
+        className="absolute top-full w-0 h-0"
+        style={{
+          left: Math.max(8, Math.min(cardWidth - 16, arrowLeft)),
+          transform: 'translateX(-50%)',
+          borderLeft: '5px solid transparent',
+          borderRight: '5px solid transparent',
+          borderTop: `5px solid ${arrowColor}`,
+        }}
+      />
+    </motion.div>
+  );
 }
 
 // ─── Day pill ─────────────────────────────────────────────────────────────────
@@ -214,7 +292,7 @@ export default function StreakCard() {
             Current Streak
           </span>
           <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-            {streak.currentStreak} days
+            {streak.currentStreak} {streak.currentStreak === 1 || streak.currentStreak === 0 ? 'day' : 'days'}
           </span>
         </div>
         <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl">
@@ -222,7 +300,7 @@ export default function StreakCard() {
             Longest Streak
           </span>
           <span className="text-2xl font-bold text-gray-600 dark:text-gray-400">
-            {streak.longestStreak} days
+            {streak.longestStreak} {streak.longestStreak === 1 || streak.longestStreak === 0 ? 'day' : 'days'}
           </span>
         </div>
       </div>
@@ -235,14 +313,45 @@ export default function StreakCard() {
         <div className="flex items-center justify-between gap-1">
           {streak.weekActivity.map((active, index) => {
             const isToday = index === 6;
+            const today = new Date();
+            const dayDate = new Date(today);
+            dayDate.setDate(today.getDate() - (6 - index));
+            const dateISO = localDateISO(dayDate);
+            const lessons = dailyCompletions[dateISO] || 0;
+            const seconds = dailyTimeSeconds[dateISO] || 0;
+            const [hovered, setHovered] = useState(false);
+            const dotRef = useRef<HTMLDivElement>(null);
+            const [dotRect, setDotRect] = useState<{ top: number; centerX: number } | null>(null);
+
+            const handleMouseEnter = () => {
+              if (dotRef.current) {
+                const r = dotRef.current.getBoundingClientRect();
+                setDotRect({ top: r.top, centerX: r.left + r.width / 2 });
+              }
+              setHovered(true);
+            };
+
+            const CARD_W = 160;
+            const GAP = 8;
+            const cardLeft = dotRect
+              ? Math.min(
+                  window.innerWidth - CARD_W - 16,
+                  Math.max(16, dotRect.centerX - CARD_W / 2)
+                )
+              : 0;
+            const arrowLeft = dotRect ? dotRect.centerX - cardLeft : CARD_W / 2;
+
             return (
-              <div key={index} className="flex flex-col items-center gap-1">
+              <div key={index} className="relative flex flex-col items-center gap-1">
                 <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">
                   {DAY_SHORT[index]}
                 </span>
                 <div
+                  ref={dotRef}
+                  onMouseEnter={handleMouseEnter}
+                  onMouseLeave={() => { setHovered(false); setDotRect(null); }}
                   className={cn(
-                    "w-7 h-7 rounded-full flex items-center justify-center transition-colors duration-300",
+                    "w-7 h-7 rounded-full flex items-center justify-center transition-colors duration-300 cursor-pointer",
                     active
                       ? "bg-orange-100 dark:bg-orange-900/30"
                       : "bg-gray-100 dark:bg-gray-800",
@@ -263,6 +372,19 @@ export default function StreakCard() {
                     <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600 block" />
                   )}
                 </div>
+                <AnimatePresence>
+                  {hovered && dotRect && active && (
+                    <TooltipContent
+                      cardLeft={cardLeft}
+                      arrowLeft={arrowLeft}
+                      dotTop={dotRect.top}
+                      lessons={lessons}
+                      seconds={seconds}
+                      cardWidth={CARD_W}
+                      gap={GAP}
+                    />
+                  )}
+                </AnimatePresence>
               </div>
             );
           })}
