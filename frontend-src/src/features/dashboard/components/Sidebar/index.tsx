@@ -54,7 +54,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={() => setIsUploadModalOpen(true)}
-              className="w-full h-10 rounded-xl bg-[#2f7df6] dark:bg-blue-600 text-white flex items-center justify-center gap-2 text-sm font-medium shadow-sm hover:bg-[#2567cc] dark:hover:bg-blue-700 transition"
+              className="w-full h-10 rounded-xl bg-[#2f7df6] dark:bg-blue-600 text-white flex items-center justify-center gap-2 text-sm font-medium shadow-sm hover:bg-[#2567cc] dark:hover:bg-blue-700 transition cursor-pointer"
             >
               <Upload size={16} />
               Upload File

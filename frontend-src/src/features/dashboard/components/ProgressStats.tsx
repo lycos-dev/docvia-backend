@@ -2,15 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
 import { cn } from '../../../shared/utils/cn';
-
-function formatTime(totalSeconds: number): string {
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  const rem = minutes % 60;
-  return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`;
-}
+import { formatStudyDurationSeconds } from '../../../shared/utils/formatStudyDuration';
 
 function todayISO(): string {
   const d = new Date();
@@ -106,11 +98,7 @@ export default function ProgressStats() {
     : `Resets in ${minutesLeft}m`;
 
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide px-1">
-        Your Stats
-      </h2>
-
+    <div className="flex flex-col gap-3 h-full">
       <StatCard
         icon="✅"
         label="Lessons completed"
@@ -128,7 +116,7 @@ export default function ProgressStats() {
       <StatCard
         icon="⏱️"
         label="Total time spent per day"
-        value={formatTime(todaySeconds)}
+        value={formatStudyDurationSeconds(todaySeconds)}
         accent="bg-purple-100 dark:bg-purple-900/30"
         delay={0.1}
         tooltip={

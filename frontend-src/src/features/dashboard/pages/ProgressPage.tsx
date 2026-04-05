@@ -1,11 +1,47 @@
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { useProgressContext } from '../../../shared/contexts/ProgressContext';
-import { useDocuments } from '../../../shared/contexts/DocumentsContext';
-import { cn } from '../../../shared/utils/cn';
-import ProgressStats from '../components/ProgressStats';
-import LessonProgressChart from '../components/LessonProgressChart';
-import type { DocumentProgress } from '../../../shared/contexts/ProgressContext';
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { useProgressContext } from "../../../shared/contexts/ProgressContext";
+import { useDocuments } from "../../../shared/contexts/DocumentsContext";
+import { cn } from "../../../shared/utils/cn";
+import ProgressStats from "../components/ProgressStats";
+import LessonProgressChart from "../components/LessonProgressChart";
+import type { DocumentProgress } from "../../../shared/contexts/ProgressContext";
+
+// ────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────
+
+/**
+ * Mirror of pdfService.toDisplayName — must stay in sync.
+ * Strips the backend "timestamp_randomhex_" prefix, replaces underscores
+ * with spaces, and removes the .pdf extension.
+ */
+function toDisplayName(filename: string): string {
+  return filename
+    .replace(/^\d+_[a-z0-9]+_/i, '')
+    .replace(/_/g, ' ')
+    .replace(/\.pdf$/i, '');
+}
+
+/**
+ * Resolve a human-readable title for a documentId (raw filename).
+ * Priority:
+ *   1. Title stored in DocumentsContext (set at upload time)
+ *   2. toDisplayName() derived from the raw filename
+ */
+function resolveDocTitle(
+  documentId: string,
+  documents: ReturnType<typeof useDocuments>['documents']
+): string {
+  if (!documentId) return 'Untitled Document';
+
+  // 1. Exact filename match → use stored title
+  const match = documents.find((d) => d.filename === documentId);
+  if (match?.title) return match.title;
+
+  // 2. Derive from filename using the same logic as the backend service
+  return toDisplayName(documentId) || documentId;
+}
 
 // ────────────────────────────────────────────────────────────────────
 // Sub-component: individual per-document progress row
@@ -16,14 +52,20 @@ interface DocumentProgressRowProps {
   docTitle: string;
 }
 
-function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps) {
+function DocumentProgressRow({
+  docProgress,
+  docTitle,
+}: DocumentProgressRowProps) {
   const navigate = useNavigate();
 
-  const { completedLessons, totalLessons, percentage, documentId } = docProgress;
+  const { completedLessons, totalLessons, percentage, documentId } =
+    docProgress;
   const completed = completedLessons.length;
   const safeTotal = totalLessons > 0 ? totalLessons : 0;
   const displayPct =
-    safeTotal > 0 ? Math.min(100, Math.round((completed / safeTotal) * 100)) : Math.min(100, percentage);
+    safeTotal > 0
+      ? Math.min(100, Math.round((completed / safeTotal) * 100))
+      : Math.min(100, percentage);
 
   function handleContinue() {
     navigate(`/roadmap/${encodeURIComponent(documentId)}`);
@@ -35,12 +77,15 @@ function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -2, transition: { type: 'spring', stiffness: 400, damping: 28 } }}
+      whileHover={{
+        y: -2,
+        transition: { type: "spring", stiffness: 400, damping: 28 },
+      }}
       className={cn(
-        'bg-white dark:bg-[#1e293b] rounded-2xl p-4',
-        'border border-black/5 dark:border-white/10',
-        'flex flex-col gap-3',
-        'shadow-sm dark:shadow-none'
+        "bg-white dark:bg-[#1e293b] rounded-2xl p-4",
+        "border border-black/5 dark:border-white/10",
+        "flex flex-col gap-3",
+        "shadow-sm dark:shadow-none",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -57,13 +102,15 @@ function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps
           className="h-full rounded-full bg-gradient-to-r from-[#3B82F6] to-[#6366F1]"
           initial={false}
           animate={{ width: `${displayPct}%` }}
-          transition={{ type: 'spring', stiffness: 200, damping: 26 }}
+          transition={{ type: "spring", stiffness: 200, damping: 26 }}
         />
       </div>
 
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-[#6B7280] dark:text-[#94A3B8] tabular-nums">
-          {safeTotal > 0 ? `${completed}/${safeTotal} lessons` : `${completed} lesson${completed === 1 ? '' : 's'} done`}
+          {safeTotal > 0
+            ? `${completed}/${safeTotal} lessons`
+            : `${completed} lesson${completed === 1 ? "" : "s"} done`}
         </span>
         <motion.button
           type="button"
@@ -71,9 +118,9 @@ function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           className={cn(
-            'text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer',
-            'bg-[#89ADE2]/15 hover:bg-[#89ADE2]/30 text-[#3B82F6] dark:text-[#60A5FA]',
-            'dark:bg-[#3B82F6]/15 dark:hover:bg-[#3B82F6]/25'
+            "text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer",
+            "bg-[#89ADE2]/15 hover:bg-[#89ADE2]/30 text-[#3B82F6] dark:text-[#60A5FA]",
+            "dark:bg-[#3B82F6]/15 dark:hover:bg-[#3B82F6]/25",
           )}
         >
           Continue →
@@ -89,23 +136,44 @@ function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps
 
 function DocumentProgressList() {
   const { documentProgress } = useProgressContext();
-  const { documents } = useDocuments();
+  const { documents, isLoading } = useDocuments();
 
-  const entries = Object.values(documentProgress).sort((a, b) => {
-    const aMs = Date.parse(a.lastAccessedAt);
-    const bMs = Date.parse(b.lastAccessedAt);
-    const aT = Number.isNaN(aMs) ? 0 : aMs;
-    const bT = Number.isNaN(bMs) ? 0 : bMs;
-    return bT - aT;
-  });
+  // Build a set of filenames that still exist on the backend
+  const existingFilenames = new Set(documents.map((d) => d.filename));
 
-  if (entries.length === 0) {
+  const entries = Object.values(documentProgress)
+    // Only show progress for documents that still exist
+    .filter((dp) => existingFilenames.has(dp.documentId))
+    .sort((a, b) => {
+      const aMs = Date.parse(a.lastAccessedAt);
+      const bMs = Date.parse(b.lastAccessedAt);
+      const aT = Number.isNaN(aMs) ? 0 : aMs;
+      const bT = Number.isNaN(bMs) ? 0 : bMs;
+      return bT - aT;
+    });
+
+  // While documents are loading don't flash an empty state
+  if (isLoading) {
     return (
       <div
         className={cn(
           'bg-white dark:bg-[#1e293b] rounded-2xl p-6',
           'border border-black/5 dark:border-white/10',
           'flex flex-col items-center justify-center text-center gap-3 min-h-[160px]'
+        )}
+      >
+        <span className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading…</span>
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div
+        className={cn(
+          "bg-white dark:bg-[#1e293b] rounded-2xl p-6",
+          "border border-black/5 dark:border-white/10",
+          "flex flex-col items-center justify-center text-center gap-3 min-h-[160px]",
         )}
       >
         <span className="text-4xl">📚</span>
@@ -118,13 +186,10 @@ function DocumentProgressList() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide px-1">
-        Documents
-      </h2>
       {entries.map((dp) => {
         // dp.documentId is the PDF filename; d.id is a numeric Date.now() — match on filename instead
         const match = documents.find((d) => d.filename === dp.documentId);
-        const docTitle = match?.title ?? 'Unknown Document';
+        const docTitle = match?.title ?? "Unknown Document";
         return (
           <DocumentProgressRow
             key={dp.documentId}
@@ -144,7 +209,6 @@ function DocumentProgressList() {
 export default function ProgressPage() {
   return (
     <div className="min-h-screen bg-[#F4F4F4] dark:bg-[#0f172a] px-0 py-6">
-      {/* Page heading */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[#111827] dark:text-[#F1F5F9]">
           Progress
@@ -154,27 +218,41 @@ export default function ProgressPage() {
         </p>
       </div>
 
+      {/* Column headers — sits above the grid so all cards start at same top */}
+      <div
+        className={cn(
+          "hidden lg:grid gap-6 mb-1",
+          "lg:grid-cols-[280px_1fr_280px]",
+        )}
+      >
+        <span className="text-sm font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide px-1">
+          Your Stats
+        </span>
+        <span className="text-sm font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide px-1">
+          Activity
+        </span>
+        <span className="text-sm font-semibold text-[#6B7280] dark:text-[#94A3B8] uppercase tracking-wide px-1">
+          Documents
+        </span>
+      </div>
+
       {/* 3-column responsive grid */}
       <div
         className={cn(
-          'grid grid-cols-1 gap-6',
-          'lg:grid-cols-[280px_1fr_280px]'
+          "grid grid-cols-1 gap-6",
+          "lg:grid-cols-[280px_1fr_280px]",
+          "lg:items-start",
         )}
       >
-        {/* Left — stats */}
         <aside>
           <ProgressStats />
         </aside>
 
-        {/* Center — 7-day activity chart */}
         <section className="flex flex-col gap-6">
           <LessonProgressChart />
-
-          {/* Longest streak badge */}
           <LongestStreakBanner />
         </section>
 
-        {/* Right — per-document list */}
         <aside>
           <DocumentProgressList />
         </aside>
@@ -184,7 +262,7 @@ export default function ProgressPage() {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Small inline component: longest streak banner in center column
+// Longest streak banner
 // ────────────────────────────────────────────────────────────────────
 
 function LongestStreakBanner() {
@@ -197,15 +275,20 @@ function LongestStreakBanner() {
       transition={{ duration: 0.35, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
       whileHover={{ scale: 1.01 }}
       className={cn(
-        'bg-white dark:bg-[#1e293b] rounded-2xl p-5',
-        'border border-black/5 dark:border-white/10',
-        'flex items-center gap-4',
-        'shadow-sm dark:shadow-none'
+        "bg-white dark:bg-[#1e293b] rounded-2xl p-5",
+        "border border-black/5 dark:border-white/10",
+        "flex items-center gap-4",
+        "shadow-sm dark:shadow-none",
       )}
     >
       <motion.div
         animate={{ rotate: [0, -6, 6, 0] }}
-        transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 5, ease: 'easeInOut' }}
+        transition={{
+          duration: 2.2,
+          repeat: Infinity,
+          repeatDelay: 5,
+          ease: "easeInOut",
+        }}
         className="h-12 w-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-2xl shrink-0"
       >
         🏆
@@ -215,9 +298,9 @@ function LongestStreakBanner() {
           Longest Streak
         </p>
         <p className="text-xl font-bold text-[#111827] dark:text-[#F1F5F9]">
-          {streak.longestStreak}{' '}
+          {streak.longestStreak}{" "}
           <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8]">
-            {streak.longestStreak === 1 ? 'day' : 'days'}
+            {streak.longestStreak === 1 ? "day" : "days"}
           </span>
         </p>
       </div>

@@ -29,6 +29,9 @@ interface StreakData {
   streakStartDate: string | null;
   weekActivity: boolean[];
   todayCompleted: boolean;
+  /** True only when the streak was active yesterday but today hasn't been completed yet AND
+   *  the user had a streak > 0 that is now gone. Cleared once the user acknowledges the modal. */
+  streakJustLost: boolean;
 }
 
 interface ProgressStore {
@@ -56,19 +59,28 @@ interface ProgressContextValue {
   addTimeSpent: (documentId: string, lessonId: string, seconds: number) => void;
   /** YYYY-MM-DD → seconds studied; used for 7-day activity detail */
   dailyTimeSeconds: Record<string, number>;
+  /** YYYY-MM-DD → lesson completions that day (streak / week UI) */
+  dailyCompletions: Record<string, number>;
+  /** Call this after the user dismisses the streak-lost modal so it doesn't reappear */
+  acknowledgeStreakLost: () => void;
 }
 
 const ProgressContext = createContext<ProgressContextValue | null>(null);
 
 function todayISO(): string {
-  // Use local date components to avoid UTC offset shifting the date (e.g. Philippines UTC+8)
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function localDateISO(d: Date): string {
-  // Returns YYYY-MM-DD in the local timezone (fixes UTC offset shifting the date)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Returns YYYY-MM-DD for yesterday in local time */
+function yesterdayISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return localDateISO(d);
 }
 
 function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[] {
@@ -95,13 +107,22 @@ function computeStreak(
   prevStreak: StreakData
 ): StreakData {
   const today = todayISO();
+  const yesterday = yesterdayISO();
+
   const todayCompleted = (dailyCompletions[today] ?? 0) >= 2;
+  const yesterdayCompleted = (dailyCompletions[yesterday] ?? 0) >= 2;
   const weekActivity = computeWeekActivity(dailyCompletions);
 
+  // Walk back from today counting consecutive completed days.
+  // If today isn't done yet, start the walk from yesterday so the streak
+  // isn't broken just because the user hasn't finished today.
   let currentStreak = 0;
   const d = new Date();
+  if (!todayCompleted) {
+    d.setDate(d.getDate() - 1); // start from yesterday
+  }
   while (true) {
-    const key = localDateISO(d); // local date, not UTC
+    const key = localDateISO(d);
     if ((dailyCompletions[key] ?? 0) >= 2) {
       currentStreak++;
       d.setDate(d.getDate() - 1);
@@ -113,6 +134,22 @@ function computeStreak(
   const longestStreak = Math.max(prevStreak.longestStreak, currentStreak);
   const lastActive = lastActiveDayISO(dailyCompletions);
 
+  // Streak is "just lost" when:
+  //   - The previous streak was > 0
+  //   - Yesterday was NOT completed (so there's a real gap, not just "today not done yet")
+  //   - Today is also not completed
+  //   - The computed currentStreak is now 0
+  const hadStreak = prevStreak.currentStreak > 0 || prevStreak.longestStreak > 0;
+  const gapExists = !yesterdayCompleted && !todayCompleted;
+  const streakJustLost =
+    hadStreak &&
+    gapExists &&
+    currentStreak === 0 &&
+    // Don't re-flag if already acknowledged (prevStreak.streakJustLost is false)
+    !prevStreak.streakJustLost
+      ? true
+      : prevStreak.streakJustLost; // preserve until acknowledged
+
   return {
     currentStreak,
     longestStreak,
@@ -120,6 +157,7 @@ function computeStreak(
     streakStartDate: prevStreak.streakStartDate,
     weekActivity,
     todayCompleted,
+    streakJustLost: streakJustLost ?? false,
   };
 }
 
@@ -130,6 +168,7 @@ const INITIAL_STREAK: StreakData = {
   streakStartDate: null,
   weekActivity: [false, false, false, false, false, false, false],
   todayCompleted: false,
+  streakJustLost: false,
 };
 
 const INITIAL_STORE: ProgressStore = {
@@ -144,7 +183,12 @@ function loadStore(): ProgressStore {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return INITIAL_STORE;
-    return { ...INITIAL_STORE, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    // Back-fill streakJustLost for older stored data
+    if (parsed.streak && parsed.streak.streakJustLost === undefined) {
+      parsed.streak.streakJustLost = false;
+    }
+    return { ...INITIAL_STORE, ...parsed };
   } catch {
     return INITIAL_STORE;
   }
@@ -215,6 +259,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           lessonProgress: { ...prev.lessonProgress, [key]: lessonProg },
           streak,
           dailyCompletions,
+          dailyTimeSeconds: prev.dailyTimeSeconds,
         };
         saveStore(next);
         return next;
@@ -294,6 +339,17 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     [store.documentProgress]
   );
 
+  const acknowledgeStreakLost = useCallback(() => {
+    setStore((prev) => {
+      const next = {
+        ...prev,
+        streak: { ...prev.streak, streakJustLost: false },
+      };
+      saveStore(next);
+      return next;
+    });
+  }, []);
+
   return (
     <ProgressContext.Provider
       value={{
@@ -305,6 +361,8 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         getDocumentProgress,
         addTimeSpent,
         dailyTimeSeconds: store.dailyTimeSeconds ?? {},
+        dailyCompletions: store.dailyCompletions ?? {},
+        acknowledgeStreakLost,
       }}
     >
       {children}

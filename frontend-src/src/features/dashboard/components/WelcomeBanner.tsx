@@ -120,9 +120,6 @@ export default function WelcomeBanner() {
                 aria-hidden
               />
             </Link>
-            <span className="text-xs text-[#6b7280] dark:text-slate-400 transition-colors duration-300">
-              Upload a PDF anytime from the sidebar to start a new journey.
-            </span>
           </div>
         </div>
 

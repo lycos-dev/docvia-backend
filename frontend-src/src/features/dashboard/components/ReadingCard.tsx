@@ -8,6 +8,7 @@ import type { DocumentItem } from "../types";
 import { cn } from "../../../shared/utils/cn";
 import { useDocuments } from "../../../shared/contexts/DocumentsContext";
 import { useAuth } from "../../../shared/contexts/AuthContext";
+import { deletePDF } from "../../../shared/services/pdfService";
 
 // Set worker once per module load (same as UploadModal)
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -32,6 +33,7 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(document.title);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuPanelRef = useRef<HTMLDivElement>(null);
@@ -177,12 +179,28 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
     setIsEditingTitle(false);
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${document.title}"?`)) {
-      removeDocument(document.filename);
-    }
     setMenuOpen(false);
+
+    if (!window.confirm(`Are you sure you want to delete "${document.title}"?`)) return;
+
+    setIsDeleting(true);
+
+    // Optimistically remove from UI immediately so it feels instant
+    removeDocument(document.filename);
+
+    // Delete from Supabase storage via the backend
+    if (token) {
+      const result = await deletePDF(document.filename, token);
+      if (!result.success) {
+        // If the backend call failed, log it — the file will reappear on next
+        // refresh, but we don't want to block the user with an error modal here.
+        console.error('[Delete] Backend deletion failed for', document.filename);
+      }
+    }
+
+    setIsDeleting(false);
   };
 
   /** Renders the progress status line below the title — fixed block height keeps cards aligned */
@@ -246,7 +264,10 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
           onClick={handleCardClick}
           whileHover={{ y: -4, transition: { type: 'spring', stiffness: 420, damping: 28 } }}
           whileTap={{ scale: 0.99 }}
-          className="overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 hover:shadow-[0_14px_40px_rgba(0,0,0,0.14)] dark:hover:shadow-[0_14px_40px_rgba(0,0,0,0.35)] cursor-pointer h-full flex flex-col"
+          className={cn(
+            "overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 hover:shadow-[0_14px_40px_rgba(0,0,0,0.14)] dark:hover:shadow-[0_14px_40px_rgba(0,0,0,0.35)] cursor-pointer h-full flex flex-col",
+            isDeleting && "opacity-50 pointer-events-none"
+          )}
         >
           {/* Image — fixed aspect so every card lines up */}
           <div className="relative w-full aspect-[16/10] shrink-0 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 overflow-hidden">
@@ -404,7 +425,10 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
         onClick={handleCardClick}
         whileHover={{ x: 2, transition: { type: 'spring', stiffness: 400, damping: 30 } }}
         whileTap={{ scale: 0.995 }}
-        className="overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 hover:shadow-[0_10px_32px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_10px_32px_rgba(0,0,0,0.35)] cursor-pointer flex items-stretch min-h-[6.5rem]"
+        className={cn(
+          "overflow-hidden rounded-3xl border border-[#d8d8d8] dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md transition-shadow duration-300 hover:shadow-[0_10px_32px_rgba(0,0,0,0.12)] dark:hover:shadow-[0_10px_32px_rgba(0,0,0,0.35)] cursor-pointer flex items-stretch min-h-[6.5rem]",
+          isDeleting && "opacity-50 pointer-events-none"
+        )}
       >
         {/* Thumbnail — same source as grid (cover or pdf.js) */}
         <div className="relative w-32 sm:w-36 shrink-0 self-stretch min-h-[6.5rem] bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800 overflow-hidden">
