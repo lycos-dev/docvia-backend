@@ -2142,6 +2142,7 @@ export default function RoadmapPage() {
     );
   }
 
+  const pageBg = isDark ? "#080e1c" : "#F0F2F5";
   const borderCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)";
   const textPri = isDark ? "#F1F5F9" : "#111827";
   const textMuted = isDark ? "#94A3B8" : "#6B7280";

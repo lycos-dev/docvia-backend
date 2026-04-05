@@ -185,6 +185,7 @@ export default function StreakCard() {
   const days = getLast7Days();
 
   const flameScale = Math.min(1 + streak.currentStreak * 0.02, 1.5);
+  const isStreakBroken = streak.streakJustLost;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm transition-colors">
@@ -237,7 +238,7 @@ export default function StreakCard() {
             return (
               <div key={index} className="flex flex-col items-center gap-1">
                 <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">
-                  {dayLabels[index]}
+                  {DAY_SHORT[index]}
                 </span>
                 <div
                   className={cn(
