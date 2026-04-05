@@ -8,6 +8,42 @@ import LessonProgressChart from '../components/LessonProgressChart';
 import type { DocumentProgress } from '../../../shared/contexts/ProgressContext';
 
 // ────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────
+
+/**
+ * Mirror of pdfService.toDisplayName — must stay in sync.
+ * Strips the backend "timestamp_randomhex_" prefix, replaces underscores
+ * with spaces, and removes the .pdf extension.
+ */
+function toDisplayName(filename: string): string {
+  return filename
+    .replace(/^\d+_[a-z0-9]+_/i, '')
+    .replace(/_/g, ' ')
+    .replace(/\.pdf$/i, '');
+}
+
+/**
+ * Resolve a human-readable title for a documentId (raw filename).
+ * Priority:
+ *   1. Title stored in DocumentsContext (set at upload time)
+ *   2. toDisplayName() derived from the raw filename
+ */
+function resolveDocTitle(
+  documentId: string,
+  documents: ReturnType<typeof useDocuments>['documents']
+): string {
+  if (!documentId) return 'Untitled Document';
+
+  // 1. Exact filename match → use stored title
+  const match = documents.find((d) => d.filename === documentId);
+  if (match?.title) return match.title;
+
+  // 2. Derive from filename using the same logic as the backend service
+  return toDisplayName(documentId) || documentId;
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Sub-component: individual per-document progress row
 // ────────────────────────────────────────────────────────────────────
 
@@ -89,15 +125,36 @@ function DocumentProgressRow({ docProgress, docTitle }: DocumentProgressRowProps
 
 function DocumentProgressList() {
   const { documentProgress } = useProgressContext();
-  const { documents } = useDocuments();
+  const { documents, isLoading } = useDocuments();
 
-  const entries = Object.values(documentProgress).sort((a, b) => {
-    const aMs = Date.parse(a.lastAccessedAt);
-    const bMs = Date.parse(b.lastAccessedAt);
-    const aT = Number.isNaN(aMs) ? 0 : aMs;
-    const bT = Number.isNaN(bMs) ? 0 : bMs;
-    return bT - aT;
-  });
+  // Build a set of filenames that still exist on the backend
+  const existingFilenames = new Set(documents.map((d) => d.filename));
+
+  const entries = Object.values(documentProgress)
+    // Only show progress for documents that still exist
+    .filter((dp) => existingFilenames.has(dp.documentId))
+    .sort((a, b) => {
+      const aMs = Date.parse(a.lastAccessedAt);
+      const bMs = Date.parse(b.lastAccessedAt);
+      const aT = Number.isNaN(aMs) ? 0 : aMs;
+      const bT = Number.isNaN(bMs) ? 0 : bMs;
+      return bT - aT;
+    });
+
+  // While documents are loading don't flash an empty state
+  if (isLoading) {
+    return (
+      <div
+        className={cn(
+          'bg-white dark:bg-[#1e293b] rounded-2xl p-6',
+          'border border-black/5 dark:border-white/10',
+          'flex flex-col items-center justify-center text-center gap-3 min-h-[160px]'
+        )}
+      >
+        <span className="text-sm text-[#6B7280] dark:text-[#94A3B8]">Loading…</span>
+      </div>
+    );
+  }
 
   if (entries.length === 0) {
     return (
@@ -122,9 +179,7 @@ function DocumentProgressList() {
         Documents
       </h2>
       {entries.map((dp) => {
-        // dp.documentId is the PDF filename; d.id is a numeric Date.now() — match on filename instead
-        const match = documents.find((d) => d.filename === dp.documentId);
-        const docTitle = match?.title ?? 'Unknown Document';
+        const docTitle = resolveDocTitle(dp.documentId, documents);
         return (
           <DocumentProgressRow
             key={dp.documentId}
@@ -144,7 +199,6 @@ function DocumentProgressList() {
 export default function ProgressPage() {
   return (
     <div className="min-h-screen bg-[#F4F4F4] dark:bg-[#0f172a] px-0 py-6">
-      {/* Page heading */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-[#111827] dark:text-[#F1F5F9]">
           Progress
@@ -154,27 +208,21 @@ export default function ProgressPage() {
         </p>
       </div>
 
-      {/* 3-column responsive grid */}
       <div
         className={cn(
           'grid grid-cols-1 gap-6',
           'lg:grid-cols-[280px_1fr_280px]'
         )}
       >
-        {/* Left — stats */}
         <aside>
           <ProgressStats />
         </aside>
 
-        {/* Center — 7-day activity chart */}
         <section className="flex flex-col gap-6">
           <LessonProgressChart />
-
-          {/* Longest streak badge */}
           <LongestStreakBanner />
         </section>
 
-        {/* Right — per-document list */}
         <aside>
           <DocumentProgressList />
         </aside>
@@ -184,7 +232,7 @@ export default function ProgressPage() {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Small inline component: longest streak banner in center column
+// Longest streak banner
 // ────────────────────────────────────────────────────────────────────
 
 function LongestStreakBanner() {

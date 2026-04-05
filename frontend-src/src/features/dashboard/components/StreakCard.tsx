@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
 import { cn } from '../../../shared/utils/cn';
@@ -46,80 +46,6 @@ function getMilestoneMessage(streak: number): string {
   return 'Keep it up!';
 }
 
-// ─── Streak Lost Modal ────────────────────────────────────────────────────────
-
-interface StreakLostModalProps {
-  longestStreak: number;
-  onClose: () => void;
-}
-
-function StreakLostModal({ longestStreak, onClose }: StreakLostModalProps) {
-  // Close on Escape key
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        key="streak-lost-backdrop"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        className="fixed inset-0 z-50 flex items-center justify-center px-4"
-        style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(2px)' }}
-        onClick={onClose}
-      >
-        <motion.div
-          key="streak-lost-card"
-          initial={{ opacity: 0, scale: 0.92, y: 12 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 6 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="bg-white dark:bg-[#1e293b] rounded-3xl p-7 shadow-2xl border border-gray-100 dark:border-white/10 max-w-xs w-full text-center"
-          style={{ fontFamily: 'Poppins, sans-serif' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Flame icon (desaturated to signal loss) */}
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <span className="text-3xl grayscale opacity-60">🔥</span>
-            </div>
-          </div>
-
-          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-2">
-            Streak Lost
-          </h2>
-
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-1 leading-relaxed">
-            You missed a day and your streak has ended.
-          </p>
-
-          {longestStreak > 0 && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mb-5">
-              Your best was{' '}
-              <span className="font-semibold text-amber-500 dark:text-amber-400">
-                {longestStreak} {longestStreak === 1 ? 'day' : 'days'}
-              </span>
-              . Start fresh today!
-            </p>
-          )}
-
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 px-4 rounded-xl bg-[#89ADE2] hover:bg-[#6B93D1] text-white text-sm font-semibold transition-colors cursor-pointer"
-          >
-            Okay
-          </button>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
 // ─── Day pill ─────────────────────────────────────────────────────────────────
 
 interface DayPillProps {
@@ -133,11 +59,10 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
   const [hovered, setHovered] = useState(false);
   const dotRef = useRef<HTMLDivElement>(null);
 
-  // Snapshot of the dot's position taken exactly at mouse-enter
   const [dotRect, setDotRect] = useState<{ top: number; centerX: number } | null>(null);
 
-  const CARD_W  = 176; // w-44
-  const GAP     = 8;   // px between card bottom and dot top
+  const CARD_W  = 176;
+  const GAP     = 8;
 
   const handleMouseEnter = () => {
     if (dotRef.current) {
@@ -147,7 +72,6 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
     setHovered(true);
   };
 
-  // Clamped left so card never exits viewport
   const cardLeft = dotRect
     ? Math.min(
         window.innerWidth - CARD_W - 16,
@@ -155,7 +79,6 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
       )
     : 0;
 
-  // Arrow sits at dot center relative to card
   const arrowLeft = dotRect ? dotRect.centerX - cardLeft : CARD_W / 2;
 
   const intensity =
@@ -176,7 +99,6 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => { setHovered(false); setDotRect(null); }}
     >
-      {/* Label */}
       <span className={cn(
         'text-[10px] font-semibold transition-colors',
         day.isToday ? 'text-orange-500 dark:text-orange-400' : 'text-gray-400 dark:text-gray-500'
@@ -184,7 +106,6 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
         {day.short}
       </span>
 
-      {/* Dot */}
       <div
         ref={dotRef}
         className={cn(
@@ -203,7 +124,6 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
         )}
       </div>
 
-      {/* Tooltip — fixed so no parent overflow can clip it */}
       <AnimatePresence>
         {hovered && dotRect && (
           <motion.div
@@ -218,7 +138,6 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
             )}
             style={{
               left: cardLeft,
-              // Place card so its bottom edge is GAP above the dot's top edge
               bottom: `calc(100vh - ${dotRect.top - GAP}px)`,
             }}
           >
@@ -254,7 +173,6 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
               <p className="text-[10px] text-slate-500 italic">No activity</p>
             )}
 
-            {/* Arrow pointing down at the dot */}
             <div
               className="absolute top-full w-0 h-0"
               style={{
@@ -278,107 +196,85 @@ export default function StreakCard() {
   const { streak, dailyCompletions, dailyTimeSeconds } = useProgressContext();
   const days = getLast7Days();
 
-  const [showStreakLostModal, setShowStreakLostModal] = useState(false);
-
-  const flameScale     = Math.min(1 + streak.currentStreak * 0.02, 1.5);
-  const isStreakBroken = streak.currentStreak === 0 && streak.longestStreak > 0;
+  const flameScale = Math.min(1 + streak.currentStreak * 0.02, 1.5);
 
   return (
-    <>
-      <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm transition-colors">
+    <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 border border-gray-200 dark:border-gray-700 shadow-sm transition-colors">
 
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
-            <span className="text-2xl transition-transform duration-500" style={{ transform: `scale(${flameScale})` }}>
-              🔥
-            </span>
-          </div>
-          <div>
-            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Your Streak</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{getMilestoneMessage(streak.currentStreak)}</p>
-          </div>
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
+          <span className="text-2xl transition-transform duration-500" style={{ transform: `scale(${flameScale})` }}>
+            🔥
+          </span>
         </div>
-
-        {/* Streak stats */}
-        <div className="space-y-3 mb-5">
-          <div className="flex items-center justify-between p-4 bg-orange-50 dark:bg-orange-900/20 rounded-2xl">
-            <div>
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Streak</span>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Complete 2 lessons/day to maintain</p>
-            </div>
-            <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-              {streak.currentStreak} days
-            </span>
-          </div>
-          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Longest Streak</span>
-            <span className="text-2xl font-bold text-gray-600 dark:text-gray-400">
-              {streak.longestStreak} days
-            </span>
-          </div>
+        <div>
+          <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Your Streak</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{getMilestoneMessage(streak.currentStreak)}</p>
         </div>
-
-        {/* 7-day activity */}
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">This week</p>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">Hover a day for details</p>
-          </div>
-
-          <div className="flex items-end justify-between gap-1 px-1">
-            {days.map((day, index) => (
-              <DayPill
-                key={day.iso}
-                day={day}
-                active={streak.weekActivity[index] ?? false}
-                lessons={dailyCompletions?.[day.iso] ?? 0}
-                seconds={dailyTimeSeconds?.[day.iso] ?? 0}
-              />
-            ))}
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-3 mt-3 px-1">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700" />
-              <span className="text-[9px] text-gray-400 dark:text-gray-500">No activity</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-green-400 dark:bg-green-500" />
-              <span className="text-[9px] text-gray-400 dark:text-gray-500">Active</span>
-            </div>
-            <div className="flex items-center gap-1.5 ml-auto">
-              <div className="w-2.5 h-2.5 rounded-full ring-2 ring-orange-400 bg-transparent" />
-              <span className="text-[9px] text-gray-400 dark:text-gray-500">Today</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Today status / streak broken */}
-        {isStreakBroken ? (
-          <button
-            onClick={() => setShowStreakLostModal(true)}
-            className="w-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 text-sm font-medium text-amber-700 dark:text-amber-400 text-center hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors cursor-pointer"
-          >
-            Streak lost — tap to see details
-          </button>
-        ) : (
-          <div className={cn('p-4 rounded-2xl', streak.todayCompleted ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-700/50')}>
-            <p className={cn('text-sm font-medium text-center', streak.todayCompleted ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400')}>
-              {streak.todayCompleted ? '✅ Today completed!' : "⏳ Complete 2 lessons to count today"}
-            </p>
-          </div>
-        )}
       </div>
 
-      {/* Streak lost modal */}
-      {showStreakLostModal && (
-        <StreakLostModal
-          longestStreak={streak.longestStreak}
-          onClose={() => setShowStreakLostModal(false)}
-        />
-      )}
-    </>
+      {/* Streak stats */}
+      <div className="space-y-3 mb-5">
+        <div className="flex items-center justify-between p-4 bg-orange-50 dark:bg-orange-900/20 rounded-2xl">
+          <div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Streak</span>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Complete 2 lessons/day to maintain</p>
+          </div>
+          <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            {streak.currentStreak} days
+          </span>
+        </div>
+        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Longest Streak</span>
+          <span className="text-2xl font-bold text-gray-600 dark:text-gray-400">
+            {streak.longestStreak} days
+          </span>
+        </div>
+      </div>
+
+      {/* 7-day activity */}
+      <div className="mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">This week</p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 italic">Hover a day for details</p>
+        </div>
+
+        <div className="flex items-end justify-between gap-1 px-1">
+          {days.map((day, index) => (
+            <DayPill
+              key={day.iso}
+              day={day}
+              active={streak.weekActivity[index] ?? false}
+              lessons={dailyCompletions?.[day.iso] ?? 0}
+              seconds={dailyTimeSeconds?.[day.iso] ?? 0}
+            />
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center gap-3 mt-3 px-1">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700" />
+            <span className="text-[9px] text-gray-400 dark:text-gray-500">No activity</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-green-400 dark:bg-green-500" />
+            <span className="text-[9px] text-gray-400 dark:text-gray-500">Active</span>
+          </div>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <div className="w-2.5 h-2.5 rounded-full ring-2 ring-orange-400 bg-transparent" />
+            <span className="text-[9px] text-gray-400 dark:text-gray-500">Today</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Today status */}
+      <div className={cn('p-4 rounded-2xl', streak.todayCompleted ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-700/50')}>
+        <p className={cn('text-sm font-medium text-center', streak.todayCompleted ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400')}>
+          {streak.todayCompleted ? '✅ Today completed!' : '⏳ Complete 2 lessons to count today'}
+        </p>
+      </div>
+    </div>
   );
 }
