@@ -142,6 +142,7 @@ function formatLessonOverviewParagraph(overviewRaw: string): string {
   if (!t) {
     return "";
   }
+  // Return full overview text (don't extract first sentence)
   return t.endsWith(".") ? t : `${t}.`;
 }
 
@@ -162,6 +163,7 @@ function mapLessonsToModules(
   completedLessonIds: string[],
   _docTitle: string,
   visitedLessonIds: Set<string>,
+  moduleOverview: string = "",
 ): Module[] {
   const completedSet = new Set(
     completedLessonIds.map((id) => String(id).trim()),
@@ -189,9 +191,11 @@ function mapLessonsToModules(
     const isLocked = idx > lastCompletedIdx + 1;
 
     const overview =
-      typeof lesson.explanation === "string"
-        ? shortSegmentOverview(lesson.explanation)
-        : "";
+      idx === 0 && typeof moduleOverview === "string" && moduleOverview.length > 0
+        ? shortSegmentOverview(moduleOverview)
+        : typeof lesson.explanation === "string"
+          ? shortSegmentOverview(lesson.explanation)
+          : "";
 
     return {
       id: `m${idx + 1}`,
@@ -2568,6 +2572,7 @@ export default function RoadmapPage() {
               completedLessonIds,
               result.data.title,
               pdfId ? getVisitedLessonIds(pdfId) : new Set<string>(),
+              result.data.overview,
             ),
           );
           setErrorMessage(null);
