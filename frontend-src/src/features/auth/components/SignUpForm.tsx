@@ -120,7 +120,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSubmit, onSignInClick,
         type="button"
         onClick={handleGoogleSignIn}
         disabled={isLoading || googleLoading}
-        className="w-full h-12 flex items-center justify-center gap-3 rounded-xl border border-[#dadce0] dark:border-white/12 bg-white dark:bg-[#1e293b] hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full h-12 flex items-center justify-center gap-3 rounded-xl border border-[#dadce0] dark:border-white/12 bg-white dark:bg-[#1e293b] hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
       >
         {googleLoading ? (
           <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />

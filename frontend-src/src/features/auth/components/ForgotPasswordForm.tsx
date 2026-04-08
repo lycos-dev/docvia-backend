@@ -48,7 +48,7 @@ export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({
         disabled={isLoading}
       />
 
-      <Button type="submit" variant="primary" className="w-full" isLoading={isLoading}>
+      <Button type="submit" variant="primary" className="w-full cursor-pointer" isLoading={isLoading}>
         Send Reset Link
       </Button>
 

@@ -264,7 +264,7 @@ export default function PDFViewer({ documentId, initialPage = 1, isDark, token }
           <ZoomOut size={18} />
         </button>
 
-        <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] min-w-[3.5rem] text-center tabular-nums">
+        <span className="text-sm font-medium text-[#6B7280] dark:text-[#94A3B8] min-w-14 text-center tabular-nums">
           {Math.round(scale * 100)}%
         </span>
 
