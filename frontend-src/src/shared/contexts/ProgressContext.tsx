@@ -39,6 +39,12 @@ interface StreakData {
   weekActivity: boolean[];
   todayCompleted: boolean;
   streakJustLost: boolean;
+  /**
+   * The ISO date (YYYY-MM-DD) on which the user dismissed the streak-lost
+   * warning. Once set, `streakJustLost` will never re-fire for the same loss
+   * event — even across page reloads. Reset to `null` when a new streak starts.
+   */
+  streakLostAcknowledgedDate: string | null;
 }
 
 interface ProgressStore {
@@ -162,10 +168,22 @@ function computeStreak(
 
   const hadStreak = prevStreak.currentStreak > 0 || prevStreak.longestStreak > 0;
   const gapExists = !yesterdayCompleted && !todayCompleted;
+
+  // A loss event is "already acknowledged" when the user dismissed the modal
+  // and streakLostAcknowledgedDate is set. We keep it dismissed as long as
+  // currentStreak is still 0 (i.e. the same loss event hasn't resolved yet).
+  const alreadyAcknowledged =
+    prevStreak.streakLostAcknowledgedDate !== null && currentStreak === 0;
+
   const streakJustLost =
-    hadStreak && gapExists && currentStreak === 0 && !prevStreak.streakJustLost
+    hadStreak && gapExists && currentStreak === 0 && !alreadyAcknowledged
       ? true
-      : prevStreak.streakJustLost;
+      : prevStreak.streakJustLost && currentStreak === 0; // clear flag if new streak started
+
+  // Reset the acknowledged date once a new streak is underway so a future
+  // loss will show the modal again.
+  const streakLostAcknowledgedDate =
+    currentStreak > 0 ? null : prevStreak.streakLostAcknowledgedDate;
 
   return {
     currentStreak,
@@ -175,6 +193,7 @@ function computeStreak(
     weekActivity,
     todayCompleted,
     streakJustLost: streakJustLost ?? false,
+    streakLostAcknowledgedDate,
   };
 }
 
@@ -188,6 +207,7 @@ const INITIAL_STREAK: StreakData = {
   weekActivity: [false, false, false, false, false, false, false],
   todayCompleted: false,
   streakJustLost: false,
+  streakLostAcknowledgedDate: null,
 };
 
 const INITIAL_STORE: ProgressStore = {
@@ -205,6 +225,9 @@ function loadStore(): ProgressStore {
     const parsed = JSON.parse(raw) as Partial<ProgressStore>;
     if (parsed.streak && parsed.streak.streakJustLost === undefined) {
       parsed.streak.streakJustLost = false;
+    }
+    if (parsed.streak && parsed.streak.streakLostAcknowledgedDate === undefined) {
+      parsed.streak.streakLostAcknowledgedDate = null;
     }
     // Back-fill deadline fields for existing document progress entries
     if (parsed.documentProgress) {
@@ -442,7 +465,14 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
 
   const acknowledgeStreakLost = useCallback(() => {
     setStore((prev) => {
-      const next = { ...prev, streak: { ...prev.streak, streakJustLost: false } };
+      const next = {
+        ...prev,
+        streak: {
+          ...prev.streak,
+          streakJustLost: false,
+          streakLostAcknowledgedDate: todayISO(),
+        },
+      };
       saveStore(next);
       return next;
     });
