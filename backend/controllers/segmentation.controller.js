@@ -528,15 +528,54 @@ async function evaluateMicrotaskEndpoint(req, res) {
 
     console.log(`[Microtask] Evaluating ${task.type} answer for "${segmentTitle}"`);
 
-    // Multiple choice & True/False: evaluate locally — no AI needed
+    // Multiple choice & True/False: evaluate locally, then use AI to explain why
     if (task.type === 'multiple_choice' || task.type === 'true_false') {
       const correct = Number(userAnswer) === Number(task.correctIndex);
+      const correctOptionText = task.options[task.correctIndex];
+      const chosenOptionText  = task.options[Number(userAnswer)];
+      const content = (segmentContent || '').substring(0, 1500);
+
+      let explanation = task.explanation || '';
+      try {
+        const explainMsg = await makeGroqCall(userId, key =>
+          getGroq(key).chat.completions.create({
+            messages: [
+              {
+                role: 'system',
+                content: `You are a concise, encouraging teacher. Always explain WHY the correct answer is right in 2-3 sentences, grounded in the lesson content.`,
+              },
+              {
+                role: 'user',
+                content: `Question: ${task.question}
+Correct answer: ${correctOptionText}
+${!correct ? `Student chose: ${chosenOptionText}` : ''}
+Lesson context: ${content}
+
+Briefly explain why "${correctOptionText}" is the correct answer.`,
+              },
+            ],
+            model:       'llama-3.3-70b-versatile',
+            max_tokens:  150,
+            temperature: 0.4,
+            stream:      false,
+          })
+        );
+        explanation = explainMsg.choices[0].message.content.trim();
+      } catch (e) {
+        // fallback to static explanation if AI call fails
+        explanation = task.explanation || '';
+      }
+
       return res.status(200).json({
         success:     true,
         correct,
+        isCorrect:   correct,
         score:       correct ? 100 : 0,
-        feedback:    correct ? '✅ Correct! Well done.' : `❌ Not quite. The correct answer was: ${task.options[task.correctIndex]}`,
-        explanation: task.explanation || '',
+        feedback:    correct
+          ? `✅ Correct! ${explanation}`
+          : `❌ Not quite. The correct answer was: ${correctOptionText}. ${explanation}`,
+        correctAnswer: correctOptionText,
+        explanation,
       });
     }
 
@@ -554,13 +593,13 @@ Evaluate based on:
 2. Whether key terms are used appropriately
 3. Clarity of explanation
 
-Be encouraging but honest. Keep feedback to 2-3 sentences.
+Always explain WHY the correct answer is what it is — not just whether the student got it right or wrong. Be encouraging but honest. Keep feedback to 2-3 sentences.
 
 Return ONLY valid JSON:
 {
   "correct": true or false,
   "score": 0-100,
-  "feedback": "Your encouraging but honest 2-3 sentence feedback",
+  "feedback": "Your 2-3 sentence feedback that explains WHY the correct answer is correct, and what the student got right or wrong",
   "highlight": "The strongest part of their answer (1 phrase)",
   "improve": "One specific thing they could add or correct (1 sentence, or null if score >= 85)"
 }`,

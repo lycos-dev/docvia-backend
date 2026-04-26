@@ -499,7 +499,7 @@ export default function QuizPanel({
         {/* 2. Centered Content Body */}
         <div className="flex flex-col items-center justify-center flex-1 gap-4 px-8 py-10 text-center overflow-y-auto">
           {/* --- PENGUIN IMAGE CONDITIONAL RENDERING --- */}
-          {pct >= 75 && (
+          {pct >= 80 && (
             <div className="w-32 h-32 flex items-center justify-center">
               <img
                 src="https://raw.githubusercontent.com/lycos-dev/docvia-backend/refs/heads/waru-branch/frontend-src/public/assets/images/happy-Photoroom.png"
@@ -509,7 +509,7 @@ export default function QuizPanel({
             </div>
           )}
 
-          {pct >= 50 && pct < 75 && (
+          {pct >= 50 && pct < 80 && (
             <div className="w-32 h-32 flex items-center justify-center">
               <img
                 src="https://github.com/lycos-dev/docvia-backend/blob/waru-branch/frontend-src/public/assets/images/nani-Photoroom.png?raw=true"
