@@ -9,6 +9,7 @@ const Groq = require('groq-sdk');
 const pdfjs = require('pdfjs-dist');
 const { supabase } = require('../config/supabase');
 const { makeGroqCall } = require('../services/groqkeymanager.service');
+const { getPageTextWithOCRFallback, renderPageToBuffer } = require('../services/ocr.service');
 
 function getGroq(apiKey) {
   return new Groq({ apiKey });
@@ -27,9 +28,19 @@ async function extractPDFText(pdfBuffer) {
     let fullText = '';
 
     for (let i = 1; i <= pageCount; i++) {
-      const page = await pdf.getPage(i);
+      const page        = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items.map(item => item.str).join(' ');
+      const rawText     = textContent.items.map(item => item.str).join(' ');
+
+      // OCR fallback: if the text layer is thin/empty, render the page to an
+      // image and run Tesseract on it. renderPageToBuffer is passed as a lazy
+      // thunk so we never render pages that don't need OCR.
+      const pageText = await getPageTextWithOCRFallback(
+        rawText,
+        () => renderPageToBuffer(pdf, i),
+        i
+      );
+
       pages.push({ pageNum: i, text: pageText });
       fullText += `\n[PAGE ${i}]\n${pageText}`;
     }
