@@ -9,6 +9,8 @@ import { cn } from "../../../shared/utils/cn";
 import { useDocuments } from "../../../shared/contexts/DocumentsContext";
 import { useAuth } from "../../../shared/contexts/AuthContext";
 import { deletePDF } from "../../../shared/services/pdfService";
+import DeadlinePicker from './DeadlinePicker';
+import DeadlineBadge from '../../../shared/components/ui/DeadlineBadge';
 
 // Set worker once per module load (same as UploadModal)
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -346,6 +348,8 @@ export default function ReadingCard({ document, viewMode }: ReadingCardProps) {
                   </h4>
                   <div className="mt-1 flex-1 flex flex-col gap-0.5">
                     <ProgressStatus />
+                    <DeadlineBadge documentId={document.filename} className="mt-1" />
+                    <DeadlinePicker documentId={document.filename} documentTitle={document.title} className="mt-2" />
                     <LastAccessed />
                   </div>
                 </>

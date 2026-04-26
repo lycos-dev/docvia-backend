@@ -1,3 +1,7 @@
+// src/shared/contexts/ProgressContext.tsx
+// DROP-IN REPLACEMENT — adds `deadline`, `dailyTarget`, `setDeadline`, `clearDeadline`
+// to DocumentProgress. All existing behaviour is preserved exactly.
+
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'docvia-progress';
@@ -20,6 +24,11 @@ export interface DocumentProgress {
   startedAt: string;
   lastAccessedAt: string;
   streakDays: number;
+  // ── NEW ──────────────────────────────────────────────────────────────────
+  /** ISO date string (YYYY-MM-DD) for the user-set deadline, or null */
+  deadline: string | null;
+  /** Lessons per day needed to finish on time (recomputed on every set) */
+  dailyTarget: number;
 }
 
 interface StreakData {
@@ -29,8 +38,6 @@ interface StreakData {
   streakStartDate: string | null;
   weekActivity: boolean[];
   todayCompleted: boolean;
-  /** True only when the streak was active yesterday but today hasn't been completed yet AND
-   *  the user had a streak > 0 that is now gone. Cleared once the user acknowledges the modal. */
   streakJustLost: boolean;
 }
 
@@ -39,7 +46,6 @@ interface ProgressStore {
   lessonProgress: Record<string, LessonProgress>;
   streak: StreakData;
   dailyCompletions: Record<string, number>;
-  /** YYYY-MM-DD → total seconds studied that day */
   dailyTimeSeconds: Record<string, number>;
 }
 
@@ -48,28 +54,24 @@ interface ProgressContextValue {
   lessonProgress: Record<string, LessonProgress>;
   streak: StreakData;
   markLessonComplete: (documentId: string, lessonId: string, totalLessons: number) => void;
-  /** Unmark a lesson as complete, removing it from completion records */
   unmarkLessonComplete: (documentId: string, lessonId: string) => void;
-  /** Updates current lesson + last access; pass totalLessons when known so % stays accurate */
   setCurrentLesson: (documentId: string, lessonId: string, totalLessons?: number) => void;
   getDocumentProgress: (documentId: string) => DocumentProgress | null;
-  /**
-   * Adds seconds to the timeSpentSeconds counter for the given lesson.
-   * Called by useTimeTracker — only fires while the user is actively studying
-   * (tab visible + window focused) on the Roadmap or Reader pages.
-   */
   addTimeSpent: (documentId: string, lessonId: string, seconds: number) => void;
-  /** YYYY-MM-DD → seconds studied; used for 7-day activity detail */
   dailyTimeSeconds: Record<string, number>;
-  /** YYYY-MM-DD → lesson completions that day (streak / week UI) */
   dailyCompletions: Record<string, number>;
-  /** Call this after the user dismisses the streak-lost modal so it doesn't reappear */
   acknowledgeStreakLost: () => void;
-  /** Remove all progress (document + lessons) for a deleted document */
   removeDocumentProgress: (documentId: string) => void;
+  // ── NEW ──────────────────────────────────────────────────────────────────
+  /** Set (or update) a deadline for a document. Recalculates dailyTarget. */
+  setDeadline: (documentId: string, isoDate: string) => void;
+  /** Remove the deadline for a document, resetting dailyTarget to 0. */
+  clearDeadline: (documentId: string) => void;
 }
 
 const ProgressContext = createContext<ProgressContextValue | null>(null);
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function todayISO(): string {
   const d = new Date();
@@ -80,12 +82,36 @@ function localDateISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Returns YYYY-MM-DD for yesterday in local time */
 function yesterdayISO(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
   return localDateISO(d);
 }
+
+/**
+ * Compute how many lessons/day are needed to finish a document before the deadline.
+ * Returns 0 when there's no deadline, the doc is complete, or the deadline has passed.
+ */
+function computeDailyTarget(
+  deadline: string | null,
+  completedCount: number,
+  totalLessons: number
+): number {
+  if (!deadline || totalLessons === 0) return 0;
+  const remaining = totalLessons - completedCount;
+  if (remaining <= 0) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadlineDate = new Date(deadline + 'T00:00:00');
+  const daysLeft = Math.ceil(
+    (deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (daysLeft <= 0) return remaining; // overdue — show full remaining as target
+  return Math.ceil(remaining / daysLeft);
+}
+
+// ─── Streak helpers (unchanged) ───────────────────────────────────────────────
 
 function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[] {
   const result: boolean[] = [];
@@ -97,7 +123,6 @@ function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[
   return result;
 }
 
-/** Latest calendar day (YYYY-MM-DD) with at least one completion, or null */
 function lastActiveDayISO(daily: Record<string, number>): string | null {
   let best: string | null = null;
   for (const [day, count] of Object.entries(daily)) {
@@ -117,13 +142,10 @@ function computeStreak(
   const yesterdayCompleted = (dailyCompletions[yesterday] ?? 0) >= 2;
   const weekActivity = computeWeekActivity(dailyCompletions);
 
-  // Walk back from today counting consecutive completed days.
-  // If today isn't done yet, start the walk from yesterday so the streak
-  // isn't broken just because the user hasn't finished today.
   let currentStreak = 0;
   const d = new Date();
   if (!todayCompleted) {
-    d.setDate(d.getDate() - 1); // start from yesterday
+    d.setDate(d.getDate() - 1);
   }
   while (true) {
     const key = localDateISO(d);
@@ -138,21 +160,12 @@ function computeStreak(
   const longestStreak = Math.max(prevStreak.longestStreak, currentStreak);
   const lastActive = lastActiveDayISO(dailyCompletions);
 
-  // Streak is "just lost" when:
-  //   - The previous streak was > 0
-  //   - Yesterday was NOT completed (so there's a real gap, not just "today not done yet")
-  //   - Today is also not completed
-  //   - The computed currentStreak is now 0
   const hadStreak = prevStreak.currentStreak > 0 || prevStreak.longestStreak > 0;
   const gapExists = !yesterdayCompleted && !todayCompleted;
   const streakJustLost =
-    hadStreak &&
-    gapExists &&
-    currentStreak === 0 &&
-    // Don't re-flag if already acknowledged (prevStreak.streakJustLost is false)
-    !prevStreak.streakJustLost
+    hadStreak && gapExists && currentStreak === 0 && !prevStreak.streakJustLost
       ? true
-      : prevStreak.streakJustLost; // preserve until acknowledged
+      : prevStreak.streakJustLost;
 
   return {
     currentStreak,
@@ -164,6 +177,8 @@ function computeStreak(
     streakJustLost: streakJustLost ?? false,
   };
 }
+
+// ─── Store init / persistence ─────────────────────────────────────────────────
 
 const INITIAL_STREAK: StreakData = {
   currentStreak: 0,
@@ -187,10 +202,16 @@ function loadStore(): ProgressStore {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return INITIAL_STORE;
-    const parsed = JSON.parse(raw);
-    // Back-fill streakJustLost for older stored data
+    const parsed = JSON.parse(raw) as Partial<ProgressStore>;
     if (parsed.streak && parsed.streak.streakJustLost === undefined) {
       parsed.streak.streakJustLost = false;
+    }
+    // Back-fill deadline fields for existing document progress entries
+    if (parsed.documentProgress) {
+      for (const doc of Object.values(parsed.documentProgress)) {
+        if (doc.deadline === undefined) doc.deadline = null;
+        if (doc.dailyTarget === undefined) doc.dailyTarget = 0;
+      }
     }
     return { ...INITIAL_STORE, ...parsed };
   } catch {
@@ -201,6 +222,8 @@ function loadStore(): ProgressStore {
 function saveStore(store: ProgressStore): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function ProgressProvider({ children }: { children: React.ReactNode }) {
   const [store, setStore] = useState<ProgressStore>(loadStore);
@@ -213,6 +236,8 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+
+  // ── Existing actions (unchanged) ───────────────────────────────────────────
 
   const markLessonComplete = useCallback(
     (documentId: string, lessonId: string, totalLessons: number) => {
@@ -239,6 +264,10 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
             ? Math.min(100, Math.round((completedLessons.length / mergedTotal) * 100))
             : 0;
 
+        // Recompute dailyTarget after completing a lesson
+        const deadline = existingDoc?.deadline ?? null;
+        const dailyTarget = computeDailyTarget(deadline, completedLessons.length, mergedTotal);
+
         const docProg: DocumentProgress = {
           documentId,
           completedLessons,
@@ -248,6 +277,8 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           startedAt: existingDoc?.startedAt ?? new Date().toISOString(),
           lastAccessedAt: new Date().toISOString(),
           streakDays: existingDoc?.streakDays ?? 0,
+          deadline,
+          dailyTarget,
         };
 
         const today = todayISO();
@@ -278,26 +309,26 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         const key = `${documentId}:${lessonId}`;
         if (!prev.lessonProgress[key]?.isCompleted) return prev;
 
-        // Remove from lessonProgress
         const newLessonProgress = { ...prev.lessonProgress };
         delete newLessonProgress[key];
 
-        // Remove from documentProgress completedLessons
         const existingDoc = prev.documentProgress[documentId];
         if (!existingDoc) return prev;
 
-        const completedLessons = existingDoc.completedLessons.filter(
-          (id) => id !== lessonId
-        );
+        const completedLessons = existingDoc.completedLessons.filter((id) => id !== lessonId);
         const percentage =
           existingDoc.totalLessons > 0
             ? Math.min(
                 100,
-                Math.round(
-                  (completedLessons.length / existingDoc.totalLessons) * 100
-                )
+                Math.round((completedLessons.length / existingDoc.totalLessons) * 100)
               )
             : 0;
+
+        const dailyTarget = computeDailyTarget(
+          existingDoc.deadline,
+          completedLessons.length,
+          existingDoc.totalLessons
+        );
 
         const docProg: DocumentProgress = {
           documentId,
@@ -308,14 +339,13 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           startedAt: existingDoc.startedAt,
           lastAccessedAt: new Date().toISOString(),
           streakDays: existingDoc.streakDays,
+          deadline: existingDoc.deadline,
+          dailyTarget,
         };
 
-        // Decrement daily completions if it was completed today
         const today = todayISO();
         const dailyCompletions = { ...prev.dailyCompletions };
-        if (dailyCompletions[today] > 0) {
-          dailyCompletions[today]--;
-        }
+        if (dailyCompletions[today] > 0) dailyCompletions[today]--;
 
         const streak = computeStreak(dailyCompletions, prev.streak);
 
@@ -346,6 +376,10 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           total > 0
             ? Math.min(100, Math.round((completed.length / total) * 100))
             : (existing?.percentage ?? 0);
+
+        const deadline = existing?.deadline ?? null;
+        const dailyTarget = computeDailyTarget(deadline, completed.length, total);
+
         const docProg: DocumentProgress = {
           documentId,
           completedLessons: completed,
@@ -355,6 +389,8 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           startedAt: existing?.startedAt ?? new Date().toISOString(),
           lastAccessedAt: new Date().toISOString(),
           streakDays: existing?.streakDays ?? 0,
+          deadline,
+          dailyTarget,
         };
         const next = {
           ...prev,
@@ -376,10 +412,10 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         const lessonProg: LessonProgress = {
           lessonId,
           documentId,
-          isCompleted:      existing?.isCompleted      ?? false,
-          completedAt:      existing?.completedAt      ?? null,
+          isCompleted: existing?.isCompleted ?? false,
+          completedAt: existing?.completedAt ?? null,
           timeSpentSeconds: (existing?.timeSpentSeconds ?? 0) + seconds,
-          attempts:         existing?.attempts          ?? 0,
+          attempts: existing?.attempts ?? 0,
         };
         const today = todayISO();
         const dailyTimeSeconds = {
@@ -406,10 +442,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
 
   const acknowledgeStreakLost = useCallback(() => {
     setStore((prev) => {
-      const next = {
-        ...prev,
-        streak: { ...prev.streak, streakJustLost: false },
-      };
+      const next = { ...prev, streak: { ...prev.streak, streakJustLost: false } };
       saveStore(next);
       return next;
     });
@@ -417,20 +450,59 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
 
   const removeDocumentProgress = useCallback((documentId: string) => {
     setStore((prev) => {
-      // Remove document-level progress entry only
-      // Preserve lesson completions for historical data
       const newDocProgress = { ...prev.documentProgress };
       delete newDocProgress[documentId];
+      const next: ProgressStore = { ...prev, documentProgress: newDocProgress };
+      saveStore(next);
+      return next;
+    });
+  }, []);
 
+  // ── NEW: deadline actions ──────────────────────────────────────────────────
+
+  const setDeadline = useCallback((documentId: string, isoDate: string) => {
+    setStore((prev) => {
+      const existing = prev.documentProgress[documentId];
+      const completedCount = existing?.completedLessons.length ?? 0;
+      const totalLessons = existing?.totalLessons ?? 0;
+      const dailyTarget = computeDailyTarget(isoDate, completedCount, totalLessons);
+
+      const docProg: DocumentProgress = {
+        documentId,
+        completedLessons: existing?.completedLessons ?? [],
+        currentLessonId: existing?.currentLessonId ?? null,
+        totalLessons,
+        percentage: existing?.percentage ?? 0,
+        startedAt: existing?.startedAt ?? new Date().toISOString(),
+        lastAccessedAt: existing?.lastAccessedAt ?? new Date().toISOString(),
+        streakDays: existing?.streakDays ?? 0,
+        deadline: isoDate,
+        dailyTarget,
+      };
       const next: ProgressStore = {
         ...prev,
-        documentProgress: newDocProgress,
-        // lessonProgress remains unchanged - preserve completion history
+        documentProgress: { ...prev.documentProgress, [documentId]: docProg },
       };
       saveStore(next);
       return next;
     });
   }, []);
+
+  const clearDeadline = useCallback((documentId: string) => {
+    setStore((prev) => {
+      const existing = prev.documentProgress[documentId];
+      if (!existing) return prev;
+      const docProg: DocumentProgress = { ...existing, deadline: null, dailyTarget: 0 };
+      const next: ProgressStore = {
+        ...prev,
+        documentProgress: { ...prev.documentProgress, [documentId]: docProg },
+      };
+      saveStore(next);
+      return next;
+    });
+  }, []);
+
+  // ── Provider value ─────────────────────────────────────────────────────────
 
   return (
     <ProgressContext.Provider
@@ -447,6 +519,8 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         dailyCompletions: store.dailyCompletions ?? {},
         acknowledgeStreakLost,
         removeDocumentProgress,
+        setDeadline,
+        clearDeadline,
       }}
     >
       {children}

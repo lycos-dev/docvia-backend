@@ -1,10 +1,14 @@
+// src/features/dashboard/pages/DashboardPage.tsx
+
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import TopBar from '../components/TopBar';
 import WelcomeBanner from '../components/WelcomeBanner';
 import ReadingSection from '../components/ReadingSection';
 import StreakCard from '../components/StreakCard';
+import DeadlineBanner from '../components/DeadlineBanner';
 import { useProgressContext } from '../../../shared/contexts/ProgressContext';
+import { useDocuments } from '../../../shared/contexts/DocumentsContext';
 
 // ─── Streak Lost Modal ────────────────────────────────────────────────────────
 
@@ -83,7 +87,8 @@ function StreakLostModal({ longestStreak, onClose }: StreakLostModalProps) {
 
 export default function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
-  const { streak, acknowledgeStreakLost } = useProgressContext();
+  const { streak, acknowledgeStreakLost, documentProgress } = useProgressContext();
+  const { documents } = useDocuments();
 
   // Show the modal automatically when the user loads the dashboard and
   // their streak was just detected as lost (streakJustLost flag from ProgressContext).
@@ -95,12 +100,31 @@ export default function DashboardPage() {
     acknowledgeStreakLost(); // clears the flag in storage so it won't re-appear next session
   }
 
+  // Only show banners for documents that actually have a deadline set
+  const docsWithDeadline = documents.filter(
+    (doc) => documentProgress[doc.filename]?.deadline != null
+  );
+
   return (
     <div>
       <TopBar searchTerm={searchTerm} onSearchChange={setSearchTerm} />
       <div className="flex flex-col xl:flex-row gap-6">
         <div className="flex-1 space-y-6">
           <WelcomeBanner />
+
+          {/* ── Deadline reminder banners — one per document with an active deadline ── */}
+          {docsWithDeadline.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {docsWithDeadline.map((doc) => (
+                <DeadlineBanner
+                  key={doc.filename}
+                  documentId={doc.filename}
+                  documentTitle={doc.title}
+                />
+              ))}
+            </div>
+          )}
+
           <ReadingSection searchTerm={searchTerm} onSearchClear={() => setSearchTerm('')} />
         </div>
         <div className="w-full xl:w-[320px] flex xl:block justify-end">
