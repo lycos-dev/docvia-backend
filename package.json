@@ -20,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.37.0",
     "@heroicons/react": "^2.2.0",
+    "@napi-rs/canvas": "^0.1.53",
     "@supabase/supabase-js": "^2.92.1-rc.2",
     "bcryptjs": "^2.4.3",
     "canvas": "^3.2.3",

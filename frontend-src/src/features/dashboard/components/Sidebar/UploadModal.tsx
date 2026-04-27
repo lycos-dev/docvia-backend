@@ -35,37 +35,10 @@ async function extractPDFThumbnail(file: File): Promise<string | null> {
   }
 }
 
-/**
- * Checks whether a PDF has enough extractable text to be processed.
- * Samples up to 3 pages and counts characters from their text content.
- * Returns an object with isTextBased flag and the page count.
- */
-async function checkPDFTextContent(file: File): Promise<{ isTextBased: boolean; pageCount: number; charCount: number }> {
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const pageCount = pdf.numPages;
-    const pagesToSample = Math.min(3, pageCount);
-    let totalChars = 0;
-
-    for (let i = 1; i <= pagesToSample; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const text = content.items
-        .map((item) => ('str' in item ? item.str : ''))
-        .join(' ')
-        .trim();
-      totalChars += text.length;
-    }
-
-    // Require at least 80 chars per sampled page on average
-    const isTextBased = totalChars >= pagesToSample * 80;
-    return { isTextBased, pageCount, charCount: totalChars };
-  } catch {
-    // If we can't read the PDF at all, let the server handle it
-    return { isTextBased: true, pageCount: 0, charCount: 0 };
-  }
-}
+// NOTE: Client-side text-layer check removed.
+// Image-based and scanned PDFs are now handled server-side via Anthropic vision
+// OCR — the backend will extract text from any PDF regardless of whether it has
+// an embedded text layer. We no longer block uploads here.
 
 interface UploadModalProps {
   onClose: (refreshNeeded?: boolean) => void;
@@ -77,7 +50,6 @@ export default function UploadModal({ onClose }: UploadModalProps) {
   const { addDocument } = useDocuments();
   const [dragActive, setDragActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [isChecking, setIsChecking] = useState(false);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [thumbnail, setThumbnail] = useState<string | null>(null);
@@ -156,19 +128,6 @@ export default function UploadModal({ onClose }: UploadModalProps) {
     setError(undefined);
     setUploadProgress(0);
     setFileSize(formatFileSize(file.size));
-
-    // Check if PDF has extractable text before uploading
-    setIsChecking(true);
-    const textCheck = await checkPDFTextContent(file);
-    setIsChecking(false);
-
-    if (!textCheck.isTextBased) {
-      setError(
-        `This PDF appears to be image-based or scanned (only ${textCheck.charCount} characters detected across ${Math.min(3, textCheck.pageCount)} page${textCheck.pageCount === 1 ? '' : 's'}). ` +
-        `Please upload a text-based PDF so lessons can be generated from its content.`
-      );
-      return;
-    }
 
     // Extract thumbnail before uploading (fast, runs on the local file)
     const extracted = await extractPDFThumbnail(file);

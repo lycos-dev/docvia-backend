@@ -6,51 +6,22 @@
  */
 
 const Groq = require('groq-sdk');
-const pdfjs = require('pdfjs-dist');
 const { supabase } = require('../config/supabase');
 const { makeGroqCall } = require('../services/groqkeymanager.service');
-const { getPageTextWithOCRFallback, renderPageToBuffer } = require('../services/ocr.service');
+const { extractPDFTextWithOCR } = require('../services/groq-ocr.service');
 
 function getGroq(apiKey) {
   return new Groq({ apiKey });
 }
 
 // ─── PDF TEXT EXTRACTION ───────────────────────────────────────────────────────
+//
+// Delegates to groq-ocr.service which tries pdf-parse first, then falls back
+// to Groq vision OCR (free tier) for image-based / scanned PDFs.
 
-async function extractPDFText(pdfBuffer) {
-  try {
-    pdfjs.GlobalWorkerOptions.workerSrc =
-      require('pdfjs-dist/legacy/build/pdf.worker.min.js');
-
-    const pdf = await pdfjs.getDocument({ data: pdfBuffer }).promise;
-    const pageCount = pdf.numPages;
-    const pages = [];
-    let fullText = '';
-
-    for (let i = 1; i <= pageCount; i++) {
-      const page        = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const rawText     = textContent.items.map(item => item.str).join(' ');
-
-      // OCR fallback: if the text layer is thin/empty, render the page to an
-      // image and run Tesseract on it. renderPageToBuffer is passed as a lazy
-      // thunk so we never render pages that don't need OCR.
-      const pageText = await getPageTextWithOCRFallback(
-        rawText,
-        () => renderPageToBuffer(pdf, i),
-        i
-      );
-
-      pages.push({ pageNum: i, text: pageText });
-      fullText += `\n[PAGE ${i}]\n${pageText}`;
-    }
-
-    return { pages, fullText, pageCount, extractedAt: new Date().toISOString() };
-  } catch (error) {
-    throw new Error(`PDF extraction failed: ${error.message}`);
-  }
+async function extractPDFText(pdfBuffer, userId) {
+  return extractPDFTextWithOCR(pdfBuffer, userId, '[Segmentation]');
 }
-
 // ─── SLICE CONTENT BY PAGE RANGE ─────────────────────────────────────────────
 
 function sliceContentByPages(pages, startPage, endPage) {
@@ -92,6 +63,8 @@ INSTRUCTIONS:
 - Segments must be non-overlapping and together must cover pages 1 to ${pageCount}
 - The last segment's endPage must equal ${pageCount}
 - Difficulty: "beginner" | "intermediate" | "advanced"
+- Titles and descriptions must be based on the ACTUAL academic content in the document — never reference OCR quality, page numbers, or text readability
+- If a segment's content is unclear, infer a meaningful title from the document name and surrounding context
 - Return ONLY valid JSON — no markdown, no code fences, no extra text
 
 JSON FORMAT:
@@ -284,8 +257,8 @@ async function segmentPDFEndpoint(req, res) {
     console.log('[PDF] Extracting text...');
     let extraction;
     try {
-      extraction = await extractPDFText(Buffer.from(pdfData));
-      console.log(`[PDF] ${extraction.pageCount} pages, ${extraction.fullText.length} chars`);
+      extraction = await extractPDFText(Buffer.from(await pdfData.arrayBuffer()), userId);
+      console.log(`[PDF] ${extraction.pageCount} pages, ${extraction.fullText.length} chars${extraction.usedOCR ? ' (via Groq OCR)' : ''}`);
     } catch (extractError) {
       console.warn('[PDF] Extraction failed, using fallback');
       const fallback = fallbackSegmentation(pdfId, null);

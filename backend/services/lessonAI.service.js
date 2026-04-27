@@ -94,6 +94,7 @@ RULES (follow strictly):
 TITLE RULES:
 - Specific and descriptive (include the topic, actor, or tension when possible).
 - Never use generic titles: "Introduction", "Overview", "Summary", "Conclusion", "Background", "Key Points".
+- Never reference OCR quality, readability, page numbers, or text extraction in titles or explanations.
 
 EXPLANATION — STRUCTURE AND DEPTH (critical):
 - Write ONLY in third-person explanatory voice (no "In this lesson we will…", no "This section discusses…").
