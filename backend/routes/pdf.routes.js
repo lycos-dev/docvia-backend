@@ -15,6 +15,7 @@ const {
 const {
   generateLessonsEndpoint,
   getLessonsEndpoint,
+  getLessonsStatusEndpoint,
   deleteLessonsEndpoint,
   deepExplainEndpoint,
 } = require('../controllers/lessons.controller');
@@ -51,10 +52,13 @@ router.post('/segment', segmentPDFEndpoint);
 router.post('/chat', chatWithSegmentEndpoint);
 
 // ── LESSON GENERATION ─────────────────────────────────────────────────────────
-router.post('/lessons/generate',     generateLessonsEndpoint);
-router.post('/lessons/deep-explain', deepExplainEndpoint);
-router.get('/lessons/:pdfId',        getLessonsEndpoint);
-router.delete('/lessons/:pdfId',     deleteLessonsEndpoint);
+// NOTE: Specific routes (/generate, /deep-explain, /:pdfId/status) must come
+// BEFORE the generic /:pdfId GET to avoid Express matching them as pdfId params.
+router.post('/lessons/generate',         generateLessonsEndpoint);
+router.post('/lessons/deep-explain',     deepExplainEndpoint);
+router.get('/lessons/:pdfId/status',     getLessonsStatusEndpoint);
+router.get('/lessons/:pdfId',            getLessonsEndpoint);
+router.delete('/lessons/:pdfId',         deleteLessonsEndpoint);
 
 // ── MICRO-TASKS ───────────────────────────────────────────────────────────────
 router.post('/microtask/generate', generateMicrotaskEndpoint);

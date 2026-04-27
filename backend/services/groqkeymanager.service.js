@@ -9,6 +9,11 @@
  *
  * .env format:
  *   GROQ_API_KEY=key1,key2,key3,...
+ *
+ * FIX: makeGroqCall now accepts an optional pre-resolved startIndex so the
+ * caller (lessonAI.service) can resolve the user's key index ONCE per
+ * generation pipeline instead of hitting the DB on every chunk call.
+ * Pass `resolvedKeyIndex` (number) to skip the DB lookup entirely.
  */
 
 const { supabase } = require('../config/supabase');
@@ -92,14 +97,11 @@ async function getKeyForUser(userId) {
 }
 
 // ─── Key-level failure detection ──────────────────────────────────────────────
-// Returns true for ANY error that means THIS specific key can't be used,
-// so the manager should cycle to the next key instead of throwing immediately.
 
 function isKeyExhaustedError(err) {
   const msg    = (err?.message || '').toLowerCase();
   const status = err?.status ?? err?.statusCode ?? err?.response?.status ?? 0;
 
-  // Rate-limit / quota patterns
   const isRateLimit = (
     msg.includes('429') ||
     msg.includes('rate_limit_exceeded') ||
@@ -111,7 +113,6 @@ function isKeyExhaustedError(err) {
     status === 429
   );
 
-  // Key-level failures — key is deactivated, invalid, or over its quota
   const isKeyFailure = (
     msg.includes('invalid_api_key') ||
     msg.includes('invalid api key') ||
@@ -138,17 +139,31 @@ const isRateLimitError = isKeyExhaustedError;
  * automatically tries the next key in the pool, cycling through ALL available
  * keys before giving up.
  *
- * Usage:
- *   const result = await makeGroqCall(userId, key =>
- *     new Groq({ apiKey: key }).chat.completions.create({ ... })
- *   );
+ * @param {string} userId         - User ID used to resolve starting key index (DB lookup).
+ * @param {Function} callFn       - (apiKey: string) => Promise<any>
+ * @param {number} [resolvedKeyIndex] - Pre-resolved key index. When provided, skips the DB
+ *                                     lookup entirely. Use this when making multiple calls
+ *                                     within a single pipeline (e.g. per-chunk lesson generation)
+ *                                     so you only pay the DB cost once.
+ *
+ * Usage (single call):
+ *   const result = await makeGroqCall(userId, key => new Groq({ apiKey: key }).chat.completions.create({ ... }));
+ *
+ * Usage (multi-call pipeline, efficient):
+ *   const keyIndex = await getUserKeyIndex(userId);
+ *   for (const chunk of chunks) {
+ *     await makeGroqCall(userId, key => ..., keyIndex);
+ *   }
  */
-async function makeGroqCall(userId, callFn) {
+async function makeGroqCall(userId, callFn, resolvedKeyIndex) {
   if (GROQ_KEYS.length === 0) {
     throw new Error('No Groq API keys configured.');
   }
 
-  const startIndex = await getUserKeyIndex(userId);
+  // Use the pre-resolved index if provided, otherwise hit the DB once
+  const startIndex = (resolvedKeyIndex != null && Number.isFinite(resolvedKeyIndex))
+    ? resolvedKeyIndex % GROQ_KEYS.length
+    : await getUserKeyIndex(userId);
 
   for (let i = 0; i < GROQ_KEYS.length; i++) {
     const index = (startIndex + i) % GROQ_KEYS.length;
@@ -176,4 +191,4 @@ async function makeGroqCall(userId, callFn) {
   }
 }
 
-module.exports = { assignKeyToUser, getKeyForUser, makeGroqCall, isRateLimitError, GROQ_KEYS };
+module.exports = { assignKeyToUser, getKeyForUser, getUserKeyIndex, makeGroqCall, isRateLimitError, isKeyExhaustedError, GROQ_KEYS };

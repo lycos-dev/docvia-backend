@@ -2535,7 +2535,53 @@ export default function RoadmapPage() {
 
   useEffect(() => {
     let cancelled = false;
-    let timeoutId: NodeJS.Timeout | null = null;
+    let pollIntervalId: ReturnType<typeof setInterval> | null = null;
+
+    // Apply a resolved lesson set to state
+    const applyLessonData = (data: import("../../../shared/services/pdfService").LessonSet) => {
+      setDocTitle(data.title);
+      setModules(
+        mapLessonsToModules(
+          data.lessons,
+          completedLessonIds,
+          data.title,
+          pdfId ? getVisitedLessonIds(pdfId) : new Set<string>(),
+          data.overview,
+        ),
+      );
+      setErrorMessage(null);
+      setApiResolved(true);
+      setLoadingState("ready");
+    };
+
+    // Poll /status every 4s until generation completes — no hard timeout
+    const startPolling = () => {
+      if (pollIntervalId) clearInterval(pollIntervalId);
+      pollIntervalId = setInterval(async () => {
+        if (cancelled) { clearInterval(pollIntervalId!); return; }
+        try {
+          const statusResult = await pdfService.getLessonsStatus(
+            pdfId!,
+            user?.id ?? "",
+            token ?? undefined,
+          );
+          if (cancelled) return;
+          if (statusResult.status === "complete" && statusResult.data) {
+            clearInterval(pollIntervalId!);
+            applyLessonData(statusResult.data);
+          } else if (statusResult.status === "error") {
+            clearInterval(pollIntervalId!);
+            setErrorMessage(statusResult.error || "Lesson generation failed. Please try again.");
+            setModules([]);
+            setApiResolved(true);
+            setLoadingState("ready");
+          }
+          // status === "generating" → keep polling
+        } catch {
+          // Network blip — keep polling, don't abort
+        }
+      }, 4000);
+    };
 
     const fetchLessons = async () => {
       if (!pdfId) {
@@ -2547,14 +2593,6 @@ export default function RoadmapPage() {
         return;
       }
 
-      // Set 8-second timeout
-      timeoutId = setTimeout(() => {
-        if (!cancelled) {
-          setLoadingState("timeout");
-          cancelled = true; // Stop processing after timeout
-        }
-      }, 8000);
-
       try {
         const result = await pdfService.generateLessons(
           pdfId,
@@ -2562,20 +2600,14 @@ export default function RoadmapPage() {
           token ?? undefined,
         );
         if (cancelled) return;
-        if (timeoutId) clearTimeout(timeoutId);
 
         if (result.success && result.data && result.data.lessons?.length > 0) {
-          setDocTitle(result.data.title);
-          setModules(
-            mapLessonsToModules(
-              result.data.lessons,
-              completedLessonIds,
-              result.data.title,
-              pdfId ? getVisitedLessonIds(pdfId) : new Set<string>(),
-              result.data.overview,
-            ),
-          );
-          setErrorMessage(null);
+          // Completed synchronously (cache hit or fast generation)
+          applyLessonData(result.data);
+        } else if (result.queued || result.status === "generating") {
+          // Generation is in progress on the server — poll until done
+          // Keep loadingState as "loading" so the spinner stays visible
+          startPolling();
         } else {
           const msg =
             (result as { error?: string; message?: string }).message ||
@@ -2583,12 +2615,11 @@ export default function RoadmapPage() {
             "Could not generate lessons for this document. It may be blank, password-protected, or unreadable.";
           setErrorMessage(msg);
           setModules([]);
+          setApiResolved(true);
+          setLoadingState("ready");
         }
-        setApiResolved(true);
-        setLoadingState("ready");
       } catch (err: unknown) {
         if (cancelled) return;
-        if (timeoutId) clearTimeout(timeoutId);
         const msg =
           err instanceof Error
             ? err.message
@@ -2603,7 +2634,7 @@ export default function RoadmapPage() {
     fetchLessons();
     return () => {
       cancelled = true;
-      if (timeoutId) clearTimeout(timeoutId);
+      if (pollIntervalId) clearInterval(pollIntervalId);
     };
   }, [pdfId, user?.id, token, retryKey]);
 

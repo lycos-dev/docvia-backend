@@ -39,6 +39,19 @@ export interface LessonSetResult {
   data?: LessonSet;
   error?: string;
   message?: string;
+  /** 'complete' | 'generating' | 'not_started' | 'error' */
+  status?: string;
+  /** true when the server returned 202 (generation kicked off, poll /status) */
+  queued?: boolean;
+}
+
+export interface LessonStatusResult {
+  success: boolean;
+  /** 'complete' | 'generating' | 'not_started' */
+  status: string;
+  data?: LessonSet;
+  message?: string;
+  error?: string;
 }
 
 export interface DuplicateCheckResult {
@@ -83,7 +96,6 @@ export async function uploadPDF(
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
 
-    // Track upload progress
     if (onProgress) {
       xhr.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) {
@@ -168,6 +180,17 @@ export async function deletePDF(
   return safeJson<{ success: boolean }>(res, { success: false });
 }
 
+/**
+ * Trigger or retrieve lesson generation.
+ *
+ * The backend returns:
+ *   - 200 { status: 'complete', data }   → lessons ready (cache hit or freshly generated)
+ *   - 202 { status: 'generating' }       → generation started/in-progress, poll /status
+ *   - 4xx/5xx                            → error
+ *
+ * Callers that need to wait for completion should poll `getLessonsStatus` after
+ * receiving queued: true.
+ */
 export async function generateLessons(
   pdfId: string,
   userId: string,
@@ -181,7 +204,42 @@ export async function generateLessons(
     },
     body: JSON.stringify({ pdfId, userId }),
   });
-  return safeJson<LessonSetResult>(res, { success: false, error: 'Server did not return a response.' });
+
+  const json = await safeJson<LessonSetResult>(res, {
+    success: false,
+    error: 'Server did not return a response.',
+  });
+
+  // Attach a queued flag so callers can switch to polling without inspecting status strings
+  if (res.status === 202) {
+    return { ...json, queued: true };
+  }
+
+  return json;
+}
+
+/**
+ * Non-blocking status check. Returns immediately without waiting for generation.
+ * Use this to poll after receiving { queued: true } from generateLessons.
+ */
+export async function getLessonsStatus(
+  pdfId: string,
+  userId: string,
+  token?: string
+): Promise<LessonStatusResult> {
+  const res = await fetch(
+    `${BASE}/lessons/${encodeURIComponent(pdfId)}/status?userId=${encodeURIComponent(userId)}`,
+    {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }
+  );
+  return safeJson<LessonStatusResult>(res, {
+    success: false,
+    status: 'error',
+    error: 'Server did not return a response.',
+  });
 }
 
 export async function getLessons(pdfId: string, userId: string, token?: string): Promise<LessonSetResult> {

@@ -161,38 +161,85 @@ export default function ReaderPage() {
     if (!documentId || !user?.id) return;
     setLessonLoadState("loading");
 
-    const resolveLessonSet = async () => {
-      const cached = await pdfService.getLessons(
-        documentId,
-        user.id,
-        token ?? undefined,
-      );
-      if (cached.success && cached.data) return cached.data;
+    let cancelled = false;
+    let pollIntervalId: ReturnType<typeof setInterval> | null = null;
 
-      const generated = await pdfService.generateLessons(
-        documentId,
-        user.id,
-        token ?? undefined,
-      );
-      if (generated.success && generated.data) return generated.data;
-
-      return null;
+    // Apply resolved lesson set to state
+    const applySet = (set: import("../../../shared/services/pdfService").LessonSet) => {
+      setLessonSet(set);
+      const idx = set.lessons.findIndex((l) => String(l.id) === lessonId);
+      const resolvedIdx = idx >= 0 ? idx : 0;
+      setLessonIndex(resolvedIdx);
+      setLesson(set.lessons[resolvedIdx] ?? null);
+      setLessonLoadState("ready");
     };
 
-    resolveLessonSet()
-      .then((set) => {
-        if (!set) {
-          setLessonLoadState("error");
-          return;
+    // Poll /status every 4s until generation completes — no hard timeout
+    const startPolling = () => {
+      if (pollIntervalId) clearInterval(pollIntervalId);
+      pollIntervalId = setInterval(async () => {
+        if (cancelled) { clearInterval(pollIntervalId!); return; }
+        try {
+          const status = await pdfService.getLessonsStatus(
+            documentId,
+            user!.id,
+            token ?? undefined,
+          );
+          if (cancelled) return;
+          if (status.status === "complete" && status.data) {
+            clearInterval(pollIntervalId!);
+            applySet(status.data);
+          } else if (status.status === "error") {
+            clearInterval(pollIntervalId!);
+            setLessonLoadState("error");
+          }
+          // status === "generating" → keep polling
+        } catch {
+          // Network blip — keep polling
         }
-        setLessonSet(set);
-        const idx = set.lessons.findIndex((l) => String(l.id) === lessonId);
-        const resolvedIdx = idx >= 0 ? idx : 0;
-        setLessonIndex(resolvedIdx);
-        setLesson(set.lessons[resolvedIdx] ?? null);
-        setLessonLoadState("ready");
-      })
-      .catch(() => setLessonLoadState("error"));
+      }, 4000);
+    };
+
+    const resolveLessonSet = async () => {
+      // 1. Check cache first (fast, no AI cost)
+      const cached = await pdfService.getLessons(
+        documentId,
+        user!.id,
+        token ?? undefined,
+      );
+      if (cancelled) return;
+      if (cached.success && cached.data) {
+        applySet(cached.data);
+        return;
+      }
+
+      // 2. Trigger generation
+      const generated = await pdfService.generateLessons(
+        documentId,
+        user!.id,
+        token ?? undefined,
+      );
+      if (cancelled) return;
+
+      if (generated.success && generated.data) {
+        // Done immediately (cache hit on server or very fast generation)
+        applySet(generated.data);
+      } else if (generated.queued || generated.status === "generating") {
+        // Server is generating in background — poll until done
+        startPolling();
+      } else {
+        setLessonLoadState("error");
+      }
+    };
+
+    resolveLessonSet().catch(() => {
+      if (!cancelled) setLessonLoadState("error");
+    });
+
+    return () => {
+      cancelled = true;
+      if (pollIntervalId) clearInterval(pollIntervalId);
+    };
   }, [documentId, lessonId, user?.id, token]);
 
   // ── Notes (auto-save with timestamp) ─────────────────────────────────────

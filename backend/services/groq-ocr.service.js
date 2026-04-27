@@ -22,7 +22,9 @@ const { GROQ_KEYS }   = require('./groqkeymanager.service');
 
 const GROQ_VISION_MODEL  = 'meta-llama/llama-4-scout-17b-16e-instruct';
 const GROQ_VISION_URL    = 'https://api.groq.com/openai/v1/chat/completions';
-const MIN_CHARS_PER_PAGE = 80;
+const MIN_CHARS_PER_PAGE = 60;
+const MIN_TOTAL_CHARS   = 150;
+const OCR_MIN_PER_PAGE  = 30;
 
 // ─── Round-robin key index (module-level, stateless fallback) ─────────────────
 // makeGroqCall() requires a userId DB lookup. For OCR we just cycle keys
@@ -171,16 +173,25 @@ async function extractPDFTextWithOCR(pdfBuffer, userId, label = '[OCR]') {
     console.warn(`${label} pdf-parse failed: ${e.message} — will attempt Groq vision OCR`);
   }
 
-  const cleaned     = rawText.replace(/\s+/g, ' ').trim();
-  const expectedMin = Math.max(100, pageCount * MIN_CHARS_PER_PAGE);
+  const cleaned = rawText.replace(/\s+/g, ' ').trim();
+  const pageTexts = cleaned.split(/\f/).map(t => t.trim()).filter(Boolean);
+  const pageLens = pageTexts.map(p => p.length);
+  const totalChars = cleaned.length;
+  const avgCharsPerPage = pageCount > 0 ? totalChars / pageCount : 0;
+  const hasRichPages = pageLens.some(len => len >= MIN_CHARS_PER_PAGE);
+  const minPageLen = Math.min(...pageLens, 0);
 
-  console.log(`${label} pdf-parse: ${cleaned.length} chars, ${pageCount} pages (min expected: ${expectedMin})`);
+  console.log(`${label} pdf-parse: ${totalChars} chars, ${pageCount} pages (avg: ${avgCharsPerPage.toFixed(1)}/page, min: ${minPageLen}, has rich pages: ${hasRichPages})`);
 
-  if (cleaned.length >= expectedMin) {
-    // Text layer is sufficient — no OCR needed
-    const rawPages = cleaned.split(/\f/)
-      .map((t, i) => ({ pageNum: i + 1, text: t.trim() }))
-      .filter(p => p.text);
+  const shouldUseOCR = (
+    totalChars < MIN_TOTAL_CHARS ||
+    (!hasRichPages && avgCharsPerPage < 20 && pageCount > 1)
+  );
+
+  if (!shouldUseOCR) {
+    const rawPages = pageTexts
+      .map((t, i) => ({ pageNum: i + 1, text: t }))
+      .filter(p => p.text.length > 0);
     const finalPages = rawPages.length > 0 ? rawPages : [{ pageNum: 1, text: cleaned }];
     return {
       fullText:  finalPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join(''),
@@ -214,13 +225,33 @@ async function extractPDFTextWithOCR(pdfBuffer, userId, label = '[OCR]') {
     }
   }
 
+  const ocrPageTexts = pages.map(p => p.text);
+  const ocrPageLens = ocrPageTexts.map(t => t.length);
+  const ocrMinLen = Math.min(...ocrPageLens, 0);
+  const ocrAvgLen = pages.length > 0 ? ocrPageLens.reduce((a, b) => a + b, 0) / pages.length : 0;
+  const hasGoodOCRPages = ocrPageLens.some(len => len >= OCR_MIN_PER_PAGE);
+
   const combinedText = fullText.trim();
-  if (combinedText.length < 50) {
+
+  if (combinedText.length < 50 || (!hasGoodOCRPages && ocrAvgLen < 15)) {
+    if (rawText && rawText.trim().length > 50) {
+      console.log(`${label} OCR yielded poor results (${combinedText.length} chars, avg ${ocrAvgLen.toFixed(1)}/page), falling back to raw text layer`);
+      const rawPages = rawText.split(/\f/).map((t, i) => ({ pageNum: i + 1, text: t.trim() })).filter(p => p.text);
+      const finalPages = rawPages.length > 0 ? rawPages : [{ pageNum: 1, text: rawText }];
+      return {
+        fullText:  finalPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join(''),
+        pages:     finalPages,
+        pageCount: finalPages.length,
+        usedOCR:   false,
+      };
+    }
     throw new Error(
-      'Groq OCR could not extract text from this PDF. ' +
-      'The document may be blank, corrupted, or password-protected.'
+      'Could not extract meaningful text from this PDF. ' +
+      'The document may be blank, corrupted, password-protected, or scanned at very low resolution.'
     );
   }
+
+  console.log(`${label} OCR results: ${combinedText.length} chars, ${pages.length} pages (avg ${ocrAvgLen.toFixed(1)}/page, min ${ocrMinLen})`);
 
   console.log(`${label} Groq OCR complete: ${combinedText.length} total chars across ${numPages} pages`);
 
