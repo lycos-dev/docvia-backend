@@ -42,14 +42,12 @@ function nextGroqKey() {
 // ─── Groq vision call via native fetch (SDK-version-independent) ──────────────
 
 async function groqVisionRequest(base64Png) {
-  const lastError = null;
-
   for (let attempt = 0; attempt < GROQ_KEYS.length; attempt++) {
     const key = nextGroqKey();
 
     const body = JSON.stringify({
       model:       GROQ_VISION_MODEL,
-      max_tokens:  2048,
+      max_tokens:  4096,
       temperature: 0,
       messages: [
         {
@@ -61,19 +59,7 @@ async function groqVisionRequest(base64Png) {
             },
             {
               type: 'text',
-              text: `You are a professional OCR engine. Your ONLY job is to extract and transcribe ALL readable text from this document scan.
-
-STRICT RULES:
-- Extract EVERY word, number, and symbol you can reasonably identify
-- Maintain reading order - left to right, top to bottom
-- Preserve paragraph breaks and line breaks
-- If text is slightly fuzzy or has noise, make your best guess - prefer reasonable English words over garbled output
-- NEVER output meta-comments like "unreadable", "illegible", "blank", "no text", "cannot read", etc.
-- If the page is visually completely blank with no content, output: [BLANK PAGE]
-- Spell out abbreviations when confident (e.g., "University" not "unu")
-- Do NOT invent words or hallucinate text not present in the image
-- If unsure about a word, note it with parentheses: (unclear: partial word)
-- Do not add any explanation, description, or commentary - only raw extracted text`,
+              text: `Extract all readable text from this document image. Return the raw text only with no commentary. If you cannot read any text, respond with exactly: [NO_TEXT]`,
             },
           ],
         },
@@ -89,19 +75,20 @@ STRICT RULES:
       body,
     });
 
-    if (res.status === 429 || res.status === 401 || res.status === 403) {
-      // Key exhausted or invalid — try the next one
-      console.warn(`[OCR] Groq key attempt ${attempt + 1} failed (${res.status}) — cycling...`);
-      continue;
-    }
-
     if (!res.ok) {
       const errText = await res.text();
+      console.error(`[OCR] Groq response error: ${res.status}`, errText.slice(0, 500));
+      if (res.status === 429 || res.status === 401 || res.status === 403) {
+        console.warn(`[OCR] Groq key attempt ${attempt + 1} failed (${res.status}) — cycling...`);
+        continue;
+      }
       throw new Error(`Groq vision API error ${res.status}: ${errText}`);
     }
 
     const data = await res.json();
-    return (data.choices?.[0]?.message?.content || '').trim();
+    const content = (data.choices?.[0]?.message?.content || '').trim();
+    console.log(`[OCR] Groq raw response (${content.length} chars):`, content.slice(0, 200));
+    return content;
   }
 
   throw new Error('All Groq API keys are exhausted or rate-limited for vision OCR.');
@@ -117,6 +104,10 @@ async function renderPageToBase64(pdfDoc, pageNum, scale = 3.0) {
   const canvas   = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
   const context  = canvas.getContext('2d');
 
+  // Debug: fill with white to see if canvas is working
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
   // pdfjs-dist v4 requires an explicit NodeCanvasFactory in Node.js
   const canvasFactory = {
     create(w, h) {
@@ -129,7 +120,14 @@ async function renderPageToBase64(pdfDoc, pageNum, scale = 3.0) {
 
   await page.render({ canvasContext: context, viewport, canvasFactory }).promise;
 
-  return canvas.toBuffer('image/png').toString('base64');
+  const base64 = canvas.toBuffer('image/png').toString('base64');
+  
+  // Verify the base64 isn't empty or suspiciously small
+  if (base64.length < 1000) {
+    console.warn(`[OCR] Warning: Rendered PNG is very small (${base64.length} chars), page may be blank`);
+  }
+  
+  return base64;
 }
 
 // ─── Lazy-load pdfjs (ESM) — cached after first import ───────────────────────
@@ -174,29 +172,41 @@ async function extractPDFTextWithOCR(pdfBuffer, userId, label = '[OCR]') {
     rawText   = result.text    || '';
     pageCount = result.numpages || 1;
   } catch (e) {
-    console.warn(`${label} pdf-parse failed: ${e.message} — will attempt Groq vision OCR`);
+    console.warn(`${label} pdf-parse failed: ${e.message} — will attempt vision OCR`);
   }
 
+  // Parse extracted text into pages
   const cleaned = rawText.replace(/\s+/g, ' ').trim();
   const pageTexts = cleaned.split(/\f/).map(t => t.trim()).filter(Boolean);
   const pageLens = pageTexts.map(p => p.length);
   const totalChars = cleaned.length;
-  const avgCharsPerPage = pageCount > 0 ? totalChars / pageCount : 0;
-  const hasRichPages = pageLens.some(len => len >= MIN_CHARS_PER_PAGE);
-  const minPageLen = Math.min(...pageLens, 0);
 
-  console.log(`${label} pdf-parse: ${totalChars} chars, ${pageCount} pages (avg: ${avgCharsPerPage.toFixed(1)}/page, min: ${minPageLen}, has rich pages: ${hasRichPages})`);
+  // Check usability of text layer - be very lenient
+  const usablePages = pageLens.filter(len => len >= 30).length;
+  const avgChars = pageCount > 0 ? totalChars / pageCount : 0;
 
-  const shouldUseOCR = (
-    totalChars < MIN_TOTAL_CHARS ||
-    (!hasRichPages && avgCharsPerPage < 20 && pageCount > 1)
-  );
+  console.log(`${label} pdf-parse: ${totalChars} chars, ${pageCount} pages (avg: ${avgChars.toFixed(0)}/page, usable: ${usablePages}/${pageCount})`);
 
-  if (!shouldUseOCR) {
+  // HEURISTIC: If text layer looks like OCR metadata (contains phrases like "text extracted", 
+  // "unreadable", "## Step" or page markers), skip it and force vision OCR
+  const ocrMetadataPatterns = [
+    /text extracted from the image/i,
+    /## step \d+/i,
+    /## analyzing the image/i,
+    /the image is (completely )?blank/i,
+    /no visible text/i,
+  ];
+  const looksLikeOCRMeta = ocrMetadataPatterns.some(p => p.test(cleaned.slice(0, 500)));
+
+  // Use text layer only if: decent quality AND doesn't look like OCR metadata
+  const textLayerOK = (usablePages >= pageCount * 0.4 || avgChars >= 50) && totalChars >= 100 && !looksLikeOCRMeta;
+
+  if (textLayerOK) {
     const rawPages = pageTexts
       .map((t, i) => ({ pageNum: i + 1, text: t }))
       .filter(p => p.text.length > 0);
     const finalPages = rawPages.length > 0 ? rawPages : [{ pageNum: 1, text: cleaned }];
+    console.log(`${label} Using text layer (${totalChars} chars)`);
     return {
       fullText:  finalPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join(''),
       pages:     finalPages,
@@ -205,90 +215,77 @@ async function extractPDFTextWithOCR(pdfBuffer, userId, label = '[OCR]') {
     };
   }
 
-  // ── Step 2: Groq vision OCR per page ──────────────────────────────────────
-  console.log(`${label} Text too short — PDF is image-based. Running Groq vision OCR...`);
+  // ── Step 2: Vision OCR for PDFs with images containing text ───────────────────
+  console.log(`${label} Text layer weak (${totalChars} chars, ${usablePages}/${pageCount} usable) — running vision OCR...`);
 
   const pdfjs  = await getPdfjs();
   const pdfDoc = await pdfjs.getDocument({ data: new Uint8Array(pdfBuffer) }).promise;
-
   const numPages = pdfDoc.numPages;
+
   const pages    = [];
   let   fullText = '';
+
+  const ocrFailureMarkers = ['[OCR_UNCLEAR]', '[BLANK_PAGE]', '[NO_TEXT]'];
 
   for (let i = 1; i <= numPages; i++) {
     console.log(`${label} OCR page ${i}/${numPages}...`);
     try {
       const base64Png = await renderPageToBase64(pdfDoc, i);
-      const pageText  = await groqVisionRequest(base64Png);
+      console.log(`${label} Rendered PNG size: ${Math.round(base64Png.length * 3/4)} bytes approx (base64 length: ${base64Png.length})`);
+      let pageText  = await groqVisionRequest(base64Png);
+      
+      // Filter out OCR failure markers
+      const isFailureMarker = ocrFailureMarkers.includes(pageText);
+      if (isFailureMarker) {
+        pageText = '';
+      }
+      
       pages.push({ pageNum: i, text: pageText });
       fullText += `\n[PAGE ${i}]\n${pageText}`;
-      console.log(`${label} Page ${i}: ${pageText.length} chars extracted`);
+      console.log(`${label} Page ${i}: ${pageText.length} chars extracted${isFailureMarker ? ' (filtered)' : ''}`);
     } catch (err) {
       console.error(`${label} Page ${i} OCR failed: ${err.message}`);
       pages.push({ pageNum: i, text: '' });
     }
   }
 
-  const ocrPageTexts = pages.map(p => p.text);
-  const ocrPageLens = ocrPageTexts.map(t => t.length);
-  const ocrMinLen = Math.min(...ocrPageLens, 0);
-  const ocrAvgLen = pages.length > 0 ? ocrPageLens.reduce((a, b) => a + b, 0) / pages.length : 0;
-  const hasGoodOCRPages = ocrPageLens.some(len => len >= OCR_MIN_PER_PAGE);
-  const isMostlyBlankPages = ocrPageTexts.filter(t => /^\[BLANK PAGE\]|^\s*$/.test(t.trim())).length >= pages.length * 0.6;
+const ocrPageLens = pages.map(p => p.text).map(t => t.length);
+  const ocrTotal = ocrPageLens.reduce((a, b) => a + b, 0);
+  const ocrAvgLen = pages.length > 0 ? ocrTotal / pages.length : 0;
+  const bestPage = Math.max(...ocrPageLens, 0);
+  const goodPages = ocrPageLens.filter(len => len >= 100).length;
 
-  let combinedText = fullText.trim();
+  console.log(`${label} OCR done: ${ocrTotal} chars total, ${goodPages}/${pages.length} good pages, best page: ${bestPage} chars`);
 
-  if (isMostlyBlankPages && !rawText.trim()) {
-    throw new Error(
-      'This PDF appears to contain mostly blank or empty pages. ' +
-      'Please upload a PDF with readable content.'
-    );
+  // If ANY page has substantial content (like 100+ chars), use it - don't reject for blank pages!
+  if (bestPage >= 100 || goodPages >= 1) {
+    const finalPages = pages.map((p, i) => ({ pageNum: i + 1, text: p.text }));
+    console.log(`${label} Success: ${ocrTotal} chars from vision OCR`);
+    return {
+      fullText:  finalPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join(''),
+      pages:     finalPages,
+      pageCount: finalPages.length,
+      usedOCR:   true,
+    };
   }
 
-  if ((combinedText.length < 50 && !rawText.trim()) || (isMostlyBlankPages && ocrAvgLen < 20)) {
-    if (rawText && rawText.trim().length > 50) {
-      console.log(`${label} OCR yielded poor results (${combinedText.length} chars, avg ${ocrAvgLen.toFixed(1)}/page), falling back to raw text layer`);
-      const rawPages = rawText.split(/\f/).map((t, i) => ({ pageNum: i + 1, text: t.trim() })).filter(p => p.text);
-      const finalPages = rawPages.length > 0 ? rawPages : [{ pageNum: 1, text: rawText }];
-      return {
-        fullText:  finalPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join(''),
-        pages:     finalPages,
-        pageCount: finalPages.length,
-        usedOCR:   false,
-      };
-    }
-    console.log(`${label} Attempting Tesseract fallback OCR...`);
-    try {
-      const tesseractPages = await runTesseractOCR(pdfBuffer, numPages);
-      if (tesseractPages && tesseractPages.length > 0 && tesseractPages.some(p => p.text.length > 20)) {
-        console.log(`${label} Tesseract recovered ${tesseractPages.reduce((a, p) => a + p.text.length, 0)} chars`);
-        const tesseractFullText = tesseractPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join('');
-        return {
-          fullText:  tesseractFullText,
-          pages:     tesseractPages,
-          pageCount: tesseractPages.length,
-          usedOCR:   true,
-        };
-      }
-    } catch (tessErr) {
-      console.warn(`${label} Tesseract fallback failed: ${tessErr.message}`);
-    }
-    throw new Error(
-      'Could not extract meaningful text from this PDF. ' +
-      'The document may be blank, corrupted, password-protected, or scanned at very low resolution.'
-    );
+  // Very poor OCR results - fall back to text layer if available
+  if (rawText && rawText.trim().length > 50) {
+    console.log(`${label} Poor OCR (${bestPage} chars best), falling back to text layer`);
+    const rawPages = rawText.split(/\f/).map((t, i) => ({ pageNum: i + 1, text: t.trim() })).filter(p => p.text);
+    const finalPages = rawPages.length > 0 ? rawPages : [{ pageNum: 1, text: rawText }];
+    return {
+      fullText:  finalPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join(''),
+      pages:     finalPages,
+      pageCount: finalPages.length,
+      usedOCR:   false,
+    };
   }
 
-  console.log(`${label} OCR results: ${combinedText.length} chars, ${pages.length} pages (avg ${ocrAvgLen.toFixed(1)}/page, min ${ocrMinLen})`);
-
-  console.log(`${label} Groq OCR complete: ${combinedText.length} total chars across ${numPages} pages`);
-
-  return {
-    fullText:  fullText,
-    pages:     pages,
-    pageCount: numPages,
-    usedOCR:   true,
-  };
+throw new Error(
+    'Could not extract readable text from this PDF. ' +
+    'The document may be blank, corrupted, or password-protected.'
+  );
 }
 
 module.exports = { extractPDFTextWithOCR };

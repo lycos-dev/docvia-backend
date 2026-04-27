@@ -18,6 +18,21 @@ if (!process.env.JWT_SECRET) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ── Deadline cron job ──────────────────────────────────────────────
+const { checkDeadlinesAndApplyPenalties, checkReminders } = require('./controllers/deadline.controller');
+
+// Check deadlines every 15 minutes
+setInterval(async () => {
+  try {
+    await checkReminders();
+    await checkDeadlinesAndApplyPenalties();
+  } catch (err) {
+    console.error('[Cron] Deadline check error:', err.message);
+  }
+}, 15 * 60 * 1000); // 15 minutes
+
+console.log('✅ Deadline checker scheduled (every 15 minutes)');
+
 // Middleware
 app.use(cors()); // Enable CORS for all routes
 app.use(express.json()); // Parse JSON request bodies

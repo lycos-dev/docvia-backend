@@ -293,3 +293,93 @@ export async function checkForDuplicates(
     };
   }
 }
+
+// ─── DEADLINE SERVICE ──────────────────────────────────────────────
+
+export interface Deadline {
+  id: string;
+  pdfId: string;
+  deadline: string;
+  isOverdue: boolean;
+  isPenaltyApplied: boolean;
+  createdAt: string;
+}
+
+export interface SetDeadlineResult {
+  success: boolean;
+  data?: {
+    id: string;
+    pdfId: string;
+    deadline: string;
+    createdAt: string;
+  };
+  error?: string;
+  message?: string;
+}
+
+export async function setDeadline(
+  pdfId: string,
+  deadline: string,
+  token: string
+): Promise<SetDeadlineResult> {
+  const res = await fetch(`${BASE}/deadline`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ pdfId, deadline }),
+  });
+
+  return safeJson<SetDeadlineResult>(res, {
+    success: false,
+    error: 'Failed to set deadline',
+  });
+}
+
+export async function getDeadline(
+  pdfId: string,
+  token: string
+): Promise<{
+  success: boolean;
+  data?: Deadline;
+  error?: string;
+}> {
+  const res = await fetch(`${BASE}/deadline/${encodeURIComponent(pdfId)}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return safeJson(res, { success: false });
+}
+
+export async function getAllDeadlines(
+  token: string
+): Promise<{
+  success: boolean;
+  data?: Deadline[];
+  error?: string;
+}> {
+  const res = await fetch(`${BASE}/deadlines`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return safeJson(res, { success: false });
+}
+
+export async function deleteDeadline(
+  pdfId: string,
+  token: string
+): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch(`${BASE}/deadline/${encodeURIComponent(pdfId)}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return safeJson(res, { success: false });
+}

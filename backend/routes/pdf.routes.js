@@ -24,6 +24,12 @@ const {
   getProgressEndpoint,
   getAllProgressEndpoint,
 } = require('../controllers/progress.controller');
+const {
+  setDeadlineEndpoint,
+  getDeadlineEndpoint,
+  getAllDeadlinesEndpoint,
+  deleteDeadlineEndpoint,
+} = require('../controllers/deadline.controller');
 
 // ── Multer ────────────────────────────────────────────────────────────────────
 const storage    = multer.memoryStorage();
@@ -68,6 +74,12 @@ router.post('/microtask/evaluate', evaluateMicrotaskEndpoint);
 router.get('/progress',         getAllProgressEndpoint);
 router.post('/progress',        saveProgressEndpoint);
 router.get('/progress/:pdfId',  getProgressEndpoint);
+
+// ── DEADLINES ────────────────────────────────────────────────────────────────
+router.get('/deadlines',           getAllDeadlinesEndpoint);
+router.post('/deadline',           setDeadlineEndpoint);
+router.get('/deadline/:pdfId',   getDeadlineEndpoint);
+router.delete('/deadline/:pdfId', deleteDeadlineEndpoint);
 
 // ── RENAME (must come before wildcard DELETE) ─────────────────────────────────
 router.patch('/:filename/rename', renamePDF);
