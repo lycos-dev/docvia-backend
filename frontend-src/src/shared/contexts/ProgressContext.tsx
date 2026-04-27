@@ -1,8 +1,15 @@
 // src/shared/contexts/ProgressContext.tsx
 // DROP-IN REPLACEMENT — adds `deadline`, `dailyTarget`, `setDeadline`, `clearDeadline`
 // to DocumentProgress. All existing behaviour is preserved exactly.
+// FIX 2: deadline set/clear now syncs to the backend in real-time via the API.
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useAuth } from './AuthContext';
+import {
+  setDeadline as apiSetDeadline,
+  deleteDeadline as apiDeleteDeadline,
+  getAllDeadlines,
+} from '../services/pdfService';
 
 const STORAGE_KEY = 'docvia-progress';
 
@@ -169,19 +176,14 @@ function computeStreak(
   const hadStreak = prevStreak.currentStreak > 0 || prevStreak.longestStreak > 0;
   const gapExists = !yesterdayCompleted && !todayCompleted;
 
-  // A loss event is "already acknowledged" when the user dismissed the modal
-  // and streakLostAcknowledgedDate is set. We keep it dismissed as long as
-  // currentStreak is still 0 (i.e. the same loss event hasn't resolved yet).
   const alreadyAcknowledged =
     prevStreak.streakLostAcknowledgedDate !== null && currentStreak === 0;
 
   const streakJustLost =
     hadStreak && gapExists && currentStreak === 0 && !alreadyAcknowledged
       ? true
-      : prevStreak.streakJustLost && currentStreak === 0; // clear flag if new streak started
+      : prevStreak.streakJustLost && currentStreak === 0;
 
-  // Reset the acknowledged date once a new streak is underway so a future
-  // loss will show the modal again.
   const streakLostAcknowledgedDate =
     currentStreak > 0 ? null : prevStreak.streakLostAcknowledgedDate;
 
@@ -250,6 +252,10 @@ function saveStore(store: ProgressStore): void {
 
 export function ProgressProvider({ children }: { children: React.ReactNode }) {
   const [store, setStore] = useState<ProgressStore>(loadStore);
+  const { token } = useAuth();
+  // Keep a ref so callbacks can access the latest token without re-creating
+  const tokenRef = useRef(token);
+  useEffect(() => { tokenRef.current = token; }, [token]);
 
   useEffect(() => {
     setStore((prev) => {
@@ -259,6 +265,55 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+
+  // ── FIX 2: On login, fetch all deadlines from backend and merge into local store ──
+  useEffect(() => {
+    if (!token) return;
+
+    getAllDeadlines(token).then((result) => {
+      if (!result.success || !result.data) return;
+
+      setStore((prev) => {
+        let changed = false;
+        const docProgress = { ...prev.documentProgress };
+
+        for (const item of result.data!) {
+          const docId = item.pdfId;
+          // Extract YYYY-MM-DD from the ISO deadline string
+          const isoDate = item.deadline.slice(0, 10);
+          const existing = docProgress[docId];
+
+          // Only update if the backend deadline differs from what we have locally
+          if (existing?.deadline === isoDate) continue;
+
+          changed = true;
+          const completedCount = existing?.completedLessons.length ?? 0;
+          const totalLessons = existing?.totalLessons ?? 0;
+          const dailyTarget = computeDailyTarget(isoDate, completedCount, totalLessons);
+
+          docProgress[docId] = {
+            documentId: docId,
+            completedLessons: existing?.completedLessons ?? [],
+            currentLessonId: existing?.currentLessonId ?? null,
+            totalLessons,
+            percentage: existing?.percentage ?? 0,
+            startedAt: existing?.startedAt ?? new Date().toISOString(),
+            lastAccessedAt: existing?.lastAccessedAt ?? new Date().toISOString(),
+            streakDays: existing?.streakDays ?? 0,
+            deadline: isoDate,
+            dailyTarget,
+          };
+        }
+
+        if (!changed) return prev;
+        const next = { ...prev, documentProgress: docProgress };
+        saveStore(next);
+        return next;
+      });
+    }).catch(() => {
+      // Silently ignore — local state is used as fallback
+    });
+  }, [token]);
 
   // ── Existing actions (unchanged) ───────────────────────────────────────────
 
@@ -488,9 +543,10 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // ── NEW: deadline actions ──────────────────────────────────────────────────
+  // ── FIX 2: deadline actions — update local store AND sync to backend ────────
 
   const setDeadline = useCallback((documentId: string, isoDate: string) => {
+    // 1. Update local store immediately (optimistic)
     setStore((prev) => {
       const existing = prev.documentProgress[documentId];
       const completedCount = existing?.completedLessons.length ?? 0;
@@ -516,9 +572,20 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
       saveStore(next);
       return next;
     });
+
+    // 2. Persist to backend — fire-and-forget (errors are silent; local state is the source of truth)
+    const currentToken = tokenRef.current;
+    if (currentToken) {
+      // Backend expects a full ISO datetime string; send end-of-day UTC for the chosen date
+      const deadlineISO = `${isoDate}T23:59:59.000Z`;
+      apiSetDeadline(documentId, deadlineISO, currentToken).catch((err) => {
+        console.warn('[Deadline] Backend sync failed (set):', err);
+      });
+    }
   }, []);
 
   const clearDeadline = useCallback((documentId: string) => {
+    // 1. Update local store immediately (optimistic)
     setStore((prev) => {
       const existing = prev.documentProgress[documentId];
       if (!existing) return prev;
@@ -530,6 +597,14 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
       saveStore(next);
       return next;
     });
+
+    // 2. Delete from backend — fire-and-forget
+    const currentToken = tokenRef.current;
+    if (currentToken) {
+      apiDeleteDeadline(documentId, currentToken).catch((err) => {
+        console.warn('[Deadline] Backend sync failed (delete):', err);
+      });
+    }
   }, []);
 
   // ── Provider value ─────────────────────────────────────────────────────────
