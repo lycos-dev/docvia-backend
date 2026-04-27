@@ -1,5 +1,5 @@
 const { supabase } = require('../config/supabase');
-const { assignKeyToUser } = require('../services/groqkeymanager.service');
+const { assignKeyToUser } = require('../services/geminikeymanager.service');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 

@@ -1,55 +1,103 @@
 /**
- * GROQ SEGMENTATION CONTROLLER
+ * GEMINI SEGMENTATION CONTROLLER
  * AI-Powered Document Segmentation + Per-Segment Content Storage + Chat
- * Uses makeGroqCall() so every request automatically cycles through all
- * available API keys when one hits a 429 rate-limit.
+ * Uses makeGeminiCall() so every request automatically cycles through all
+ * available API keys when one hits a rate-limit.
  */
 
-const Groq = require('groq-sdk');
-const { supabase } = require('../config/supabase');
-const { makeGroqCall } = require('../services/groqkeymanager.service');
-const { extractPDFTextWithOCR } = require('../services/groq-ocr.service');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { supabase } = require("../config/supabase");
+const { makeGeminiCall, getUserKeyIndex } = require("../services/geminikeymanager.service");
+const { extractPDFTextWithOCR } = require("../services/gemini-ocr.service");
 
-function getGroq(apiKey) {
-  return new Groq({ apiKey });
+const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+
+function getGeminiModel(apiKey) {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  return genAI.getGenerativeModel({ model: GEMINI_MODEL });
+}
+
+// ─── Call Gemini and get response text ────────────────────────────────────────
+
+async function callGemini(key, prompt, maxTokens = 2048, temperature = 0.5) {
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const genAI = new GoogleGenerativeAI(key);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature,
+          responseMimeType: 'application/json',
+        },
+      });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
+      return result.response.text().trim();
+    } catch (err) {
+      const status = err?.status ?? 0;
+      if ((status === 503 || status === 429) && modelName !== GEMINI_MODELS[GEMINI_MODELS.length - 1]) {
+        console.warn(`[Segmentation] ⚠️  ${modelName} unavailable, trying next...`);
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // ─── PDF TEXT EXTRACTION ───────────────────────────────────────────────────────
 //
-// Delegates to groq-ocr.service which tries pdf-parse first, then falls back
-// to Groq vision OCR (free tier) for image-based / scanned PDFs.
+// Delegates to gemini-ocr.service which tries pdf-parse first, then falls back
+// to Gemini vision OCR for image-based / scanned PDFs.
 
 async function extractPDFText(pdfBuffer, userId) {
-  return extractPDFTextWithOCR(pdfBuffer, userId, '[Segmentation]');
+  return extractPDFTextWithOCR(pdfBuffer, userId, "[Segmentation]");
 }
 // ─── SLICE CONTENT BY PAGE RANGE ─────────────────────────────────────────────
 
 function sliceContentByPages(pages, startPage, endPage) {
   const start = Math.max(1, startPage);
-  const end   = Math.min(pages.length, endPage);
+  const end = Math.min(pages.length, endPage);
   return pages
-    .filter(p => p.pageNum >= start && p.pageNum <= end)
-    .map(p => p.text.trim())
+    .filter((p) => p.pageNum >= start && p.pageNum <= end)
+    .map((p) => p.text.trim())
     .filter(Boolean)
-    .join('\n\n');
+    .join("\n\n");
 }
 
-// ─── GROQ SEGMENTATION ────────────────────────────────────────────────────────
+// ─── GEMINI SEGMENTATION ───────────────────────────────────────────────────────
 
-async function segmentWithGroq(extractedText, pages, fileName, userId) {
-  const preview = extractedText.length > 12000
-    ? extractedText.substring(0, 12000) + '\n... (truncated)'
-    : extractedText;
+async function callGemini(key, prompt, maxTokens = 2048, temperature = 0.5) {
+  const genAI = new GoogleGenerativeAI(key);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    generationConfig: {
+      maxOutputTokens: maxTokens,
+      temperature,
+      responseMimeType: 'application/json',
+    },
+  });
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+  });
+  return result.response.text().trim();
+}
+
+async function segmentWithGemini(extractedText, pages, fileName, userId) {
+  const preview =
+    extractedText.length > 12000
+      ? extractedText.substring(0, 12000) + "\n... (truncated)"
+      : extractedText;
 
   const pageCount = pages.length;
-  console.log(`[Groq] Segmenting: ${fileName} (${pageCount} pages, ${preview.length} chars preview)`);
+  console.log(
+    `[Gemini] Segmenting: ${fileName} (${pageCount} pages, ${preview.length} chars preview)`,
+  );
 
-  const message = await makeGroqCall(userId, key =>
-    getGroq(key).chat.completions.create({
-      messages: [
-        {
-          role: 'user',
-          content: `You are an expert educational content analyst. Analyse this academic document and divide it into 4–8 logical learning segments. Each segment should cover a coherent topic from the document.
+  const resolvedIndex = await getUserKeyIndex(userId);
+
+  const prompt = `You are an expert educational content analyst. Analyse this academic document and divide it into 4–8 logical learning segments. Each segment should cover a coherent topic from the document.
 
 DOCUMENT NAME: "${fileName}"
 TOTAL PAGES: ${pageCount}
@@ -86,23 +134,11 @@ JSON FORMAT:
   ],
   "totalSegments": 4,
   "estimatedTotalTime": "45–60 minutes"
-}`,
-        },
-      ],
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 2048,
-      temperature: 0.5,
-      stream: false,
-    })
-  );
+}`;
 
-  const raw = message.choices[0].message.content
-    .replace(/```json\n?/g, '')
-    .replace(/```\n?/g, '')
-    .trim();
-
-  const segmentData = JSON.parse(raw);
-  console.log(`[Groq] Got ${segmentData.segments.length} segment boundaries`);
+  const raw = await makeGeminiCall(userId, key => callGemini(key, prompt, 2048, 0.5), resolvedIndex);
+  const segmentData = JSON.parse(raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+  console.log(`[Gemini] Got ${segmentData.segments.length} segment boundaries`);
   return segmentData;
 }
 
@@ -113,12 +149,12 @@ function attachContent(segmentData, pages) {
 
   segmentData.segments = segmentData.segments.map((seg, idx) => {
     let startPage = seg.startPage;
-    let endPage   = seg.endPage;
+    let endPage = seg.endPage;
 
     if (!startPage || !endPage) {
       const perSegment = Math.ceil(pageCount / segmentData.segments.length);
       startPage = idx * perSegment + 1;
-      endPage   = Math.min((idx + 1) * perSegment, pageCount);
+      endPage = Math.min((idx + 1) * perSegment, pageCount);
     }
 
     const content = sliceContentByPages(pages, startPage, endPage);
@@ -127,7 +163,9 @@ function attachContent(segmentData, pages) {
       ...seg,
       startPage,
       endPage,
-      content: content || `Content for pages ${startPage}–${endPage} could not be extracted.`,
+      content:
+        content ||
+        `Content for pages ${startPage}–${endPage} could not be extracted.`,
     };
   });
 
@@ -137,33 +175,72 @@ function attachContent(segmentData, pages) {
 // ─── FALLBACK SEGMENTATION ────────────────────────────────────────────────────
 
 function fallbackSegmentation(fileName, pages) {
-  console.log('[Fallback] Using fallback segmentation');
+  console.log("[Fallback] Using fallback segmentation");
   const pageCount = pages ? pages.length : 1;
-  const perSeg    = Math.ceil(pageCount / 4);
+  const perSeg = Math.ceil(pageCount / 4);
 
-  const makeSegment = (id, title, description, difficulty, startPage, endPage) => ({
-    id, title, description,
-    keyPoints:          ['Key information', 'Important concepts', 'Examples'],
-    learningObjectives: ['Understand the content in this section'],
+  const makeSegment = (
+    id,
+    title,
+    description,
     difficulty,
-    estimatedTime:      '10–15 minutes',
     startPage,
     endPage,
-    content: pages ? sliceContentByPages(pages, startPage, endPage) : 'Content unavailable.',
+  ) => ({
+    id,
+    title,
+    description,
+    keyPoints: ["Key information", "Important concepts", "Examples"],
+    learningObjectives: ["Understand the content in this section"],
+    difficulty,
+    estimatedTime: "10–15 minutes",
+    startPage,
+    endPage,
+    content: pages
+      ? sliceContentByPages(pages, startPage, endPage)
+      : "Content unavailable.",
   });
 
   return {
-    title:              fileName.replace(/\.pdf$/i, ''),
-    overview:           'Document divided into sections for guided learning.',
+    title: fileName.replace(/\.pdf$/i, ""),
+    overview: "Document divided into sections for guided learning.",
     segments: [
-      makeSegment(1, 'Introduction & Overview',  'Get familiar with the document structure and main topics.', 'beginner',     1,              perSeg),
-      makeSegment(2, 'Core Concepts',            'Learn the main information and foundational concepts.',      'intermediate', perSeg + 1,     perSeg * 2),
-      makeSegment(3, 'Advanced Topics',          'Explore deeper topics and complex ideas.',                   'advanced',     perSeg * 2 + 1, perSeg * 3),
-      makeSegment(4, 'Summary & Review',         'Consolidate and review what you have learned.',              'intermediate', perSeg * 3 + 1, pageCount),
+      makeSegment(
+        1,
+        "Introduction & Overview",
+        "Get familiar with the document structure and main topics.",
+        "beginner",
+        1,
+        perSeg,
+      ),
+      makeSegment(
+        2,
+        "Core Concepts",
+        "Learn the main information and foundational concepts.",
+        "intermediate",
+        perSeg + 1,
+        perSeg * 2,
+      ),
+      makeSegment(
+        3,
+        "Advanced Topics",
+        "Explore deeper topics and complex ideas.",
+        "advanced",
+        perSeg * 2 + 1,
+        perSeg * 3,
+      ),
+      makeSegment(
+        4,
+        "Summary & Review",
+        "Consolidate and review what you have learned.",
+        "intermediate",
+        perSeg * 3 + 1,
+        pageCount,
+      ),
     ],
-    totalSegments:      4,
-    estimatedTotalTime: '50–80 minutes',
-    isUsingFallback:    true,
+    totalSegments: 4,
+    estimatedTotalTime: "50–80 minutes",
+    isUsingFallback: true,
   };
 }
 
@@ -173,39 +250,41 @@ async function saveSegmentsToDB(pdfId, userId, segmentData) {
   console.log(`[Database] Saving segments for ${pdfId}`);
 
   const { data, error } = await supabase
-    .from('document_segments')
-    .insert([{
-      pdf_id:               pdfId,
-      user_id:              userId,
-      title:                segmentData.title,
-      overview:             segmentData.overview,
-      segments_json:        JSON.stringify(segmentData.segments),
-      total_segments:       segmentData.totalSegments,
-      estimated_total_time: segmentData.estimatedTotalTime,
-      segmentation_method:  segmentData.isUsingFallback ? 'fallback' : 'groq',
-      created_at:           new Date().toISOString(),
-      updated_at:           new Date().toISOString(),
-    }])
+    .from("document_segments")
+    .insert([
+      {
+        pdf_id: pdfId,
+        user_id: userId,
+        title: segmentData.title,
+        overview: segmentData.overview,
+        segments_json: JSON.stringify(segmentData.segments),
+        total_segments: segmentData.totalSegments,
+        estimated_total_time: segmentData.estimatedTotalTime,
+        segmentation_method: segmentData.isUsingFallback ? "fallback" : "groq",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ])
     .select();
 
   if (error) throw new Error(`Database save failed: ${error.message}`);
-  console.log('[Database] Segments saved successfully');
+  console.log("[Database] Segments saved successfully");
   return data[0];
 }
 
 async function getExistingSegments(pdfId, userId) {
   try {
     const { data, error } = await supabase
-      .from('document_segments')
-      .select('*')
-      .eq('pdf_id', pdfId)
-      .eq('user_id', userId)
+      .from("document_segments")
+      .select("*")
+      .eq("pdf_id", pdfId)
+      .eq("user_id", userId)
       .single();
 
-    if (error && error.code !== 'PGRST116') throw error;
+    if (error && error.code !== "PGRST116") throw error;
     return data || null;
   } catch (error) {
-    console.warn('[Cache] Error fetching segments:', error.message);
+    console.warn("[Cache] Error fetching segments:", error.message);
     return null;
   }
 }
@@ -217,62 +296,83 @@ async function segmentPDFEndpoint(req, res) {
     const { pdfId, userId } = req.body;
 
     if (!pdfId || !userId) {
-      return res.status(400).json({ success: false, error: 'Missing required fields', required: ['pdfId', 'userId'] });
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+        required: ["pdfId", "userId"],
+      });
     }
 
     console.log(`\n[Segmentation] Starting for ${pdfId}`);
 
     const existing = await getExistingSegments(pdfId, userId);
     if (existing) {
-      console.log('[Cache] Returning cached segmentation');
+      console.log("[Cache] Returning cached segmentation");
       return res.status(200).json({
         success: true,
-        message: 'Using cached segmentation (instant)',
-        cached:  true,
+        message: "Using cached segmentation (instant)",
+        cached: true,
         data: {
-          id:            existing.id,
-          title:         existing.title,
-          overview:      existing.overview,
-          segments:      JSON.parse(existing.segments_json),
+          id: existing.id,
+          title: existing.title,
+          overview: existing.overview,
+          segments: JSON.parse(existing.segments_json),
           totalSegments: existing.total_segments,
           estimatedTime: existing.estimated_total_time,
-          method:        existing.segmentation_method,
-          createdAt:     existing.created_at,
+          method: existing.segmentation_method,
+          createdAt: existing.created_at,
         },
       });
     }
 
     // Download PDF from Supabase Storage
-    console.log('[Storage] Downloading PDF...');
-    const { data: pdfData, error: downloadError } = await supabase
-      .storage
-      .from('academic-pdfs')
+    console.log("[Storage] Downloading PDF...");
+    const { data: pdfData, error: downloadError } = await supabase.storage
+      .from("academic-pdfs")
       .download(`pdfs/${userId}/${pdfId}`);
 
     if (downloadError) {
-      return res.status(500).json({ success: false, error: 'Failed to download PDF', details: downloadError.message });
+      return res.status(500).json({
+        success: false,
+        error: "Failed to download PDF",
+        details: downloadError.message,
+      });
     }
 
     // Extract text
-    console.log('[PDF] Extracting text...');
+    console.log("[PDF] Extracting text...");
     let extraction;
     try {
-      extraction = await extractPDFText(Buffer.from(await pdfData.arrayBuffer()), userId);
-      console.log(`[PDF] ${extraction.pageCount} pages, ${extraction.fullText.length} chars${extraction.usedOCR ? ' (via Groq OCR)' : ''}`);
+      extraction = await extractPDFText(
+        Buffer.from(await pdfData.arrayBuffer()),
+        userId,
+      );
+      console.log(
+        `[PDF] ${extraction.pageCount} pages, ${extraction.fullText.length} chars${extraction.usedOCR ? " (via Groq OCR)" : ""}`,
+      );
     } catch (extractError) {
-      console.warn('[PDF] Extraction failed, using fallback');
+      console.warn("[PDF] Extraction failed, using fallback");
       const fallback = fallbackSegmentation(pdfId, null);
-      const saved    = await saveSegmentsToDB(pdfId, userId, fallback);
-      return res.status(200).json({ success: true, message: 'Segmented with fallback (text extraction failed)', data: { ...fallback, id: saved.id } });
+      const saved = await saveSegmentsToDB(pdfId, userId, fallback);
+      return res.status(200).json({
+        success: true,
+        message: "Segmented with fallback (text extraction failed)",
+        data: { ...fallback, id: saved.id },
+      });
     }
 
-    // Ask Groq for segment boundaries — makeGroqCall handles key cycling on 429
-    console.log('[AI] Requesting segment boundaries from Groq...');
+    // Ask Gemini for segment boundaries — makeGeminiCall handles key cycling
+    console.log("[AI] Requesting segment boundaries from Gemini...");
     let segmentData;
     try {
-      segmentData = await segmentWithGroq(extraction.fullText, extraction.pages, pdfId, userId);
-    } catch (groqError) {
-      console.warn('[AI] Groq failed, using fallback:', groqError.message);
+      segmentData = await segmentWithGemini(
+        extraction.fullText,
+        extraction.pages,
+        pdfId,
+        userId,
+      );
+    } catch (geminiError) {
+      console.warn("[AI] Gemini failed, using fallback:", geminiError.message);
       segmentData = fallbackSegmentation(pdfId, extraction.pages);
     }
 
@@ -280,29 +380,32 @@ async function segmentPDFEndpoint(req, res) {
       segmentData = attachContent(segmentData, extraction.pages);
     }
 
-    console.log('[Database] Saving...');
+    console.log("[Database] Saving...");
     const saved = await saveSegmentsToDB(pdfId, userId, segmentData);
 
-    console.log('[Success] Segmentation complete\n');
+    console.log("[Success] Segmentation complete\n");
     res.status(200).json({
       success: true,
-      message: 'Document segmented successfully',
-      cached:  false,
+      message: "Document segmented successfully",
+      cached: false,
       data: {
-        id:            saved.id,
-        title:         segmentData.title,
-        overview:      segmentData.overview,
-        segments:      segmentData.segments,
+        id: saved.id,
+        title: segmentData.title,
+        overview: segmentData.overview,
+        segments: segmentData.segments,
         totalSegments: segmentData.totalSegments,
         estimatedTime: segmentData.estimatedTotalTime,
-        method:        segmentData.isUsingFallback ? 'fallback' : 'groq',
-        createdAt:     saved.created_at,
+        method: segmentData.isUsingFallback ? "fallback" : "gemini",
+        createdAt: saved.created_at,
       },
     });
-
   } catch (error) {
-    console.error('[Error] Segmentation:', error.message);
-    res.status(500).json({ success: false, error: 'Segmentation failed', message: error.message });
+    console.error("[Error] Segmentation:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Segmentation failed",
+      message: error.message,
+    });
   }
 }
 
@@ -311,32 +414,41 @@ async function segmentPDFEndpoint(req, res) {
 async function getSegmentsEndpoint(req, res) {
   try {
     const { pdfId } = req.params;
-    const userId    = req.user?.id;
+    const userId = req.user?.id;
 
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    if (!userId)
+      return res.status(401).json({ success: false, error: "Unauthorized" });
 
     const existing = await getExistingSegments(pdfId, userId);
     if (!existing) {
-      return res.status(404).json({ success: false, error: 'Segmentation not found', message: 'This PDF has not been segmented yet' });
+      return res.status(404).json({
+        success: false,
+        error: "Segmentation not found",
+        message: "This PDF has not been segmented yet",
+      });
     }
 
     res.status(200).json({
       success: true,
       data: {
-        id:            existing.id,
-        pdfId:         existing.pdf_id,
-        title:         existing.title,
-        overview:      existing.overview,
-        segments:      JSON.parse(existing.segments_json),
+        id: existing.id,
+        pdfId: existing.pdf_id,
+        title: existing.title,
+        overview: existing.overview,
+        segments: JSON.parse(existing.segments_json),
         totalSegments: existing.total_segments,
         estimatedTime: existing.estimated_total_time,
-        method:        existing.segmentation_method,
-        createdAt:     existing.created_at,
-        updatedAt:     existing.updated_at,
+        method: existing.segmentation_method,
+        createdAt: existing.created_at,
+        updatedAt: existing.updated_at,
       },
     });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to retrieve segments', message: error.message });
+    res.status(500).json({
+      success: false,
+      error: "Failed to retrieve segments",
+      message: error.message,
+    });
   }
 }
 
@@ -345,20 +457,27 @@ async function getSegmentsEndpoint(req, res) {
 async function deleteSegmentsEndpoint(req, res) {
   try {
     const { pdfId } = req.params;
-    const userId    = req.user?.id;
+    const userId = req.user?.id;
 
-    if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
+    if (!userId)
+      return res.status(401).json({ success: false, error: "Unauthorized" });
 
     const { error } = await supabase
-      .from('document_segments')
+      .from("document_segments")
       .delete()
-      .eq('pdf_id', pdfId)
-      .eq('user_id', userId);
+      .eq("pdf_id", pdfId)
+      .eq("user_id", userId);
 
-    if (error && error.code !== 'PGRST116') throw error;
-    res.status(200).json({ success: true, message: 'Segmentation deleted successfully' });
+    if (error && error.code !== "PGRST116") throw error;
+    res
+      .status(200)
+      .json({ success: true, message: "Segmentation deleted successfully" });
   } catch (error) {
-    res.status(500).json({ success: false, error: 'Failed to delete segments', message: error.message });
+    res.status(500).json({
+      success: false,
+      error: "Failed to delete segments",
+      message: error.message,
+    });
   }
 }
 
@@ -366,46 +485,46 @@ async function deleteSegmentsEndpoint(req, res) {
 
 async function chatWithSegmentEndpoint(req, res) {
   try {
-    const { question, segmentTitle, segmentContent, documentTitle, userId } = req.body;
+    const { question, segmentTitle, segmentContent, documentTitle, userId } =
+      req.body;
 
     if (!question || !segmentTitle) {
-      return res.status(400).json({ success: false, error: 'Missing required fields', required: ['question', 'segmentTitle'] });
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+        required: ["question", "segmentTitle"],
+      });
     }
 
     console.log(`[Chat] "${segmentTitle}": ${question.substring(0, 80)}`);
 
-    const message = await makeGroqCall(userId, key =>
-      getGroq(key).chat.completions.create({
-        messages: [
-          {
-            role:    'system',
-            content: `You are a friendly AI tutor helping a student study "${documentTitle || 'this document'}".
+    const resolvedIndex = await getUserKeyIndex(userId);
+    const prompt = `You are a friendly AI tutor helping a student study "${documentTitle || "this document"}".
 
 The student is currently on the segment: "${segmentTitle}"
 
 SEGMENT CONTENT (the actual text the student is reading):
-${segmentContent ? segmentContent.substring(0, 4000) : 'No content available.'}
+${segmentContent ? segmentContent.substring(0, 4000) : "No content available."}
 
 Your role:
 - Answer questions clearly and concisely based on the segment content above
 - If asked for examples, draw them from the actual text when possible
 - If asked to quiz the student, generate 2–3 questions based on the content
 - Keep answers under 300 words unless more detail is genuinely needed
-- Be encouraging and supportive`,
-          },
-          { role: 'user', content: question },
-        ],
-        model:       'llama-3.3-70b-versatile',
-        max_tokens:  600,
-        temperature: 0.7,
-        stream:      false,
-      })
+- Be encouraging and supportive
+
+Question: ${question}`;
+
+    const answer = await makeGeminiCall(
+      userId,
+      key => callGemini(key, prompt, 600, 0.7),
+      resolvedIndex
     );
 
-    res.status(200).json({ success: true, answer: message.choices[0].message.content });
+    res.status(200).json({ success: true, answer });
   } catch (error) {
-    console.error('[Chat] Error:', error.message);
-    res.status(500).json({ success: false, error: 'Chat failed', message: error.message });
+    console.error("[Chat] Error:", error.message);
+    res.status(500).json({ success: false, error: "Chat failed", message: error.message });
   }
 }
 
@@ -414,36 +533,48 @@ Your role:
 async function generateMicrotaskEndpoint(req, res) {
   try {
     const {
-      segmentTitle, segmentContent, documentTitle,
-      taskType = 'auto', count = 1, previousQuestions = [], userId,
+      segmentTitle,
+      segmentContent,
+      documentTitle,
+      taskType = "auto",
+      count = 1,
+      previousQuestions = [],
+      userId,
     } = req.body;
 
     if (!segmentTitle || !segmentContent) {
-      return res.status(400).json({ success: false, error: 'Missing required fields', required: ['segmentTitle', 'segmentContent'] });
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+        required: ["segmentTitle", "segmentContent"],
+      });
     }
 
     const safeCount = Math.min(Math.max(parseInt(count) || 1, 1), 10);
-    console.log(`[Microtask] Generating ${safeCount} task(s) for "${segmentTitle}" (type: ${taskType})`);
+    console.log(
+      `[Microtask] Generating ${safeCount} task(s) for "${segmentTitle}" (type: ${taskType})`,
+    );
 
-    const content  = segmentContent.substring(0, 4000);
+    const content = segmentContent.substring(0, 4000);
     const allAsked = Array.isArray(previousQuestions) ? previousQuestions : [];
     const avoidStr = allAsked.length
-      ? `\nSTRICTLY FORBIDDEN — do NOT ask any of these questions again (not even a rephrased version):\n${allAsked.map((q, i) => `${i + 1}. ${q}`).join('\n')}`
-      : '';
+      ? `\nSTRICTLY FORBIDDEN — do NOT ask any of these questions again (not even a rephrased version):\n${allAsked.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+      : "";
 
     const angles = [
-      'cause and effect','compare and contrast','definition and application',
-      'chronology or sequence','significance or impact','critical analysis',
-      'real-world connection','misconception correction',
+      "cause and effect",
+      "compare and contrast",
+      "definition and application",
+      "chronology or sequence",
+      "significance or impact",
+      "critical analysis",
+      "real-world connection",
+      "misconception correction",
     ];
-    const angle = angles[Math.floor(Math.random() * angles.length)];
+const angle = angles[Math.floor(Math.random() * angles.length)];
+    const resolvedIndex = await getUserKeyIndex(userId);
 
-    const message = await makeGroqCall(userId, key =>
-      getGroq(key).chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: `You are an expert educational assessment designer creating quiz questions for a student studying "${documentTitle || 'a document'}".
+    const prompt = `You are an expert educational assessment designer creating quiz questions for a student studying "${documentTitle || "a document"}".
 
 RULES:
 - Base every question entirely on the provided content.
@@ -465,27 +596,26 @@ For multiple_choice or true_false:
 For identification:
 [{"type":"identification","question":"...","modelAnswer":"Key term or phrase.","keyTerms":["term"],"hint":"Nudge."}]
 For essay:
-[{"type":"essay","question":"...","modelAnswer":"3-4 sentence ideal response.","keyTerms":["term1","term2"],"hint":"Nudge."}]`,
-          },
-          {
-            role: 'user',
-            content: `Segment: "${segmentTitle}"\nTask type: ${taskType}\nCount: ${safeCount}\n\nContent:\n${content}`,
-          },
-        ],
-        model:       'llama-3.3-70b-versatile',
-        max_tokens:  safeCount * 450,
-        temperature: 0.92,
-        stream:      false,
-      })
+[{"type":"essay","question":"...","modelAnswer":"3-4 sentence ideal response.","keyTerms":["term1","term2"],"hint":"Nudge."}]
+
+Segment: "${segmentTitle}"
+Task type: ${taskType}
+Count: ${safeCount}
+
+Content:
+${content}`;
+
+    const raw = await makeGeminiCall(
+      userId,
+      key => callGemini(key, prompt, safeCount * 450, 0.92),
+      resolvedIndex
     );
+    const tasks = JSON.parse(raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+    let arr = Array.isArray(tasks) ? tasks : [tasks];
 
-    const raw   = message.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-    const tasks = JSON.parse(raw);
-    let arr     = Array.isArray(tasks) ? tasks : [tasks];
-
-    const seenQuestions = new Set(allAsked.map(q => q.toLowerCase().trim()));
-    arr = arr.filter(t => {
-      const key = (t.question || '').toLowerCase().trim();
+    const seenQuestions = new Set(allAsked.map((q) => q.toLowerCase().trim()));
+    arr = arr.filter((t) => {
+      const key = (t.question || "").toLowerCase().trim();
       if (!key || seenQuestions.has(key)) return false;
       seenQuestions.add(key);
       return true;
@@ -493,10 +623,13 @@ For essay:
 
     console.log(`[Microtask] Generated ${arr.length} unique task(s)`);
     res.status(200).json({ success: true, tasks: arr });
-
   } catch (error) {
-    console.error('[Microtask] Generate error:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to generate task', message: error.message });
+    console.error("[Microtask] Generate error:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate task",
+      message: error.message,
+    });
   }
 }
 
@@ -507,55 +640,51 @@ async function evaluateMicrotaskEndpoint(req, res) {
     const { task, userAnswer, segmentTitle, segmentContent, userId } = req.body;
 
     if (!task || userAnswer === undefined || userAnswer === null) {
-      return res.status(400).json({ success: false, error: 'Missing required fields', required: ['task', 'userAnswer'] });
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+        required: ["task", "userAnswer"],
+      });
     }
 
-    console.log(`[Microtask] Evaluating ${task.type} answer for "${segmentTitle}"`);
+    console.log(
+      `[Microtask] Evaluating ${task.type} answer for "${segmentTitle}"`,
+    );
 
     // Multiple choice & True/False: evaluate locally, then use AI to explain why
-    if (task.type === 'multiple_choice' || task.type === 'true_false') {
+    if (task.type === "multiple_choice" || task.type === "true_false") {
       const correct = Number(userAnswer) === Number(task.correctIndex);
       const correctOptionText = task.options[task.correctIndex];
-      const chosenOptionText  = task.options[Number(userAnswer)];
-      const content = (segmentContent || '').substring(0, 1500);
+      const chosenOptionText = task.options[Number(userAnswer)];
+      const content = (segmentContent || "").substring(0, 1500);
 
-      let explanation = task.explanation || '';
+      let explanation = task.explanation || "";
       try {
-        const explainMsg = await makeGroqCall(userId, key =>
-          getGroq(key).chat.completions.create({
-            messages: [
-              {
-                role: 'system',
-                content: `You are a concise, encouraging teacher. Always explain WHY the correct answer is right in 2-3 sentences, grounded in the lesson content.`,
-              },
-              {
-                role: 'user',
-                content: `Question: ${task.question}
+        const resolvedIndex = await getUserKeyIndex(userId);
+        const explainPrompt = `You are a concise, encouraging teacher. Always explain WHY the correct answer is right in 2-3 sentences, grounded in the lesson content.
+
+Question: ${task.question}
 Correct answer: ${correctOptionText}
-${!correct ? `Student chose: ${chosenOptionText}` : ''}
+${!correct ? `Student chose: ${chosenOptionText}` : ""}
 Lesson context: ${content}
 
-Briefly explain why "${correctOptionText}" is the correct answer.`,
-              },
-            ],
-            model:       'llama-3.3-70b-versatile',
-            max_tokens:  150,
-            temperature: 0.4,
-            stream:      false,
-          })
+Briefly explain why "${correctOptionText}" is the correct answer.`;
+
+        explanation = await makeGeminiCall(
+          userId,
+          key => callGemini(key, explainPrompt, 150, 0.4),
+          resolvedIndex
         );
-        explanation = explainMsg.choices[0].message.content.trim();
       } catch (e) {
-        // fallback to static explanation if AI call fails
-        explanation = task.explanation || '';
+        explanation = task.explanation || "";
       }
 
       return res.status(200).json({
-        success:     true,
+        success: true,
         correct,
-        isCorrect:   correct,
-        score:       correct ? 100 : 0,
-        feedback:    correct
+        isCorrect: correct,
+        score: correct ? 100 : 0,
+        feedback: correct
           ? `✅ Correct! ${explanation}`
           : `❌ Not quite. The correct answer was: ${correctOptionText}. ${explanation}`,
         correctAnswer: correctOptionText,
@@ -563,14 +692,10 @@ Briefly explain why "${correctOptionText}" is the correct answer.`,
       });
     }
 
-    const content = (segmentContent || '').substring(0, 2000);
+    const content = (segmentContent || "").substring(0, 2000);
+    const resolvedIndex = await getUserKeyIndex(userId);
 
-    const message = await makeGroqCall(userId, key =>
-      getGroq(key).chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: `You are a fair and encouraging teacher evaluating a student's short-answer response.
+    const evalPrompt = `You are a fair and encouraging teacher evaluating a student's short-answer response.
 
 Evaluate based on:
 1. Whether the core concept is correct (most important)
@@ -586,45 +711,42 @@ Return ONLY valid JSON:
   "feedback": "Your 2-3 sentence feedback that explains WHY the correct answer is correct, and what the student got right or wrong",
   "highlight": "The strongest part of their answer (1 phrase)",
   "improve": "One specific thing they could add or correct (1 sentence, or null if score >= 85)"
-}`,
-          },
-          {
-            role: 'user',
-            content: `Segment: "${segmentTitle}"
+}
+
+Segment: "${segmentTitle}"
 Question: ${task.question}
 Model answer: ${task.modelAnswer}
-Key terms expected: ${(task.keyTerms || []).join(', ')}
+Key terms expected: ${(task.keyTerms || []).join(", ")}
 Student's answer: "${userAnswer}"
 
 Reference content:
-${content}`,
-          },
-        ],
-        model:       'llama-3.3-70b-versatile',
-        max_tokens:  300,
-        temperature: 0.4,
-        stream:      false,
-      })
-    );
+${content}`;
 
-    const raw    = message.choices[0].message.content.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-    const result = JSON.parse(raw);
+    const raw = await makeGeminiCall(
+      userId,
+      key => callGemini(key, evalPrompt, 300, 0.4),
+      resolvedIndex
+    );
+    const result = JSON.parse(raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
 
     console.log(`[Microtask] Score: ${result.score}`);
 
     res.status(200).json({
-      success:     true,
-      correct:     result.correct,
-      score:       result.score,
-      feedback:    result.feedback,
-      highlight:   result.highlight || null,
-      improve:     result.improve   || null,
-      explanation: task.modelAnswer || '',
+      success: true,
+      correct: result.correct,
+      score: result.score,
+      feedback: result.feedback,
+      highlight: result.highlight || null,
+      improve: result.improve || null,
+      explanation: task.modelAnswer || "",
     });
-
   } catch (error) {
-    console.error('[Microtask] Evaluate error:', error.message);
-    res.status(500).json({ success: false, error: 'Failed to evaluate answer', message: error.message });
+    console.error("[Microtask] Evaluate error:", error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to evaluate answer",
+      message: error.message,
+    });
   }
 }
 
@@ -636,7 +758,7 @@ module.exports = {
   generateMicrotaskEndpoint,
   evaluateMicrotaskEndpoint,
   extractPDFText,
-  segmentWithGroq,
+  segmentWithGemini,
   attachContent,
   sliceContentByPages,
   saveSegmentsToDB,
