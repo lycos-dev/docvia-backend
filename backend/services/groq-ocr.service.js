@@ -61,15 +61,19 @@ async function groqVisionRequest(base64Png) {
             },
             {
               type: 'text',
-              text: `You are a text extraction tool. Your ONLY job is to output the exact text you see in the image.
+              text: `You are a professional OCR engine. Your ONLY job is to extract and transcribe ALL readable text from this document scan.
 
 STRICT RULES:
-- Output ONLY the literal text characters visible in the image, word for word.
-- Preserve reading order and paragraph breaks.
-- If a section is hard to read, do your best to transcribe it — never describe difficulty.
-- NEVER output phrases like: "undecipherable", "illegible", "blurry", "absence of text", "no text", "cannot read", "image shows", "the page contains", "this page", or any sentence describing the image.
-- If the page is truly blank, output only: [BLANK PAGE]
-- Do not add headings, labels, explanations, or any words that are not in the original image.`,
+- Extract EVERY word, number, and symbol you can reasonably identify
+- Maintain reading order - left to right, top to bottom
+- Preserve paragraph breaks and line breaks
+- If text is slightly fuzzy or has noise, make your best guess - prefer reasonable English words over garbled output
+- NEVER output meta-comments like "unreadable", "illegible", "blank", "no text", "cannot read", etc.
+- If the page is visually completely blank with no content, output: [BLANK PAGE]
+- Spell out abbreviations when confident (e.g., "University" not "unu")
+- Do NOT invent words or hallucinate text not present in the image
+- If unsure about a word, note it with parentheses: (unclear: partial word)
+- Do not add any explanation, description, or commentary - only raw extracted text`,
             },
           ],
         },
@@ -230,10 +234,18 @@ async function extractPDFTextWithOCR(pdfBuffer, userId, label = '[OCR]') {
   const ocrMinLen = Math.min(...ocrPageLens, 0);
   const ocrAvgLen = pages.length > 0 ? ocrPageLens.reduce((a, b) => a + b, 0) / pages.length : 0;
   const hasGoodOCRPages = ocrPageLens.some(len => len >= OCR_MIN_PER_PAGE);
+  const isMostlyBlankPages = ocrPageTexts.filter(t => /^\[BLANK PAGE\]|^\s*$/.test(t.trim())).length >= pages.length * 0.6;
 
-  const combinedText = fullText.trim();
+  let combinedText = fullText.trim();
 
-  if (combinedText.length < 50 || (!hasGoodOCRPages && ocrAvgLen < 15)) {
+  if (isMostlyBlankPages && !rawText.trim()) {
+    throw new Error(
+      'This PDF appears to contain mostly blank or empty pages. ' +
+      'Please upload a PDF with readable content.'
+    );
+  }
+
+  if ((combinedText.length < 50 && !rawText.trim()) || (isMostlyBlankPages && ocrAvgLen < 20)) {
     if (rawText && rawText.trim().length > 50) {
       console.log(`${label} OCR yielded poor results (${combinedText.length} chars, avg ${ocrAvgLen.toFixed(1)}/page), falling back to raw text layer`);
       const rawPages = rawText.split(/\f/).map((t, i) => ({ pageNum: i + 1, text: t.trim() })).filter(p => p.text);
@@ -244,6 +256,22 @@ async function extractPDFTextWithOCR(pdfBuffer, userId, label = '[OCR]') {
         pageCount: finalPages.length,
         usedOCR:   false,
       };
+    }
+    console.log(`${label} Attempting Tesseract fallback OCR...`);
+    try {
+      const tesseractPages = await runTesseractOCR(pdfBuffer, numPages);
+      if (tesseractPages && tesseractPages.length > 0 && tesseractPages.some(p => p.text.length > 20)) {
+        console.log(`${label} Tesseract recovered ${tesseractPages.reduce((a, p) => a + p.text.length, 0)} chars`);
+        const tesseractFullText = tesseractPages.map((p, i) => `\n[PAGE ${i + 1}]\n${p.text}`).join('');
+        return {
+          fullText:  tesseractFullText,
+          pages:     tesseractPages,
+          pageCount: tesseractPages.length,
+          usedOCR:   true,
+        };
+      }
+    } catch (tessErr) {
+      console.warn(`${label} Tesseract fallback failed: ${tessErr.message}`);
     }
     throw new Error(
       'Could not extract meaningful text from this PDF. ' +
