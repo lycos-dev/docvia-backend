@@ -11,7 +11,12 @@ import {
   getAllDeadlines,
 } from '../services/pdfService';
 
-const STORAGE_KEY = 'docvia-progress';
+const STORAGE_KEY_PREFIX = 'docvia-progress';
+const STREAK_COMPLETION_THRESHOLD = 1;
+
+function getStorageKey(userId: string | null | undefined): string | null {
+  return userId ? `${STORAGE_KEY_PREFIX}-${userId}` : null;
+}
 
 export interface LessonProgress {
   lessonId: string;
@@ -34,6 +39,8 @@ export interface DocumentProgress {
   // ── NEW ──────────────────────────────────────────────────────────────────
   /** ISO date string (YYYY-MM-DD) for the user-set deadline, or null */
   deadline: string | null;
+  /** User-editable title for the deadline, separate from the document title */
+  deadlineTitle: string | null;
   /** Lessons per day needed to finish on time (recomputed on every set) */
   dailyTarget: number;
 }
@@ -95,6 +102,18 @@ function localDateISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function normalizeDeadlineDatePart(deadline: string): string {
+  return deadline.slice(0, 10);
+}
+
+function deadlineForBackend(deadline: string): string {
+  if (deadline.includes('T')) {
+    return new Date(deadline).toISOString();
+  }
+
+  return `${deadline}T23:59:59.000Z`;
+}
+
 function yesterdayISO(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -116,7 +135,7 @@ function computeDailyTarget(
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const deadlineDate = new Date(deadline + 'T00:00:00');
+  const deadlineDate = new Date(`${normalizeDeadlineDatePart(deadline)}T00:00:00`);
   const daysLeft = Math.ceil(
     (deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
   );
@@ -131,7 +150,7 @@ function computeWeekActivity(dailyCompletions: Record<string, number>): boolean[
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    result.push((dailyCompletions[localDateISO(d)] ?? 0) >= 2);
+    result.push((dailyCompletions[localDateISO(d)] ?? 0) >= STREAK_COMPLETION_THRESHOLD);
   }
   return result;
 }
@@ -151,8 +170,8 @@ function computeStreak(
   const today = todayISO();
   const yesterday = yesterdayISO();
 
-  const todayCompleted = (dailyCompletions[today] ?? 0) >= 2;
-  const yesterdayCompleted = (dailyCompletions[yesterday] ?? 0) >= 2;
+  const todayCompleted = (dailyCompletions[today] ?? 0) >= STREAK_COMPLETION_THRESHOLD;
+  const yesterdayCompleted = (dailyCompletions[yesterday] ?? 0) >= STREAK_COMPLETION_THRESHOLD;
   const weekActivity = computeWeekActivity(dailyCompletions);
 
   let currentStreak = 0;
@@ -162,7 +181,7 @@ function computeStreak(
   }
   while (true) {
     const key = localDateISO(d);
-    if ((dailyCompletions[key] ?? 0) >= 2) {
+    if ((dailyCompletions[key] ?? 0) >= STREAK_COMPLETION_THRESHOLD) {
       currentStreak++;
       d.setDate(d.getDate() - 1);
     } else {
@@ -220,9 +239,10 @@ const INITIAL_STORE: ProgressStore = {
   dailyTimeSeconds: {},
 };
 
-function loadStore(): ProgressStore {
+function loadStore(storageKey: string | null): ProgressStore {
+  if (!storageKey) return INITIAL_STORE;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return INITIAL_STORE;
     const parsed = JSON.parse(raw) as Partial<ProgressStore>;
     if (parsed.streak && parsed.streak.streakJustLost === undefined) {
@@ -235,6 +255,7 @@ function loadStore(): ProgressStore {
     if (parsed.documentProgress) {
       for (const doc of Object.values(parsed.documentProgress)) {
         if (doc.deadline === undefined) doc.deadline = null;
+        if (doc.deadlineTitle === undefined) doc.deadlineTitle = null;
         if (doc.dailyTarget === undefined) doc.dailyTarget = 0;
       }
     }
@@ -244,24 +265,32 @@ function loadStore(): ProgressStore {
   }
 }
 
-function saveStore(store: ProgressStore): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+function saveStore(store: ProgressStore, storageKey: string | null): void {
+  if (!storageKey) return;
+  localStorage.setItem(storageKey, JSON.stringify(store));
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function ProgressProvider({ children }: { children: React.ReactNode }) {
-  const [store, setStore] = useState<ProgressStore>(loadStore);
-  const { token } = useAuth();
+  const { user, token } = useAuth();
+  const storageKey = getStorageKey(user?.id);
+  const [store, setStore] = useState<ProgressStore>(() => loadStore(storageKey));
   // Keep a ref so callbacks can access the latest token without re-creating
   const tokenRef = useRef(token);
   useEffect(() => { tokenRef.current = token; }, [token]);
+  const storageKeyRef = useRef<string | null>(storageKey);
+  useEffect(() => { storageKeyRef.current = storageKey; }, [storageKey]);
+
+  useEffect(() => {
+    setStore(loadStore(storageKey));
+  }, [storageKey]);
 
   useEffect(() => {
     setStore((prev) => {
       const streak = computeStreak(prev.dailyCompletions, prev.streak);
       const next = { ...prev, streak };
-      saveStore(next);
+      saveStore(next, storageKeyRef.current);
       return next;
     });
   }, []);
@@ -282,9 +311,10 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           // Extract YYYY-MM-DD from the ISO deadline string
           const isoDate = item.deadline.slice(0, 10);
           const existing = docProgress[docId];
+          const existingDate = existing?.deadline ? normalizeDeadlineDatePart(existing.deadline) : null;
 
           // Only update if the backend deadline differs from what we have locally
-          if (existing?.deadline === isoDate) continue;
+          if (existingDate === isoDate) continue;
 
           changed = true;
           const completedCount = existing?.completedLessons.length ?? 0;
@@ -301,13 +331,14 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
             lastAccessedAt: existing?.lastAccessedAt ?? new Date().toISOString(),
             streakDays: existing?.streakDays ?? 0,
             deadline: isoDate,
+            deadlineTitle: existing?.deadlineTitle ?? null,
             dailyTarget,
           };
         }
 
         if (!changed) return prev;
         const next = { ...prev, documentProgress: docProgress };
-        saveStore(next);
+        saveStore(next, storageKeyRef.current);
         return next;
       });
     }).catch(() => {
@@ -356,6 +387,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           lastAccessedAt: new Date().toISOString(),
           streakDays: existingDoc?.streakDays ?? 0,
           deadline,
+          deadlineTitle: existingDoc?.deadlineTitle ?? null,
           dailyTarget,
         };
 
@@ -374,7 +406,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           dailyCompletions,
           dailyTimeSeconds: prev.dailyTimeSeconds,
         };
-        saveStore(next);
+        saveStore(next, storageKeyRef.current);
         return next;
       });
     },
@@ -418,6 +450,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           lastAccessedAt: new Date().toISOString(),
           streakDays: existingDoc.streakDays,
           deadline: existingDoc.deadline,
+          deadlineTitle: existingDoc.deadlineTitle ?? null,
           dailyTarget,
         };
 
@@ -434,7 +467,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           dailyCompletions,
           dailyTimeSeconds: prev.dailyTimeSeconds,
         };
-        saveStore(next);
+        saveStore(next, storageKeyRef.current);
         return next;
       });
     },
@@ -468,13 +501,14 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           lastAccessedAt: new Date().toISOString(),
           streakDays: existing?.streakDays ?? 0,
           deadline,
+          deadlineTitle: existing?.deadlineTitle ?? null,
           dailyTarget,
         };
         const next = {
           ...prev,
           documentProgress: { ...prev.documentProgress, [documentId]: docProg },
         };
-        saveStore(next);
+        saveStore(next, storageKeyRef.current);
         return next;
       });
     },
@@ -505,7 +539,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           lessonProgress: { ...prev.lessonProgress, [key]: lessonProg },
           dailyTimeSeconds,
         };
-        saveStore(next);
+        saveStore(next, storageKeyRef.current);
         return next;
       });
     },
@@ -528,7 +562,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
           streakLostAcknowledgedDate: todayISO(),
         },
       };
-      saveStore(next);
+      saveStore(next, storageKeyRef.current);
       return next;
     });
   }, []);
@@ -538,20 +572,20 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
       const newDocProgress = { ...prev.documentProgress };
       delete newDocProgress[documentId];
       const next: ProgressStore = { ...prev, documentProgress: newDocProgress };
-      saveStore(next);
+      saveStore(next, storageKeyRef.current);
       return next;
     });
   }, []);
 
   // ── FIX 2: deadline actions — update local store AND sync to backend ────────
 
-  const setDeadline = useCallback((documentId: string, isoDate: string) => {
+  const setDeadline = useCallback((documentId: string, deadlineValue: string, deadlineTitle?: string) => {
     // 1. Update local store immediately (optimistic)
     setStore((prev) => {
       const existing = prev.documentProgress[documentId];
       const completedCount = existing?.completedLessons.length ?? 0;
       const totalLessons = existing?.totalLessons ?? 0;
-      const dailyTarget = computeDailyTarget(isoDate, completedCount, totalLessons);
+      const dailyTarget = computeDailyTarget(deadlineValue, completedCount, totalLessons);
 
       const docProg: DocumentProgress = {
         documentId,
@@ -562,23 +596,22 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         startedAt: existing?.startedAt ?? new Date().toISOString(),
         lastAccessedAt: existing?.lastAccessedAt ?? new Date().toISOString(),
         streakDays: existing?.streakDays ?? 0,
-        deadline: isoDate,
+        deadline: deadlineValue,
+        deadlineTitle: deadlineTitle ?? existing?.deadlineTitle ?? null,
         dailyTarget,
       };
       const next: ProgressStore = {
         ...prev,
         documentProgress: { ...prev.documentProgress, [documentId]: docProg },
       };
-      saveStore(next);
+      saveStore(next, storageKeyRef.current);
       return next;
     });
 
     // 2. Persist to backend — fire-and-forget (errors are silent; local state is the source of truth)
     const currentToken = tokenRef.current;
     if (currentToken) {
-      // Backend expects a full ISO datetime string; send end-of-day UTC for the chosen date
-      const deadlineISO = `${isoDate}T23:59:59.000Z`;
-      apiSetDeadline(documentId, deadlineISO, currentToken).catch((err) => {
+      apiSetDeadline(documentId, deadlineForBackend(deadlineValue), currentToken).catch((err) => {
         console.warn('[Deadline] Backend sync failed (set):', err);
       });
     }
@@ -589,12 +622,12 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     setStore((prev) => {
       const existing = prev.documentProgress[documentId];
       if (!existing) return prev;
-      const docProg: DocumentProgress = { ...existing, deadline: null, dailyTarget: 0 };
+      const docProg: DocumentProgress = { ...existing, deadline: null, deadlineTitle: null, dailyTarget: 0 };
       const next: ProgressStore = {
         ...prev,
         documentProgress: { ...prev.documentProgress, [documentId]: docProg },
       };
-      saveStore(next);
+      saveStore(next, storageKeyRef.current);
       return next;
     });
 

@@ -24,7 +24,7 @@ export interface DeadlineStatusResult {
 function daysUntil(isoDate: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const deadline = new Date(isoDate + 'T00:00:00');
+  const deadline = new Date(`${isoDate.slice(0, 10)}T00:00:00`);
   return Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 

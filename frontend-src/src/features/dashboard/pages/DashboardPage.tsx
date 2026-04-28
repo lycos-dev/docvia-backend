@@ -112,18 +112,7 @@ export default function DashboardPage() {
         <div className="flex-1 space-y-6">
           <WelcomeBanner />
 
-          {/* ── Deadline reminder banners — one per document with an active deadline ── */}
-          {docsWithDeadline.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {docsWithDeadline.map((doc) => (
-                <DeadlineBanner
-                  key={doc.filename}
-                  documentId={doc.filename}
-                  documentTitle={doc.title}
-                />
-              ))}
-            </div>
-          )}
+          {/* Deadline banners moved to the right column under the streak calendar */}
 
           <ReadingSection searchTerm={searchTerm} onSearchClear={() => setSearchTerm('')} />
         </div>

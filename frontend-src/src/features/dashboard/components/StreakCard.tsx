@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useProgressContext } from "../../../shared/contexts/ProgressContext";
+import { useDocuments } from "../../../shared/contexts/DocumentsContext";
 import { useTheme } from "../../../shared/contexts/ThemeContext";
 import { cn } from "../../../shared/utils/cn";
 import { Flame, CheckCircle2, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import DeadlineBanner from './DeadlineBanner';
 
 // Ordered by JS getDay(): 0=Sun, 1=Mon, ... 6=Sat
 const DAY_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -45,6 +47,78 @@ function formatTime(seconds: number): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
+function formatDeadlineTime(deadline: string): string {
+  const safeValue = deadline.includes('T') ? deadline : `${deadline}T12:00:00`;
+  return new Date(safeValue).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function normalizeDeadlineKey(deadline: string): string {
+  return deadline.slice(0, 10);
+}
+
+function isDeadlineOverdue(deadline: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadlineDate = new Date(`${normalizeDeadlineKey(deadline)}T00:00:00`);
+  return deadlineDate.getTime() < today.getTime();
+}
+
+interface MonthCalendarCell {
+  iso: string;
+  dayNumber: number;
+  inMonth: boolean;
+  isToday: boolean;
+  lessons: number;
+  seconds: number;
+  documents: Array<{ title: string; filename: string; deadlineTitle: string; endTime: string; isOverdue: boolean }>;
+}
+
+function formatMonthLabel(date: Date): string {
+  return date.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function getMonthCalendarCells(
+  referenceDate: Date,
+  dailyCompletions: Record<string, number>,
+  dailyTimeSeconds: Record<string, number>,
+  documentsByDate: Map<string, Array<{ title: string; filename: string; deadlineTitle: string; endTime: string; isOverdue: boolean }>>
+): MonthCalendarCell[] {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leadingDays = firstDay.getDay();
+  const todayISOValue = localDateISO(new Date());
+  const cells: MonthCalendarCell[] = [];
+
+  const totalCells = 42;
+
+  for (let index = 0; index < totalCells; index++) {
+    const dayOffset = index - leadingDays;
+    const cellDate = new Date(year, month, dayOffset + 1);
+    const inMonth = dayOffset >= 0 && dayOffset < daysInMonth;
+    const iso = localDateISO(cellDate);
+
+    cells.push({
+      iso,
+      dayNumber: cellDate.getDate(),
+      inMonth,
+      isToday: iso === todayISOValue,
+      lessons: dailyCompletions[iso] ?? 0,
+      seconds: dailyTimeSeconds[iso] ?? 0,
+      documents: documentsByDate.get(iso) ?? [],
+    });
+  }
+
+  return cells;
+}
+
 // ─── Tooltip Component ────────────────────────────────────────────────────────
 
 interface TooltipContentProps {
@@ -71,7 +145,7 @@ function TooltipContent({ cardLeft, arrowLeft, dotTop, lessons, seconds, cardWid
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 2, scale: 0.96 }}
       transition={{ duration: 0.13 }}
-      className="fixed z-[9999] w-40 pointer-events-none rounded-lg p-2.5 shadow-lg"
+      className="fixed z-9999 w-40 pointer-events-none rounded-lg p-2.5 shadow-lg"
       style={{
         left: cardLeft,
         bottom: `calc(100vh - ${dotTop - gap}px)`,
@@ -198,7 +272,7 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
             exit={{    opacity: 0, y: 2, scale: 0.96 }}
             transition={{ duration: 0.13 }}
             className={cn(
-              'fixed z-[9999] w-44 pointer-events-none',
+              'fixed z-9999 w-44 pointer-events-none',
               'bg-[#1e293b] dark:bg-[#0f172a] rounded-xl p-3',
               'shadow-2xl border border-white/10',
             )}
@@ -226,7 +300,7 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
                 <div className="mt-2">
                   <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-500"
+                      className="h-full rounded-full bg-linear-to-r from-green-400 to-emerald-500"
                       style={{ width: `${Math.min(100, (seconds / (30 * 60)) * 100)}%` }}
                     />
                   </div>
@@ -256,11 +330,211 @@ function DayPill({ day, active, lessons, seconds }: DayPillProps) {
   );
 }
 
+interface MonthCalendarProps {
+  dailyCompletions: Record<string, number>;
+  dailyTimeSeconds: Record<string, number>;
+  documentsByDate: Map<string, Array<{ title: string; filename: string; deadlineTitle: string; endTime: string; isOverdue: boolean }>>;
+}
+
+function MonthCalendar({ dailyCompletions, dailyTimeSeconds, documentsByDate }: MonthCalendarProps) {
+  const referenceDate = new Date();
+  const monthLabel = formatMonthLabel(referenceDate);
+  const calendarDays = getMonthCalendarCells(referenceDate, dailyCompletions, dailyTimeSeconds, documentsByDate);
+
+  return (
+    <div className="mt-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/30 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Month calendar
+          </p>
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+            {monthLabel}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-gray-500 dark:text-gray-400">
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-orange-400" />
+            Active
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-red-400" />
+            Overdue
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full border border-orange-400" />
+            Today
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {DAY_SHORT.map((day) => (
+          <div
+            key={day}
+            className="text-center text-[10px] font-semibold text-gray-400 dark:text-gray-500"
+          >
+            {day}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {calendarDays.map((day) => (
+          <MonthCalendarCellItem key={day.iso} day={day} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface MonthCalendarCellItemProps {
+  day: MonthCalendarCell;
+}
+
+function MonthCalendarCellItem({ day }: MonthCalendarCellItemProps) {
+  const [hovered, setHovered] = useState(false);
+  const cellRef = useRef<HTMLDivElement>(null);
+  const [cellRect, setCellRect] = useState<{ top: number; centerX: number } | null>(null);
+
+  const deadlineDocument = day.documents[0] ?? null;
+  const hasDeadline = Boolean(deadlineDocument);
+  const isOverdue = Boolean(deadlineDocument?.isOverdue);
+  const hasActivity = day.lessons > 0 || day.seconds > 0 || hasDeadline;
+
+  const handleMouseEnter = () => {
+    if (!hasDeadline || !cellRef.current) return;
+    const rect = cellRef.current.getBoundingClientRect();
+    setCellRect({ top: rect.top, centerX: rect.left + rect.width / 2 });
+    setHovered(true);
+  };
+
+  const cardWidth = 184;
+  const gap = 8;
+  const cardLeft = cellRect
+    ? Math.min(
+        window.innerWidth - cardWidth - 16,
+        Math.max(16, cellRect.centerX - cardWidth / 2)
+      )
+    : 0;
+  const arrowLeft = cellRect ? cellRect.centerX - cardLeft : cardWidth / 2;
+
+  return (
+    <div
+      ref={cellRef}
+      className="relative flex items-center justify-center"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => { setHovered(false); setCellRect(null); }}
+    >
+      <div
+        aria-label={`${day.iso}${hasDeadline ? `, ${deadlineDocument.title} due` : ''}`}
+        className={cn(
+          'aspect-square w-full rounded-xl flex items-center justify-center p-1 text-[11px] font-medium transition-all overflow-hidden',
+          day.inMonth
+            ? hasActivity
+              ? isOverdue
+                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                : hasDeadline
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
+              : 'bg-white text-gray-500 dark:bg-gray-800/70 dark:text-gray-400'
+            : 'bg-transparent text-gray-300 dark:text-gray-700',
+          day.isToday && 'ring-2 ring-orange-400 ring-offset-1 dark:ring-offset-gray-800',
+        )}
+      >
+        <span className="leading-none">{day.dayNumber}</span>
+      </div>
+
+      <AnimatePresence>
+        {hovered && cellRect && hasDeadline && deadlineDocument && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 2, scale: 0.96 }}
+            transition={{ duration: 0.13 }}
+            className="fixed z-9999 w-52 pointer-events-none rounded-lg p-2.5 shadow-lg bg-white dark:bg-[#0f172a] border border-gray-200 dark:border-white/10"
+            style={{
+              left: cardLeft,
+              bottom: `calc(100vh - ${cellRect.top - gap}px)`,
+            }}
+          >
+            <div className="space-y-2">
+              {day.documents.map((item) => (
+                <div
+                  key={item.filename}
+                  className="rounded-md bg-gray-50 dark:bg-white/5 px-2 py-1.5"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400">
+                      Title
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[10px] font-semibold text-right truncate',
+                        item.isOverdue
+                          ? 'text-red-600 dark:text-red-300'
+                          : 'text-blue-600 dark:text-blue-300'
+                      )}
+                    >
+                      {item.deadlineTitle}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 flex items-center justify-between gap-3">
+                    <span className="text-[9px] font-medium text-gray-500 dark:text-gray-400">
+                      End time
+                    </span>
+                    <span className="text-[10px] font-semibold text-purple-500 dark:text-purple-400">
+                      {item.endTime}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
+              className="absolute top-full w-0 h-0"
+              style={{
+                left: Math.max(8, Math.min(cardWidth - 16, arrowLeft)),
+                transform: 'translateX(-50%)',
+                borderLeft: '5px solid transparent',
+                borderRight: '5px solid transparent',
+                borderTop: '5px solid white',
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function StreakCard() {
-  const { streak, dailyCompletions, dailyTimeSeconds } = useProgressContext();
-  const days = getLast7Days();
+  const { streak, dailyCompletions, dailyTimeSeconds, documentProgress } = useProgressContext();
+  const { documents } = useDocuments();
+
+  const documentsByDate = useMemo(() => {
+    const buckets = new Map<string, Array<{ title: string; filename: string; deadlineTitle: string; endTime: string; isOverdue: boolean }>>();
+
+    documents.forEach((document) => {
+      const progress = documentProgress[document.filename];
+      const deadline = progress?.deadline;
+      if (!deadline) return;
+
+      const key = normalizeDeadlineKey(deadline);
+      const existing = buckets.get(key) ?? [];
+      existing.push({
+        title: document.title,
+        filename: document.filename,
+        deadlineTitle: progress?.deadlineTitle ?? document.title,
+        endTime: formatDeadlineTime(deadline),
+        isOverdue: isDeadlineOverdue(deadline),
+      });
+      buckets.set(key, existing);
+    });
+
+    return buckets;
+  }, [documents, documentProgress]);
 
   const flameScale = Math.min(1 + streak.currentStreak * 0.02, 1.5);
   const isStreakBroken = streak.streakJustLost;
@@ -424,6 +698,30 @@ export default function StreakCard() {
           </p>
         </div>
       )}
+
+      <MonthCalendar
+        dailyCompletions={dailyCompletions}
+        dailyTimeSeconds={dailyTimeSeconds}
+        documentsByDate={documentsByDate}
+      />
+
+          {/* Deadline reminders card under the month calendar */}
+          <div className="mt-4">
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-3">Deadline reminders</p>
+              <div className="flex flex-col gap-2">
+                {documents
+                  .filter((d) => documentProgress[d.filename]?.deadline != null)
+                  .map((d) => (
+                    <DeadlineBanner
+                      key={`sidebar-deadline-${d.filename}`}
+                      documentId={d.filename}
+                      documentTitle={d.title}
+                    />
+                  ))}
+              </div>
+            </div>
+          </div>
     </div>
   );
 }
