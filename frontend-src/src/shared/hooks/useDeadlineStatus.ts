@@ -43,11 +43,12 @@ export function useDeadlineStatus(documentId: string): DeadlineStatusResult {
     if (!doc?.deadline) return none;
 
     const daysLeft = daysUntil(doc.deadline);
+    const deadlineMoment = new Date(doc.deadline);
     const dailyTarget = doc.dailyTarget;
     const isComplete = doc.percentage >= 100;
 
-    // Overdue: deadline passed and not 100% done
-    if (daysLeft < 0 && !isComplete) {
+    // Overdue: deadline datetime has passed (handles same-day past times)
+    if ((deadlineMoment.getTime() < Date.now() || daysLeft < 0) && !isComplete) {
       return { daysLeft, dailyTarget, status: 'overdue', shouldRemind: false };
     }
 

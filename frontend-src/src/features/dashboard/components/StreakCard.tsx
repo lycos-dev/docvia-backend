@@ -60,6 +60,12 @@ function normalizeDeadlineKey(deadline: string): string {
 }
 
 function isDeadlineOverdue(deadline: string): boolean {
+  // If the deadline includes a time component, compare full datetime.
+  if (deadline.includes('T')) {
+    return new Date(deadline).getTime() < Date.now();
+  }
+
+  // Otherwise preserve previous date-only behavior (midnight boundary)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const deadlineDate = new Date(`${normalizeDeadlineKey(deadline)}T00:00:00`);

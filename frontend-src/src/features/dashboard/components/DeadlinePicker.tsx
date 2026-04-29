@@ -40,20 +40,20 @@ function normalizeDisplayDate(value: string | null): string {
   });
 }
 
-function parseDeadlineParts(value: string | null): { date: string; fromTime: string; toTime: string } {
+function parseDeadlineParts(value: string | null): { date: string; toTime: string } {
   if (!value) {
-    return { date: todayISO(), fromTime: '09:00', toTime: todayTimeDefault() };
+    return { date: todayISO(), toTime: todayTimeDefault() };
   }
 
   const parsed = new Date(value.includes('T') ? value : `${value}T12:00:00`);
   if (Number.isNaN(parsed.getTime())) {
-    return { date: todayISO(), fromTime: '09:00', toTime: todayTimeDefault() };
+    return { date: todayISO(), toTime: todayTimeDefault() };
   }
 
   const date = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
   const hours = String(parsed.getHours()).padStart(2, '0');
   const minutes = String(parsed.getMinutes()).padStart(2, '0');
-  return { date, fromTime: '09:00', toTime: `${hours}:${minutes}` };
+  return { date, toTime: `${hours}:${minutes}` };
 }
 
 function buildDeadlineIso(date: string, time: string): string {
@@ -104,7 +104,6 @@ export default function DeadlinePicker({
   const [isOpen, setIsOpen] = useState(false);
   const [editedTitle, setEditedTitle] = useState(doc?.deadlineTitle ?? documentTitle);
   const [deadlineDate, setDeadlineDate] = useState(() => parseDeadlineParts(existingDeadline).date);
-  const [fromTime, setFromTime] = useState(() => parseDeadlineParts(existingDeadline).fromTime);
   const [toTime, setToTime] = useState(() => parseDeadlineParts(existingDeadline).toTime);
   const [error, setError] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -175,7 +174,6 @@ export default function DeadlinePicker({
     const parts = parseDeadlineParts(existingDeadline);
     setEditedTitle(doc?.deadlineTitle ?? documentTitle);
     setDeadlineDate(parts.date);
-    setFromTime(parts.fromTime);
     setToTime(parts.toTime);
     setError(null);
     setIsOpen(true);
@@ -214,7 +212,6 @@ export default function DeadlinePicker({
     clearDeadline(documentId);
     setEditedTitle(documentTitle);
     setDeadlineDate(todayISO());
-    setFromTime('09:00');
     setToTime(todayTimeDefault());
     closePicker();
   }
@@ -303,51 +300,26 @@ export default function DeadlinePicker({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-100">
-                    From
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={fromTime}
-                      onChange={(e) => setFromTime(e.target.value)}
-                      className="w-full appearance-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-3 pr-10 text-sm text-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    >
-                      {TIME_OPTIONS.map((time) => (
-                        <option key={time} value={time}>
-                          {time}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      size={16}
-                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-100">
-                    To
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={toTime}
-                      onChange={(e) => setToTime(e.target.value)}
-                      className="w-full appearance-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-3 pr-10 text-sm text-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    >
-                      {TIME_OPTIONS.map((time) => (
-                        <option key={time} value={time}>
-                          {time}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      size={16}
-                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
-                    />
-                  </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-800 dark:text-gray-100">
+                  Time
+                </label>
+                <div className="relative">
+                  <select
+                    value={toTime}
+                    onChange={(e) => setToTime(e.target.value)}
+                    className="w-full appearance-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-3 pr-10 text-sm text-gray-600 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  >
+                    {TIME_OPTIONS.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={16}
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"
+                  />
                 </div>
               </div>
 
