@@ -34,12 +34,14 @@ setInterval(async () => {
 console.log('✅ Deadline checker scheduled (every 15 minutes)');
 
 // Middleware
-app.use(cors()); // Enable CORS for all routes
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true,
+}));
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-// Serve static files from frontend directory
-app.use(express.static(path.join(__dirname, '../frontend')));
+// Frontend is deployed separately on Vercel — no static file serving needed here.
 
 // Request logging middleware (for debugging)
 app.use((req, res, next) => {
@@ -77,16 +79,12 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Serve index.html for all non-API routes (SPA support)
+// 404 handler for unknown API routes
 app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
-  } else {
-    res.status(404).json({
-      success: false,
-      error: 'API endpoint not found'
-    });
-  }
+  res.status(404).json({
+    success: false,
+    error: 'API endpoint not found'
+  });
 });
 
 // Global error handler
