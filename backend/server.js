@@ -33,15 +33,46 @@ setInterval(async () => {
 
 console.log('✅ Deadline checker scheduled (every 15 minutes)');
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
-}));
-app.use(express.json()); // Parse JSON request bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+// ── CORS ───────────────────────────────────────────────────────────
+// Build allowed origins: always include localhost for dev, plus the
+// production Vercel URL from the env var (auto-fix missing https://).
+const allowedOrigins = (() => {
+  const origins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+  ];
+  if (process.env.FRONTEND_URL) {
+    let url = process.env.FRONTEND_URL.trim().replace(/\/$/, '');
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    origins.push(url);
+  }
+  return origins;
+})();
 
-// Frontend is deployed separately on Vercel — no static file serving needed here.
+console.log('✅ CORS allowed origins:', allowedOrigins);
+
+// Low-level middleware: manually write CORS headers on EVERY response.
+// This runs before the cors() package so there is no chance of an
+// invalid FRONTEND_URL value leaking into Access-Control-Allow-Origin.
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  // Handle preflight immediately — no further middleware needed
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Request logging middleware (for debugging)
 app.use((req, res, next) => {
@@ -49,7 +80,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// API Routes (must come before catch-all route)
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/pdf', pdfRoutes);
 
@@ -97,17 +128,15 @@ app.use((err, req, res, next) => {
 });
 
 // ── Port release helper ───────────────────────────────────────────────────────
-// Checks if a port is in use and kills the occupying process (Windows + Unix).
 function freePort(port) {
   return new Promise((resolve) => {
     const tester = net.createServer();
 
     tester.once('error', (err) => {
-      if (err.code !== 'EADDRINUSE') return resolve(); // unknown error — let listen fail naturally
+      if (err.code !== 'EADDRINUSE') return resolve();
       console.log(`⚠️  Port ${port} is in use — attempting to free it...`);
       try {
         if (process.platform === 'win32') {
-          // netstat output: "  TCP  0.0.0.0:3001  ...  LISTENING  <pid>"
           const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8' });
           const lines = out.trim().split('\n');
           const pids = new Set();
@@ -118,30 +147,20 @@ function freePort(port) {
             if (pid && pid !== '0') pids.add(pid);
           }
           for (const pid of pids) {
-            try {
-              execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
-              console.log(`✅ Killed PID ${pid} holding port ${port}`);
-            } catch (_) { /* already gone */ }
+            try { execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' }); } catch (_) {}
           }
         } else {
-          // macOS / Linux
           const out = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf8' });
           const pids = out.trim().split('\n').filter(Boolean);
           for (const pid of pids) {
-            try {
-              execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
-              console.log(`✅ Killed PID ${pid} holding port ${port}`);
-            } catch (_) { /* already gone */ }
+            try { execSync(`kill -9 ${pid}`, { stdio: 'ignore' }); } catch (_) {}
           }
         }
-      } catch (_) {
-        // findstr / lsof returned nothing — port may have freed itself
-      }
-      // Give the OS a moment to release the port
+      } catch (_) {}
       setTimeout(resolve, 500);
     });
 
-    tester.once('listening', () => tester.close(resolve)); // port is free
+    tester.once('listening', () => tester.close(resolve));
     tester.listen(port);
   });
 }
@@ -149,10 +168,8 @@ function freePort(port) {
 // ── Start server ──────────────────────────────────────────────────────────────
 const startServer = async () => {
   try {
-    // Free the port before binding (no-op if already free)
     await freePort(PORT);
 
-    // Test Supabase connection
     console.log('🔄 Testing Supabase connection...');
     const connected = await testConnection();
 
@@ -165,7 +182,6 @@ const startServer = async () => {
       console.log('================================');
       console.log(`🚀 Server is running on port ${PORT}`);
       console.log(`📍 Local: http://localhost:${PORT}`);
-      console.log(`📍 Frontend: http://localhost:${PORT}`);
       console.log(`📝 API Docs: http://localhost:${PORT}/api`);
       console.log('================================');
     });
