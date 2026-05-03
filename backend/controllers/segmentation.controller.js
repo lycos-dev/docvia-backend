@@ -10,27 +10,43 @@ const { supabase } = require("../config/supabase");
 const { makeGeminiCall, getUserKeyIndex } = require("../services/geminikeymanager.service");
 const { extractPDFTextWithOCR } = require("../services/gemini-ocr.service");
 
-const GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
 
-function getGeminiModel(apiKey) {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return genAI.getGenerativeModel({ model: GEMINI_MODEL });
+// ─── PDF TEXT EXTRACTION ───────────────────────────────────────────────────────
+//
+// Delegates to gemini-ocr.service which tries pdf-parse first, then falls back
+// to Gemini vision OCR for image-based / scanned PDFs.
+
+async function extractPDFText(pdfBuffer, userId) {
+  return extractPDFTextWithOCR(pdfBuffer, userId, "[Segmentation]");
+}
+
+// ─── SLICE CONTENT BY PAGE RANGE ─────────────────────────────────────────────
+
+function sliceContentByPages(pages, startPage, endPage) {
+  const start = Math.max(1, startPage);
+  const end = Math.min(pages.length, endPage);
+  return pages
+    .filter((p) => p.pageNum >= start && p.pageNum <= end)
+    .map((p) => p.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 // ─── Call Gemini and get response text ────────────────────────────────────────
+// jsonMode=true  → responseMimeType: 'application/json'  (segmentation / quiz)
+// jsonMode=false → plain text                             (chat / explain)
 
-async function callGemini(key, prompt, maxTokens = 2048, temperature = 0.5) {
+async function callGemini(key, prompt, maxTokens = 2048, temperature = 0.5, jsonMode = true) {
   for (const modelName of GEMINI_MODELS) {
     try {
       const genAI = new GoogleGenerativeAI(key);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          maxOutputTokens: maxTokens,
-          temperature,
-          responseMimeType: 'application/json',
-        },
-      });
+      const generationConfig = {
+        maxOutputTokens: maxTokens,
+        temperature,
+        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      };
+      const model = genAI.getGenerativeModel({ model: modelName, generationConfig });
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
       });
@@ -46,43 +62,7 @@ async function callGemini(key, prompt, maxTokens = 2048, temperature = 0.5) {
   }
 }
 
-// ─── PDF TEXT EXTRACTION ───────────────────────────────────────────────────────
-//
-// Delegates to gemini-ocr.service which tries pdf-parse first, then falls back
-// to Gemini vision OCR for image-based / scanned PDFs.
-
-async function extractPDFText(pdfBuffer, userId) {
-  return extractPDFTextWithOCR(pdfBuffer, userId, "[Segmentation]");
-}
-// ─── SLICE CONTENT BY PAGE RANGE ─────────────────────────────────────────────
-
-function sliceContentByPages(pages, startPage, endPage) {
-  const start = Math.max(1, startPage);
-  const end = Math.min(pages.length, endPage);
-  return pages
-    .filter((p) => p.pageNum >= start && p.pageNum <= end)
-    .map((p) => p.text.trim())
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-// ─── GEMINI SEGMENTATION ───────────────────────────────────────────────────────
-
-async function callGemini(key, prompt, maxTokens = 2048, temperature = 0.5) {
-  const genAI = new GoogleGenerativeAI(key);
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig: {
-      maxOutputTokens: maxTokens,
-      temperature,
-      responseMimeType: 'application/json',
-    },
-  });
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-  });
-  return result.response.text().trim();
-}
+// ─── GEMINI SEGMENTATION ──────────────────────────────────────────────────────
 
 async function segmentWithGemini(extractedText, pages, fileName, userId) {
   const preview =
@@ -517,7 +497,7 @@ Question: ${question}`;
 
     const answer = await makeGeminiCall(
       userId,
-      key => callGemini(key, prompt, 600, 0.7),
+      key => callGemini(key, prompt, 600, 0.7, false),
       resolvedIndex
     );
 
@@ -672,7 +652,7 @@ Briefly explain why "${correctOptionText}" is the correct answer.`;
 
         explanation = await makeGeminiCall(
           userId,
-          key => callGemini(key, explainPrompt, 150, 0.4),
+          key => callGemini(key, explainPrompt, 150, 0.4, false),
           resolvedIndex
         );
       } catch (e) {
