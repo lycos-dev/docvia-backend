@@ -465,8 +465,9 @@ async function deleteSegmentsEndpoint(req, res) {
 
 async function chatWithSegmentEndpoint(req, res) {
   try {
-    const { question, segmentTitle, segmentContent, documentTitle, userId } =
+    const { question, segmentTitle, segmentContent, documentTitle } =
       req.body;
+    const userId = req.user?.id;
 
     if (!question || !segmentTitle) {
       return res.status(400).json({
@@ -519,8 +520,8 @@ async function generateMicrotaskEndpoint(req, res) {
       taskType = "auto",
       count = 1,
       previousQuestions = [],
-      userId,
     } = req.body;
+    const userId = req.user?.id;
 
     if (!segmentTitle || !segmentContent) {
       return res.status(400).json({
@@ -564,6 +565,7 @@ QUESTION TYPE RULES based on taskType:
 - "multiple_choice": 4 options (A-D), exactly one correct, options must be meaningfully different.
 - "true_false": statement that is clearly true or false; options always ["True", "False"]; correctIndex 0 or 1.
 - "identification": a "fill in the blank" or "name the term" question; short modelAnswer (1 key term or phrase).
+- "short_answer": a concise question requiring a 1-3 sentence answer; modelAnswer is a short ideal response.
 - "essay": an open-ended analytical question; modelAnswer is a 3-4 sentence ideal response covering main points.
 - If taskType is "auto", choose the best format for each question based on the content.
 - For each question include a HINT: a 1-sentence nudge that helps the student think in the right direction WITHOUT giving away the answer.
@@ -573,7 +575,7 @@ QUESTION TYPE RULES based on taskType:
 Return an array of exactly ${safeCount} question object(s).
 For multiple_choice or true_false:
 [{"type":"multiple_choice","question":"...","options":["A. ...","B. ...","C. ...","D. ..."],"correctIndex":0,"explanation":"Why correct.","hint":"Nudge."}]
-For identification:
+For identification or short_answer:
 [{"type":"identification","question":"...","modelAnswer":"Key term or phrase.","keyTerms":["term"],"hint":"Nudge."}]
 For essay:
 [{"type":"essay","question":"...","modelAnswer":"3-4 sentence ideal response.","keyTerms":["term1","term2"],"hint":"Nudge."}]
@@ -617,7 +619,8 @@ ${content}`;
 
 async function evaluateMicrotaskEndpoint(req, res) {
   try {
-    const { task, userAnswer, segmentTitle, segmentContent, userId } = req.body;
+    const { task, userAnswer, segmentTitle, segmentContent } = req.body;
+    const userId = req.user?.id;
 
     if (!task || userAnswer === undefined || userAnswer === null) {
       return res.status(400).json({
@@ -714,6 +717,7 @@ ${content}`;
     res.status(200).json({
       success: true,
       correct: result.correct,
+      isCorrect: result.correct,
       score: result.score,
       feedback: result.feedback,
       highlight: result.highlight || null,
