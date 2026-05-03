@@ -587,12 +587,46 @@ Count: ${safeCount}
 Content:
 ${content}`;
 
-    const raw = await makeGeminiCall(
-      userId,
-      key => callGemini(key, prompt, safeCount * 450, 0.92),
-      resolvedIndex
-    );
-    const tasks = JSON.parse(raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+    // Token budget: 600 per question (options + explanation + hint) + 300 overhead
+    const tokenBudget = Math.max(safeCount * 600 + 300, 1200);
+
+    let raw = null;
+    let tasks = null;
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        raw = await makeGeminiCall(
+          userId,
+          key => callGemini(key, prompt, tokenBudget, 0.85),
+          resolvedIndex
+        );
+
+        const cleaned = raw
+          .replace(/```json\s*/gi, "")
+          .replace(/```\s*/g, "")
+          .trim();
+
+        // Detect truncated JSON before trying to parse
+        if (!cleaned.endsWith("]") && !cleaned.endsWith("}")) {
+          console.warn(`[Microtask] Attempt ${attempt}: response appears truncated, retrying...`);
+          if (attempt < maxAttempts) continue;
+          throw new Error("Gemini response was repeatedly truncated. Try fewer questions.");
+        }
+
+        tasks = JSON.parse(cleaned);
+        break; // success
+      } catch (parseErr) {
+        console.warn(`[Microtask] Attempt ${attempt} JSON parse failed: ${parseErr.message}`);
+        if (attempt >= maxAttempts) {
+          console.error("[Microtask] All attempts failed. Last raw output:", raw?.substring(0, 300));
+          throw new Error("Gemini returned invalid JSON after multiple attempts. Please try again.");
+        }
+        // Small delay before retry
+        await new Promise(r => setTimeout(r, 500 * attempt));
+      }
+    }
+
     let arr = Array.isArray(tasks) ? tasks : [tasks];
 
     const seenQuestions = new Set(allAsked.map((q) => q.toLowerCase().trim()));
