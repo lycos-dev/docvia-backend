@@ -316,7 +316,9 @@ const getFile = async (req, res) => {
 
     const storagePath = resolveUserPath(userId, filename);
 
-    const { data, error } = await storage().download(storagePath);
+    // Use adminStorage (service role) — the anon client cannot download from a
+    // private bucket even when the user is authenticated via our own JWT.
+    const { data, error } = await adminStorage().download(storagePath);
     if (error) return res.status(404).json({ success: false, error: 'File not found', message: error.message });
 
     const buffer = Buffer.from(await data.arrayBuffer());
