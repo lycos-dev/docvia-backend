@@ -315,10 +315,22 @@ const getFile = async (req, res) => {
     if (!filename) return res.status(400).json({ success: false, error: 'Filename is required' });
 
     const storagePath = resolveUserPath(userId, filename);
+    const storageClient = (supabaseAdmin || supabase).storage.from('academic-pdfs');
 
-    // Use adminStorage (service role) — the anon client cannot download from a
-    // private bucket even when the user is authenticated via our own JWT.
-    const { data, error } = await adminStorage().download(storagePath);
+    // Try to generate a short-lived signed URL (60s) and redirect the browser to it.
+    // This works for both public and private buckets and avoids streaming the binary
+    // through the Node process entirely — much faster and more reliable.
+    const { data: signedData, error: signedError } = await storageClient.createSignedUrl(storagePath, 60);
+
+    if (!signedError && signedData?.signedUrl) {
+      console.log(`[getFile] Redirecting to signed URL for ${storagePath}`);
+      return res.redirect(302, signedData.signedUrl);
+    }
+
+    // Fallback: stream the file directly through the backend.
+    // This path is taken when signed URL generation fails (e.g. bucket RLS blocks it).
+    console.warn(`[getFile] Signed URL failed (${signedError?.message}), falling back to direct stream`);
+    const { data, error } = await storageClient.download(storagePath);
     if (error) return res.status(404).json({ success: false, error: 'File not found', message: error.message });
 
     const buffer = Buffer.from(await data.arrayBuffer());
